@@ -1,0 +1,1475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel — Heroes Senior Softball</title>
+  <link rel="icon" href="assets/img/favicon.ico">
+  <link rel="stylesheet" href="assets/css/admin.css">
+  <meta name="robots" content="noindex, nofollow">
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div id="admin-login">
+  <div class="login-card">
+    <img class="login-logo" src="assets/img/heroes-logo.jpg" alt="Heroes Logo" onerror="this.style.background='#C8102E'">
+    <div class="login-title">Heroes Admin</div>
+    <div class="login-subtitle">Enter your password to access the admin panel</div>
+    <div class="form-group" style="text-align:left;margin-bottom:20px">
+      <label class="form-label">Password</label>
+      <input type="password" class="form-input" id="login-password" placeholder="Enter admin password" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="doLogin()">Sign In</button>
+    <div id="login-error" style="color:#dc2626;font-size:13px;margin-top:12px;display:none">Incorrect password</div>
+    <a href="index.html" style="display:block;margin-top:20px;font-size:13px;color:#888">← Back to Website</a>
+  </div>
+</div>
+
+<!-- ADMIN LAYOUT (hidden until login) -->
+<div id="admin-layout" style="display:none">
+
+  <!-- SIDEBAR -->
+  <aside id="admin-sidebar">
+    <div class="sidebar-brand">
+      <img src="assets/img/heroes-logo.jpg" alt="" onerror="this.style.background='#C8102E'">
+      <div class="sidebar-brand-text">
+        <span>Heroes Admin</span>
+        <span>Management Panel</span>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="sidebar-section-label">Overview</div>
+      <a class="sidebar-link active" onclick="showPage('dashboard')">
+        <span class="icon">📊</span> Dashboard
+      </a>
+      
+      <div class="sidebar-section-label" style="margin-top:12px">Organization</div>
+      <a class="sidebar-link" onclick="showPage('account-requests')" id="sidebar-acct-req">
+        <span class="icon">🆕</span> Account Requests
+        <span id="req-badge" style="display:none;background:#C8102E;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:800;margin-left:auto"></span>
+      </a>
+      <a class="sidebar-link" onclick="showPage('players')">
+        <span class="icon">👥</span> Players
+      </a>
+      <a class="sidebar-link" onclick="showPage('teams')">
+        <span class="icon">⚾</span> Teams
+      </a>
+      <a class="sidebar-link" onclick="showPage('sponsors')">
+        <span class="icon">🤝</span> Sponsors
+      </a>
+
+      <div class="sidebar-section-label" style="margin-top:12px">Game Management</div>
+      <a class="sidebar-link" onclick="showPage('games')">
+        <span class="icon">🏟️</span> Games
+      </a>
+      <a class="sidebar-link" onclick="showPage('stats-entry')">
+        <span class="icon">📝</span> Stat Entry
+      </a>
+
+      <div class="sidebar-section-label" style="margin-top:12px">Events</div>
+      <a class="sidebar-link" onclick="showPage('events')">
+        <span class="icon">📅</span> Tournaments & Events
+      </a>
+      <a class="sidebar-link" onclick="showPage('availability')">
+        <span class="icon">✅</span> Availability
+      </a>
+
+      <div class="sidebar-section-label" style="margin-top:12px">Content</div>
+      <a class="sidebar-link" onclick="showPage('news')">
+        <span class="icon">📰</span> News & Announcements
+      </a>
+      <a class="sidebar-link" onclick="showPage('awards')">
+        <span class="icon">🏆</span> Awards
+      </a>
+      <a class="sidebar-link" onclick="showPage('page-builder')">
+        <span class="icon">🎨</span> Page Builder
+      </a>
+
+      <div class="sidebar-section-label" style="margin-top:12px">Settings</div>
+      <a class="sidebar-link" onclick="showPage('settings')">
+        <span class="icon">⚙️</span> Settings
+      </a>
+      <a class="sidebar-link" onclick="showPage('data')">
+        <span class="icon">💾</span> Data Management
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <a href="index.html" target="_blank">↗ View Website</a>
+      <a onclick="doLogout()" style="cursor:pointer">🚪 Sign Out</a>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div id="admin-main">
+    <div id="admin-topbar">
+      <div class="topbar-title" id="page-title">Dashboard <span>Overview</span></div>
+      <div class="topbar-actions">
+        <button class="btn btn-sm btn-secondary" onclick="exportData()">⬇ Export Data</button>
+        <button class="btn btn-sm btn-primary" id="topbar-add-btn" onclick="triggerAddNew()">+ Add New</button>
+      </div>
+    </div>
+    <div id="admin-content"><!-- pages render here --></div>
+  </div>
+</div>
+
+<!-- SHARED MODAL -->
+<div class="modal-overlay" id="main-modal">
+  <div class="modal" id="main-modal-inner">
+    <div class="modal-header">
+      <h3 id="modal-title">Modal</h3>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer" id="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="modal-save-btn" onclick="modalSave()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- SCRIPTS -->
+<script src="assets/js/data.js"></script>
+<script>
+'use strict';
+
+// ─── AUTH ─────────────────────────────────────────────────
+function doLogin() {
+  const pw = document.getElementById('login-password').value;
+  const data = loadData();
+  if (pw === data.config.adminPassword) {
+    sessionStorage.setItem('heroes_admin', '1');
+    document.getElementById('admin-login').style.display = 'none';
+    document.getElementById('admin-layout').style.display = 'flex';
+    showPage('dashboard');
+  } else {
+    document.getElementById('login-error').style.display = 'block';
+    document.getElementById('login-password').value = '';
+  }
+}
+function doLogout() {
+  sessionStorage.removeItem('heroes_admin');
+  document.getElementById('admin-login').style.display = 'flex';
+  document.getElementById('admin-layout').style.display = 'none';
+}
+// Check if already logged in
+if (sessionStorage.getItem('heroes_admin') === '1') {
+  document.getElementById('admin-login').style.display = 'none';
+  document.getElementById('admin-layout').style.display = 'flex';
+}
+
+// ─── MODAL ────────────────────────────────────────────────
+let modalSaveCallback = null;
+function openModal(title, body, saveLabel, onSave) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = body;
+  const saveBtn = document.getElementById('modal-save-btn');
+  if (onSave) { saveBtn.style.display = 'inline-flex'; saveBtn.textContent = saveLabel || 'Save'; modalSaveCallback = onSave; }
+  else { saveBtn.style.display = 'none'; }
+  document.getElementById('main-modal').classList.add('open');
+}
+function closeModal() { document.getElementById('main-modal').classList.remove('open'); }
+function modalSave() { if (modalSaveCallback) modalSaveCallback(); }
+
+// ─── NAVIGATION ───────────────────────────────────────────
+let currentPage = 'dashboard';
+function showPage(page) {
+  currentPage = page;
+  document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+  const addBtn = document.getElementById('topbar-add-btn');
+  addBtn.style.display = 'inline-flex';
+  
+  const pages = {
+    'dashboard': ['Dashboard','Overview',false],
+    'players': ['Players','Manage Roster',true],
+    'teams': ['Teams','Manage Teams',true],
+    'games': ['Games','Manage Games & Results',true],
+    'stats-entry': ['Stat Entry','Enter Game Statistics',false],
+    'events': ['Tournaments & Events','Manage Events',true],
+    'availability': ['Player Availability','Tournament Availability',false],
+    'news': ['News','Manage Announcements',true],
+    'awards': ['Awards','Manage Achievements',true],
+    'sponsors': ['Sponsors','Manage Sponsors',true],
+    'page-builder': ['Page Builder','Design Your Website',false],
+    'settings': ['Settings','Site Configuration',false],
+    'data': ['Data Management','Import / Export',false],
+    'account-requests': ['Account Requests','Review & Approve Player Accounts',false],
+  };
+  
+  const [title, sub, showAdd] = pages[page] || ['Unknown','',false];
+  document.getElementById('page-title').innerHTML = `${title} <span>${sub}</span>`;
+  addBtn.style.display = showAdd ? 'inline-flex' : 'none';
+  
+  updateReqBadge();
+  const fn = { dashboard: renderDashboard, players: renderPlayers, teams: renderTeams,
+    games: renderGames, 'stats-entry': renderStatsEntry, events: renderEvents,
+    availability: renderAvailability, news: renderNews, awards: renderAwards,
+    sponsors: renderSponsors, 'page-builder': renderPageBuilder,
+    settings: renderSettings, data: renderData, 'account-requests': renderAccountRequests }[page];
+  if (fn) fn();
+}
+function triggerAddNew() {
+  const fns = { players: addPlayer, teams: addTeam, games: addGame, events: addEvent, news: addNews, awards: addAward, sponsors: addSponsor };
+  if (fns[currentPage]) fns[currentPage]();
+}
+
+function setContent(html) { document.getElementById('admin-content').innerHTML = html; }
+function toast(msg, type = 'success') {
+  const t = document.createElement('div');
+  t.className = `alert alert-${type}`;
+  t.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;min-width:260px;box-shadow:0 4px 20px rgba(0,0,0,0.2)';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+// ─── DASHBOARD ────────────────────────────────────────────
+function renderDashboard() {
+  const data = loadData();
+  const totalGames = data.games.length;
+  const wins = data.games.filter(g => g.result === 'W').length;
+  const pct = totalGames ? Math.round(wins/totalGames*100) : 0;
+  const recentGames = [...data.games].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
+  
+  setContent(`
+    <div class="stat-cards">
+      <div class="stat-card" style="border-color:#C8102E">
+        <div class="stat-card-value" style="color:#C8102E">${data.players.filter(p=>p.active).length}</div>
+        <div class="stat-card-label">Active Players</div>
+        <div class="stat-card-sub">${data.teams.length} teams</div>
+      </div>
+      <div class="stat-card" style="border-color:#16a34a">
+        <div class="stat-card-value" style="color:#16a34a">${wins}</div>
+        <div class="stat-card-label">Season Wins</div>
+        <div class="stat-card-sub">${pct}% win rate</div>
+      </div>
+      <div class="stat-card" style="border-color:#F0A500">
+        <div class="stat-card-value" style="color:#F0A500">${data.games.filter(g=>g.result==='L').length}</div>
+        <div class="stat-card-label">Season Losses</div>
+        <div class="stat-card-sub">${totalGames} total games</div>
+      </div>
+      <div class="stat-card" style="border-color:#6366f1">
+        <div class="stat-card-value" style="color:#6366f1">${data.events.filter(e=>e.status==='upcoming').length}</div>
+        <div class="stat-card-label">Upcoming Events</div>
+        <div class="stat-card-sub">${data.events.length} total</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div class="admin-table-wrap">
+        <div class="admin-table-header"><h3>Recent Games</h3><button class="btn btn-sm btn-secondary" onclick="showPage('games')">View All</button></div>
+        <table class="admin-table">
+          <thead><tr><th>Date</th><th>Opponent</th><th>Team</th><th>Score</th><th>Result</th></tr></thead>
+          <tbody>${recentGames.map(g=>{
+            const team = data.teams.find(t=>t.id===g.teamId);
+            return `<tr>
+              <td>${g.date}</td>
+              <td style="font-weight:700">${g.opponent}</td>
+              <td><span style="font-size:11px;font-weight:700">${team?.shortName||''}</span></td>
+              <td>${g.heroScore??'–'} - ${g.oppScore??'–'}</td>
+              <td><span style="padding:3px 8px;border-radius:20px;font-size:11px;font-weight:800;background:${g.result==='W'?'#dcfce7':g.result==='L'?'#fee2e2':'#fef9c3'};color:${g.result==='W'?'#15803d':g.result==='L'?'#dc2626':'#92400e'}">${g.result||'–'}</span></td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>
+      </div>
+      <div class="admin-table-wrap">
+        <div class="admin-table-header"><h3>Quick Actions</h3></div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:10px">
+          <button class="btn btn-primary" onclick="showPage('stats-entry')">📝 Enter Game Stats</button>
+          <button class="btn btn-secondary" onclick="showPage('games')">➕ Add New Game</button>
+          <button class="btn btn-secondary" onclick="showPage('players')">👤 Add Player</button>
+          ${(function(){ const p=(loadData().accountRequests||[]).filter(r=>r.status==='pending').length; return p>0?`<button class="btn btn-danger" onclick="showPage('account-requests')">🆕 ${p} Pending Account Request${p>1?'s':''}</button>`:''; })()}
+          <button class="btn btn-secondary" onclick="showPage('events')">📅 Add Tournament</button>
+          <button class="btn btn-secondary" onclick="showPage('news')">📰 Add Announcement</button>
+          <button class="btn btn-gold btn-sm" onclick="exportData()">⬇ Export All Data</button>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:20px" class="admin-table-wrap">
+      <div class="admin-table-header"><h3>Team Records — 2025 Season</h3></div>
+      <table class="admin-table">
+        <thead><tr><th>Team</th><th>Manager</th><th>Players</th><th>Wins</th><th>Losses</th><th>Ties</th><th>Win %</th></tr></thead>
+        <tbody>${data.teams.map(team=>{
+          const games = data.games.filter(g=>g.teamId===team.id);
+          const w=games.filter(g=>g.result==='W').length, l=games.filter(g=>g.result==='L').length, t2=games.filter(g=>g.result==='T').length;
+          const pct2=games.length?Math.round(w/games.length*100):0;
+          return `<tr>
+            <td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${team.color};margin-right:8px"></span><strong>${team.name}</strong></td>
+            <td>${team.manager||'TBD'}</td>
+            <td>${data.players.filter(p=>p.teams.includes(team.id)&&p.active).length}</td>
+            <td style="color:#16a34a;font-weight:700">${w}</td>
+            <td style="color:#dc2626;font-weight:700">${l}</td>
+            <td>${t2}</td>
+            <td>${pct2}%</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>
+  `);
+}
+
+// ─── PLAYERS ──────────────────────────────────────────────
+function renderPlayers() {
+  const data = loadData();
+  setContent(`
+    <div class="admin-table-wrap">
+      <div class="admin-table-header">
+        <h3>Player Roster (${data.players.filter(p=>p.active).length} active)</h3>
+        <div style="display:flex;gap:8px">
+          <input type="text" placeholder="Search..." style="padding:7px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;outline:none" oninput="searchPlayers(this.value)">
+          <button class="btn btn-primary btn-sm" onclick="addPlayer()">+ Add Player</button>
+        </div>
+      </div>
+      <table class="admin-table" id="players-table">
+        <thead><tr><th>#</th><th>Name</th><th>Position</th><th>Teams</th><th>Bats/Throws</th><th>Since</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>${data.players.map(p=>`
+          <tr id="player-row-${p.id}">
+            <td><strong style="color:var(--red)">#${p.number}</strong></td>
+            <td><strong>${p.firstName} ${p.lastName}</strong></td>
+            <td>${p.position}</td>
+            <td>${p.teams.map(tid=>data.teams.find(t=>t.id===tid)?.shortName||tid).join(', ')}</td>
+            <td>${p.bats}/${p.throws}</td>
+            <td>${p.joinYear}</td>
+            <td><span style="padding:3px 8px;border-radius:20px;font-size:11px;font-weight:700;background:${p.active?'#dcfce7':'#f3f4f6'};color:${p.active?'#15803d':'#6b7280'}">${p.active?'Active':'Inactive'}</span></td>
+            <td style="display:flex;gap:6px">
+              <button class="action-btn action-edit" onclick="editPlayer('${p.id}')">Edit</button>
+              <button class="action-btn action-delete" onclick="deletePlayer('${p.id}')">Remove</button>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  `);
+}
+
+window.searchPlayers = function(q) {
+  document.querySelectorAll('#players-table tbody tr').forEach(row => {
+    row.style.display = q && !row.textContent.toLowerCase().includes(q.toLowerCase()) ? 'none' : '';
+  });
+};
+
+function addPlayer() {
+  const data = loadData();
+  openModal('Add New Player', buildPlayerForm(null, data), 'Save Player', () => {
+    const d = loadData();
+    const id = 'p' + Date.now();
+    d.players.push({
+      id, firstName: val('pf-first'), lastName: val('pf-last'), number: val('pf-num'),
+      position: val('pf-pos'), teams: Array.from(document.querySelectorAll('.pf-team:checked')).map(c=>c.value),
+      bats: val('pf-bats'), throws: val('pf-throws'), joinYear: parseInt(val('pf-year')||new Date().getFullYear()),
+      active: document.getElementById('pf-active').checked, photo: '', email: val('pf-email'),
+      credentials: { username: val('pf-username'), password: val('pf-password') }
+    });
+    saveData(d); closeModal(); renderPlayers(); toast('Player added!');
+  });
+}
+
+function editPlayer(id) {
+  const data = loadData();
+  const p = data.players.find(x => x.id === id);
+  if (!p) return;
+  openModal('Edit Player', buildPlayerForm(p, data), 'Save Changes', () => {
+    const d = loadData();
+    const idx = d.players.findIndex(x => x.id === id);
+    d.players[idx] = { ...d.players[idx],
+      firstName: val('pf-first'), lastName: val('pf-last'), number: val('pf-num'),
+      position: val('pf-pos'), teams: Array.from(document.querySelectorAll('.pf-team:checked')).map(c=>c.value),
+      bats: val('pf-bats'), throws: val('pf-throws'), joinYear: parseInt(val('pf-year')),
+      active: document.getElementById('pf-active').checked, email: val('pf-email'),
+      photo: val('pf-photo'),
+      credentials: { username: val('pf-username'), password: val('pf-password') }
+    };
+    saveData(d); closeModal(); renderPlayers(); toast('Player updated!');
+  });
+}
+
+function deletePlayer(id) {
+  if (!confirm('Remove this player? Their game stats will be preserved.')) return;
+  const d = loadData(); const idx = d.players.findIndex(p=>p.id===id);
+  d.players[idx].active = false; saveData(d); renderPlayers(); toast('Player removed');
+}
+
+function buildPlayerForm(p, data) {
+  const pos = ['P','C','1B','2B','3B','SS','OF','LF','CF','RF','DH','UT'];
+  return `
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">First Name*</label><input id="pf-first" class="form-input" value="${p?.firstName||''}"></div>
+      <div class="form-group"><label class="form-label">Last Name*</label><input id="pf-last" class="form-input" value="${p?.lastName||''}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Jersey #</label><input id="pf-num" class="form-input" value="${p?.number||''}"></div>
+      <div class="form-group"><label class="form-label">Position</label>
+        <select id="pf-pos" class="form-select">${pos.map(x=>`<option${p?.position===x?' selected':''}>${x}</option>`).join('')}</select>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Teams</label>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        ${data.teams.map(t=>`<label class="form-check"><input type="checkbox" class="pf-team" value="${t.id}"${p?.teams.includes(t.id)?' checked':''}> ${t.name}</label>`).join('')}
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Bats</label>
+        <select id="pf-bats" class="form-select">
+          ${['R','L','S'].map(x=>`<option${p?.bats===x?' selected':''}>${x}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Throws</label>
+        <select id="pf-throws" class="form-select">
+          ${['R','L'].map(x=>`<option${p?.throws===x?' selected':''}>${x}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Year Joined</label><input id="pf-year" type="number" class="form-input" value="${p?.joinYear||2024}"></div>
+      <div class="form-group"><label class="form-label">Email</label><input id="pf-email" type="email" class="form-input" value="${p?.email||''}"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Photo URL</label><input id="pf-photo" class="form-input" placeholder="https://..." value="${p?.photo||''}">
+      <div class="form-hint">Link to player photo (optional)</div>
+    </div>
+    <label class="form-check"><input type="checkbox" id="pf-active"${p?.active!==false?' checked':''}> Active player</label>
+    <hr style="margin:16px 0;border-color:var(--border)">
+    <div style="font-weight:600;font-size:13px;margin-bottom:8px;color:var(--dark)">🔑 Player Login Credentials</div>
+    <div class="form-hint" style="margin-bottom:12px">Players use these to log in on the public site and mark tournament attendance.</div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Username</label><input id="pf-username" class="form-input" placeholder="e.g. jsmith" value="${p?.credentials?.username||''}"></div>
+      <div class="form-group"><label class="form-label">Password</label><input id="pf-password" class="form-input" placeholder="Set login password" value="${p?.credentials?.password||''}"></div>
+    </div>
+  `;
+}
+
+// ─── TEAMS ────────────────────────────────────────────────
+function renderTeams() {
+  const data = loadData();
+  setContent(`
+    <div class="admin-table-wrap">
+      <div class="admin-table-header"><h3>Teams</h3><button class="btn btn-primary btn-sm" onclick="addTeam()">+ Add Team</button></div>
+      <table class="admin-table">
+        <thead><tr><th>Color</th><th>Team</th><th>Division</th><th>Age</th><th>Manager</th><th>Players</th><th>Actions</th></tr></thead>
+        <tbody>${data.teams.map(t=>`<tr>
+          <td><div style="width:24px;height:24px;border-radius:50%;background:${t.color}"></div></td>
+          <td><strong>${t.name}</strong></td>
+          <td>${t.division}</td>
+          <td>${t.ageGroup}+</td>
+          <td>${t.manager||'TBD'}</td>
+          <td>${data.players.filter(p=>p.teams.includes(t.id)&&p.active).length}</td>
+          <td style="display:flex;gap:6px">
+            <button class="action-btn action-edit" onclick="editTeam('${t.id}')">Edit</button>
+            <button class="action-btn action-delete" onclick="deleteTeam('${t.id}')">Delete</button>
+          </td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+  `);
+}
+
+function addTeam() {
+  openModal('Add New Team', buildTeamForm(null), 'Save Team', () => {
+    const d = loadData();
+    d.teams.push({ id: 't'+Date.now(), name: val('tf-name'), shortName: val('tf-short'), division: val('tf-div'), ageGroup: parseInt(val('tf-age')||50), color: val('tf-color'), manager: val('tf-mgr'), assistantManager: val('tf-asst') });
+    saveData(d); closeModal(); renderTeams(); toast('Team added!');
+  });
+}
+function editTeam(id) {
+  const data = loadData(); const t = data.teams.find(x=>x.id===id);
+  openModal('Edit Team', buildTeamForm(t), 'Save Changes', () => {
+    const d = loadData(); const idx = d.teams.findIndex(x=>x.id===id);
+    d.teams[idx] = { ...d.teams[idx], name: val('tf-name'), shortName: val('tf-short'), division: val('tf-div'), ageGroup: parseInt(val('tf-age')), color: val('tf-color'), manager: val('tf-mgr'), assistantManager: val('tf-asst') };
+    saveData(d); closeModal(); renderTeams(); toast('Team updated!');
+  });
+}
+function deleteTeam(id) {
+  if (!confirm('Delete this team?')) return;
+  const d = loadData(); d.teams = d.teams.filter(t=>t.id!==id); saveData(d); renderTeams(); toast('Team deleted');
+}
+function buildTeamForm(t) {
+  return `
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Team Name*</label><input id="tf-name" class="form-input" value="${t?.name||''}" placeholder="55's AAA"></div>
+      <div class="form-group"><label class="form-label">Short Name</label><input id="tf-short" class="form-input" value="${t?.shortName||''}" placeholder="55s"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Division</label>
+        <select id="tf-div" class="form-select">${['AAA','AA','A'].map(x=>`<option${t?.division===x?' selected':''}>${x}</option>`).join('')}</select>
+      </div>
+      <div class="form-group"><label class="form-label">Age Group</label><input id="tf-age" type="number" class="form-input" value="${t?.ageGroup||50}"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Team Color</label><input type="color" id="tf-color" value="${t?.color||'#C8102E'}" style="height:40px;width:80px;border:1px solid var(--border);border-radius:4px;padding:2px"></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Manager</label><input id="tf-mgr" class="form-input" value="${t?.manager||''}"></div>
+      <div class="form-group"><label class="form-label">Asst. Manager</label><input id="tf-asst" class="form-input" value="${t?.assistantManager||''}"></div>
+    </div>
+  `;
+}
+
+// ─── GAMES ────────────────────────────────────────────────
+function renderGames() {
+  const data = loadData();
+  const games = [...data.games].sort((a,b)=>b.date.localeCompare(a.date));
+  setContent(`
+    <div class="admin-table-wrap">
+      <div class="admin-table-header">
+        <h3>Games (${games.length})</h3>
+        <div style="display:flex;gap:8px">
+          <select class="form-select" style="font-size:12px" onchange="filterGamesByTeam(this.value)">
+            <option value="">All Teams</option>
+            ${data.teams.map(t=>`<option value="${t.id}">${t.name}</option>`).join('')}
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="addGame()">+ Add Game</button>
+        </div>
+      </div>
+      <table class="admin-table" id="games-table">
+        <thead><tr><th>Date</th><th>Team</th><th>Opponent</th><th>Location</th><th>Score</th><th>Result</th><th>Stats</th><th>Actions</th></tr></thead>
+        <tbody>${games.map(g=>{
+          const team = data.teams.find(t=>t.id===g.teamId);
+          const statCount = g.playerStats?.reduce((s,ps)=>s+(ps.ab>0?1:0),0)||0;
+          return `<tr data-team="${g.teamId}">
+            <td>${g.date}</td>
+            <td><span style="font-size:11px;font-weight:700;color:var(--red)">${team?.shortName||''}</span></td>
+            <td><strong>${g.opponent}</strong></td>
+            <td style="font-size:12px;color:var(--gray)">${g.location}</td>
+            <td>${g.heroScore??'–'} - ${g.oppScore??'–'}</td>
+            <td><span style="padding:3px 8px;border-radius:20px;font-size:11px;font-weight:800;background:${g.result==='W'?'#dcfce7':g.result==='L'?'#fee2e2':'#fef9c3'};color:${g.result==='W'?'#15803d':g.result==='L'?'#dc2626':'#92400e'}">${g.result||'TBD'}</span></td>
+            <td><span style="font-size:12px;color:${statCount?'#15803d':'var(--gray)'}">${statCount?`✓ ${statCount} players`:'No stats'}</span></td>
+            <td style="display:flex;gap:4px;flex-wrap:wrap">
+              <button class="action-btn action-edit" onclick="editGame('${g.id}')">Edit</button>
+              <button class="action-btn action-save" onclick="enterStats('${g.id}')">Stats</button>
+              <button class="action-btn action-delete" onclick="deleteGame('${g.id}')">Del</button>
+            </td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>
+  `);
+}
+
+window.filterGamesByTeam = function(teamId) {
+  document.querySelectorAll('#games-table tbody tr').forEach(row => {
+    row.style.display = teamId && row.dataset.team !== teamId ? 'none' : '';
+  });
+};
+
+function addGame() {
+  const data = loadData();
+  openModal('Add Game', buildGameForm(null, data), 'Add Game', () => {
+    const d = loadData();
+    d.games.push({
+      id: 'g'+Date.now(), teamId: val('gf-team'), date: val('gf-date'),
+      opponent: val('gf-opp'), location: val('gf-loc'),
+      heroScore: val('gf-hs')?parseInt(val('gf-hs')):null,
+      oppScore: val('gf-os')?parseInt(val('gf-os')):null,
+      result: val('gf-result'), season: val('gf-season'), notes: val('gf-notes'),
+      tournamentId: null, playerStats: []
+    });
+    saveData(d); closeModal(); renderGames(); toast('Game added!');
+  });
+}
+
+function editGame(id) {
+  const data = loadData(); const g = data.games.find(x=>x.id===id);
+  openModal('Edit Game', buildGameForm(g, data), 'Save Changes', () => {
+    const d = loadData(); const idx = d.games.findIndex(x=>x.id===id);
+    d.games[idx] = { ...d.games[idx], teamId: val('gf-team'), date: val('gf-date'),
+      opponent: val('gf-opp'), location: val('gf-loc'),
+      heroScore: val('gf-hs')?parseInt(val('gf-hs')):null,
+      oppScore: val('gf-os')?parseInt(val('gf-os')):null,
+      result: val('gf-result'), season: val('gf-season'), notes: val('gf-notes')
+    };
+    saveData(d); closeModal(); renderGames(); toast('Game updated!');
+  });
+}
+
+function deleteGame(id) {
+  if (!confirm('Delete this game and all its stats?')) return;
+  const d = loadData(); d.games = d.games.filter(g=>g.id!==id); saveData(d); renderGames(); toast('Game deleted');
+}
+
+function buildGameForm(g, data) {
+  const season = new Date().getFullYear();
+  return `
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Team*</label>
+        <select id="gf-team" class="form-select">${data.teams.map(t=>`<option value="${t.id}"${g?.teamId===t.id?' selected':''}>${t.name}</option>`).join('')}</select>
+      </div>
+      <div class="form-group"><label class="form-label">Date*</label><input type="date" id="gf-date" class="form-input" value="${g?.date||''}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Opponent*</label><input id="gf-opp" class="form-input" value="${g?.opponent||''}"></div>
+      <div class="form-group"><label class="form-label">Location</label><input id="gf-loc" class="form-input" value="${g?.location||''}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Heroes Score</label><input type="number" id="gf-hs" class="form-input" value="${g?.heroScore??''}"></div>
+      <div class="form-group"><label class="form-label">Opponent Score</label><input type="number" id="gf-os" class="form-input" value="${g?.oppScore??''}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Result</label>
+        <select id="gf-result" class="form-select">
+          <option value="">TBD</option>
+          ${['W','L','T'].map(r=>`<option value="${r}"${g?.result===r?' selected':''}>${r}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Season</label>
+        <input id="gf-season" class="form-input" value="${g?.season||season}">
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Notes</label><textarea id="gf-notes" class="form-textarea">${g?.notes||''}</textarea></div>
+  `;
+}
+
+// ─── STAT ENTRY ────────────────────────────────────────────
+function renderStatsEntry() {
+  const data = loadData();
+  const pendingGames = data.games.filter(g => g.result && (!g.playerStats || g.playerStats.length === 0));
+  
+  setContent(`
+    <div style="display:grid;grid-template-columns:300px 1fr;gap:20px">
+      <div class="admin-table-wrap" style="height:fit-content">
+        <div class="admin-table-header"><h3>Select Game</h3></div>
+        <div style="padding:12px">
+          ${pendingGames.length ? '<p style="font-size:12px;color:var(--gray);margin-bottom:12px">Games without stats:</p>' : ''}
+          ${data.games.map(g=>{
+            const hasStats = g.playerStats && g.playerStats.length > 0;
+            const team = data.teams.find(t=>t.id===g.teamId);
+            return `<div onclick="loadStatEntry('${g.id}')" style="padding:10px 12px;border-radius:6px;cursor:pointer;margin-bottom:4px;border:1px solid var(--border);transition:all 0.1s" onmouseover="this.style.background='#fff5f5'" onmouseout="this.style.background=''">
+              <div style="font-size:11px;font-weight:700;color:var(--gray)">${g.date} · ${team?.shortName}</div>
+              <div style="font-size:13px;font-weight:700">vs ${g.opponent}</div>
+              <div style="font-size:11px;color:${hasStats?'#15803d':'#f59e0b'}">${hasStats?'✓ Stats entered':'⚠ No stats'}</div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+      <div id="stat-entry-panel">
+        <div style="background:var(--white);border-radius:8px;box-shadow:var(--shadow);padding:40px;text-align:center;color:var(--gray)">
+          <div style="font-size:48px;margin-bottom:16px">📊</div>
+          <p>Select a game to enter player statistics</p>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
+window.loadStatEntry = function(gameId) {
+  const data = loadData();
+  const game = data.games.find(g=>g.id===gameId);
+  if (!game) return;
+  const team = data.teams.find(t=>t.id===game.teamId);
+  const players = data.players.filter(p=>p.teams.includes(game.teamId)&&p.active);
+  
+  const headerCols = ['AB','H','1B','2B','3B','HR','HBP','K','BB','SF','RBI','R'];
+  const statKeys = ['ab','h','s','d','t','hr','hbp','k','bb','sf','rbi','r'];
+  
+  const rows = players.map(p => {
+    const existing = game.playerStats?.find(ps=>ps.playerId===p.id) || {};
+    const inputs = statKeys.map(key =>
+      `<input type="number" min="0" class="stat-input" data-player="${p.id}" data-stat="${key}" value="${existing[key]||''}" style="padding:5px 2px;text-align:center;border:1px solid var(--border);border-radius:4px;font-size:13px;width:100%;outline:none" onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'">`
+    ).join('');
+    return `<div class="stat-entry-row">
+      <div class="player-label">${p.firstName} ${p.lastName} <span style="color:var(--gray)">#${p.number}</span></div>
+      ${inputs}
+    </div>`;
+  }).join('');
+
+  document.getElementById('stat-entry-panel').innerHTML = `
+    <div class="admin-table-wrap">
+      <div class="admin-table-header">
+        <div>
+          <h3>${team?.name}: vs ${game.opponent}</h3>
+          <div style="font-size:12px;color:var(--gray)">${game.date} · Score: ${game.heroScore??'–'} - ${game.oppScore??'–'} · <span style="color:${game.result==='W'?'#15803d':'#dc2626'}">${game.result||'TBD'}</span></div>
+        </div>
+        <button class="btn btn-success" onclick="saveStatsEntry('${gameId}')">💾 Save Stats</button>
+      </div>
+      <div style="padding:16px;overflow-x:auto">
+        <div class="stat-entry-header">
+          <span style="padding-left:8px">Player</span>
+          ${headerCols.map(h=>`<span>${h}</span>`).join('')}
+        </div>
+        ${rows}
+        <div style="margin-top:16px;padding:12px;background:var(--gray-light);border-radius:6px;font-size:12px;color:var(--gray)">
+          <strong>Key:</strong> AB=At Bats · H=Hits · 1B=Singles · 2B=Doubles · 3B=Triples · HR=Home Runs · HBP=Hit By Pitch · K=Strikeouts · BB=Walks · SF=Sac Fly · RBI · R=Runs
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+window.saveStatsEntry = function(gameId) {
+  const d = loadData();
+  const gameIdx = d.games.findIndex(g=>g.id===gameId);
+  if (gameIdx < 0) return;
+  
+  const statsMap = {};
+  document.querySelectorAll('.stat-input').forEach(input => {
+    const pid = input.dataset.player;
+    const stat = input.dataset.stat;
+    const v = parseInt(input.value) || 0;
+    if (!statsMap[pid]) statsMap[pid] = { playerId: pid, ab:0, h:0, s:0, d:0, t:0, hr:0, hbp:0, k:0, bb:0, sf:0, rbi:0, r:0 };
+    statsMap[pid][stat] = v;
+  });
+  
+  d.games[gameIdx].playerStats = Object.values(statsMap).filter(ps => ps.ab > 0);
+  saveData(d);
+  toast('Stats saved! ✓', 'success');
+};
+
+// ─── EVENTS ────────────────────────────────────────────────
+function renderEvents() {
+  const data = loadData();
+  setContent(`
+    <div class="admin-table-wrap">
+      <div class="admin-table-header"><h3>Events & Tournaments</h3><button class="btn btn-primary btn-sm" onclick="addEvent()">+ Add Event</button></div>
+      <table class="admin-table">
+        <thead><tr><th>Date</th><th>Event</th><th>Type</th><th>Teams</th><th>Location</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>${data.events.map(ev=>{
+          const teams = ev.teams.map(id=>data.teams.find(t=>t.id===id)?.shortName||id).join(', ');
+          return `<tr>
+            <td>${ev.date}</td>
+            <td><strong>${ev.name}</strong></td>
+            <td><span style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray)">${ev.type}</span></td>
+            <td style="font-size:12px">${teams}</td>
+            <td style="font-size:12px;color:var(--gray)">${ev.location}</td>
+            <td><span style="padding:3px 8px;border-radius:20px;font-size:11px;font-weight:700;background:${ev.status==='upcoming'?'#fef9c3':'#f3f4f6'};color:${ev.status==='upcoming'?'#92400e':'#6b7280'}">${ev.status}</span></td>
+            <td style="display:flex;gap:4px">
+              <button class="action-btn action-edit" onclick="editEvent('${ev.id}')">Edit</button>
+              <button class="action-btn action-view" onclick="showPage('availability')">Avail.</button>
+              <button class="action-btn action-delete" onclick="deleteEvent('${ev.id}')">Del</button>
+            </td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>
+  `);
+}
+
+function addEvent() {
+  const data = loadData();
+  openModal('Add Event', buildEventForm(null, data), 'Add Event', () => {
+    const d = loadData();
+    const isTourney = val('ef-type')==='tournament';
+    d.events.push({ id:'e'+Date.now(), type:val('ef-type'), name:val('ef-name'), date:val('ef-date'), endDate:val('ef-end'),
+      location:val('ef-loc'), venue:val('ef-venue'), address:val('ef-address'),
+      teams:Array.from(document.querySelectorAll('.ef-team:checked')).map(c=>c.value),
+      division:val('ef-division'), notes:val('ef-notes'), status:val('ef-status'),
+      ...(isTourney ? {
+        entryFee: parseFloat(val('ef-fee'))||0, registrationStatus:val('ef-regstatus'),
+        rsvpDeadline:val('ef-rsvp'), rosterDeadline:val('ef-roster'),
+        director:val('ef-director'), directorPhone:val('ef-dirphone'),
+        hotelInfo:val('ef-hotel'), hotelCode:val('ef-hotelcode'), hotelUrl:val('ef-hotelurl'),
+        placement:val('ef-placement')
+      } : {}),
+      availability:[] });
+    saveData(d); closeModal(); renderEvents(); toast('Event added!');
+  });
+}
+function editEvent(id) {
+  const data = loadData(); const ev = data.events.find(e=>e.id===id);
+  openModal('Edit Event', buildEventForm(ev, data), 'Save Changes', () => {
+    const d = loadData(); const idx = d.events.findIndex(e=>e.id===id);
+    const isTourney = val('ef-type')==='tournament';
+    d.events[idx] = { ...d.events[idx], type:val('ef-type'), name:val('ef-name'), date:val('ef-date'), endDate:val('ef-end'),
+      location:val('ef-loc'), venue:val('ef-venue'), address:val('ef-address'),
+      teams:Array.from(document.querySelectorAll('.ef-team:checked')).map(c=>c.value),
+      division:val('ef-division'), notes:val('ef-notes'), status:val('ef-status'),
+      ...(isTourney ? {
+        entryFee: parseFloat(val('ef-fee'))||0, registrationStatus:val('ef-regstatus'),
+        rsvpDeadline:val('ef-rsvp'), rosterDeadline:val('ef-roster'),
+        director:val('ef-director'), directorPhone:val('ef-dirphone'),
+        hotelInfo:val('ef-hotel'), hotelCode:val('ef-hotelcode'), hotelUrl:val('ef-hotelurl'),
+        placement:val('ef-placement')
+      } : {}) };
+    saveData(d); closeModal(); renderEvents(); toast('Event updated!');
+  });
+}
+function deleteEvent(id) {
+  if(!confirm('Delete event?')) return;
+  const d=loadData(); d.events=d.events.filter(e=>e.id!==id); saveData(d); renderEvents(); toast('Event deleted');
+}
+function buildEventForm(ev, data) {
+  return `
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Event Name*</label><input id="ef-name" class="form-input" value="${ev?.name||''}"></div>
+      <div class="form-group"><label class="form-label">Type</label>
+        <select id="ef-type" class="form-select" onchange="toggleTournamentFields(this.value)">${['tournament','game','social','practice'].map(x=>`<option value="${x}"${ev?.type===x?' selected':''}>${x}</option>`).join('')}</select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Start Date*</label><input type="date" id="ef-date" class="form-input" value="${ev?.date||''}"></div>
+      <div class="form-group"><label class="form-label">End Date</label><input type="date" id="ef-end" class="form-input" value="${ev?.endDate||''}"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">City / Location</label><input id="ef-loc" class="form-input" placeholder="e.g. Omaha, NE" value="${ev?.location||''}"></div>
+      <div class="form-group"><label class="form-label">Venue Name</label><input id="ef-venue" class="form-input" placeholder="e.g. Seymour Smith Park" value="${ev?.venue||''}"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Street Address</label><input id="ef-address" class="form-input" placeholder="Full address for directions" value="${ev?.address||''}"></div>
+    <div class="form-group"><label class="form-label">Teams</label>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        ${data.teams.map(t=>`<label class="form-check"><input type="checkbox" class="ef-team" value="${t.id}"${ev?.teams?.includes(t.id)?' checked':''}> ${t.name}</label>`).join('')}
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Status</label>
+        <select id="ef-status" class="form-select">${['upcoming','completed','cancelled'].map(x=>`<option value="${x}"${ev?.status===x?' selected':''}>${x}</option>`).join('')}</select>
+      </div>
+      <div class="form-group"><label class="form-label">Division</label><input id="ef-division" class="form-input" placeholder="e.g. 55+ AAA" value="${ev?.division||''}"></div>
+    </div>
+
+    <div id="ef-tournament-fields" style="${(ev?.type||'tournament')==='tournament'?'':'display:none'}">
+      <hr style="margin:16px 0;border-color:var(--border)">
+      <div style="font-weight:600;font-size:13px;margin-bottom:12px;color:var(--dark)">🏆 Tournament Details</div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Entry Fee ($)</label><input type="number" id="ef-fee" class="form-input" placeholder="0" value="${ev?.entryFee||''}"></div>
+        <div class="form-group"><label class="form-label">Registration Status</label>
+          <select id="ef-regstatus" class="form-select">${['open','closed','waitlist','not-yet-open'].map(x=>`<option value="${x}"${ev?.registrationStatus===x?' selected':''}>${x}</option>`).join('')}</select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">RSVP Deadline</label><input type="date" id="ef-rsvp" class="form-input" value="${ev?.rsvpDeadline||''}"></div>
+        <div class="form-group"><label class="form-label">Roster Deadline</label><input type="date" id="ef-roster" class="form-input" value="${ev?.rosterDeadline||''}"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Tournament Director</label><input id="ef-director" class="form-input" placeholder="e.g. SSUSA" value="${ev?.director||''}"></div>
+        <div class="form-group"><label class="form-label">Director Phone</label><input id="ef-dirphone" class="form-input" placeholder="Optional" value="${ev?.directorPhone||''}"></div>
+      </div>
+      <hr style="margin:16px 0;border-color:var(--border)">
+      <div style="font-weight:600;font-size:13px;margin-bottom:12px;color:var(--dark)">🏨 Hotel Info</div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Hotel Name</label><input id="ef-hotel" class="form-input" placeholder="e.g. Hilton Garden Inn" value="${ev?.hotelInfo||''}"></div>
+        <div class="form-group"><label class="form-label">Group Code</label><input id="ef-hotelcode" class="form-input" placeholder="Promo / block code" value="${ev?.hotelCode||''}"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Hotel Booking URL</label><input id="ef-hotelurl" class="form-input" placeholder="https://..." value="${ev?.hotelUrl||''}"></div>
+      <hr style="margin:16px 0;border-color:var(--border)">
+      <div style="font-weight:600;font-size:13px;margin-bottom:12px;color:var(--dark)">🏅 Result</div>
+      <div class="form-group"><label class="form-label">Placement / Result</label><input id="ef-placement" class="form-input" placeholder="e.g. 3rd Place, Gold Division" value="${ev?.placement||''}"></div>
+    </div>
+
+    <div class="form-group" style="margin-top:16px"><label class="form-label">Notes</label><textarea id="ef-notes" class="form-textarea">${ev?.notes||''}</textarea></div>
+  `;
+}
+
+function toggleTournamentFields(type) {
+  const el = document.getElementById('ef-tournament-fields');
+  if (el) el.style.display = type === 'tournament' ? '' : 'none';
+}
+
+// ─── AVAILABILITY ──────────────────────────────────────────
+function renderAvailability() {
+  const data = loadData();
+  const upcomingEvents = data.events.filter(e=>e.status==='upcoming');
+  
+  setContent(`
+    <div class="admin-table-wrap" style="margin-bottom:20px">
+      <div class="admin-table-header"><h3>Select Event to Manage Availability</h3></div>
+      <div style="padding:16px;display:flex;gap:12px;flex-wrap:wrap">
+        ${upcomingEvents.map(ev=>`<button class="btn btn-secondary" onclick="showAvailabilityForEvent('${ev.id}')">${ev.name} — ${ev.date}</button>`).join('')}
+        ${!upcomingEvents.length?'<p style="color:var(--gray)">No upcoming events</p>':''}
+      </div>
+    </div>
+    <div id="avail-panel"></div>
+  `);
+}
+
+window.showAvailabilityForEvent = function(eventId) {
+  const data = loadData();
+  const ev = data.events.find(e=>e.id===eventId);
+  if (!ev) return;
+  const players = data.players.filter(p=>p.active && ev.teams.some(tid=>p.teams.includes(tid)));
+  
+  const rows = players.map(p => {
+    const a = ev.availability?.find(x=>x.playerId===p.id);
+    const status = a?.status || 'pending';
+    return `<tr>
+      <td><strong>${p.firstName} ${p.lastName}</strong></td>
+      <td>${p.teams.map(tid=>data.teams.find(t=>t.id===tid)?.shortName||'').filter(Boolean).join(', ')}</td>
+      <td>
+        <select onchange="setAvailability('${eventId}','${p.id}',this.value)" style="padding:6px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:${status==='yes'?'#dcfce7':status==='no'?'#fee2e2':'#fef9c3'}">
+          ${[['pending','⏳ TBD'],['yes','✅ Available'],['no','❌ Unavailable'],['maybe','🟡 Maybe']].map(([v,l])=>`<option value="${v}"${status===v?' selected':''}>${l}</option>`).join('')}
+        </select>
+      </td>
+      <td style="font-size:12px;color:var(--gray)">${a?.notes||'—'}</td>
+    </tr>`;
+  }).join('');
+  
+  const yes=ev.availability?.filter(a=>a.status==='yes').length||0;
+  const no=ev.availability?.filter(a=>a.status==='no').length||0;
+  const maybe=ev.availability?.filter(a=>a.status==='maybe').length||0;
+  
+  document.getElementById('avail-panel').innerHTML = `
+    <div class="admin-table-wrap">
+      <div class="admin-table-header">
+        <div><h3>${ev.name} — ${ev.date}</h3>
+        <div style="font-size:12px;color:var(--gray);margin-top:4px">✅ ${yes} in · ❌ ${no} out · 🟡 ${maybe} maybe · ⏳ ${players.length-yes-no-maybe} pending</div></div>
+      </div>
+      <table class="admin-table">
+        <thead><tr><th>Player</th><th>Teams</th><th>Status</th><th>Notes</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+};
+
+window.setAvailability = function(eventId, playerId, status) {
+  const d = loadData();
+  const evIdx = d.events.findIndex(e=>e.id===eventId);
+  if (evIdx < 0) return;
+  if (!d.events[evIdx].availability) d.events[evIdx].availability = [];
+  const aIdx = d.events[evIdx].availability.findIndex(a=>a.playerId===playerId);
+  if (aIdx >= 0) d.events[evIdx].availability[aIdx].status = status;
+  else d.events[evIdx].availability.push({ playerId, status, notes: '' });
+  saveData(d);
+};
+
+// ─── NEWS ──────────────────────────────────────────────────
+function renderNews() {
+  const data = loadData();
+  setContent(`
+    <div class="admin-table-wrap">
+      <div class="admin-table-header"><h3>News & Announcements</h3><button class="btn btn-primary btn-sm" onclick="addNews()">+ Add Article</button></div>
+      <table class="admin-table">
+        <thead><tr><th>Date</th><th>Title</th><th>Category</th><th>Author</th><th>Pinned</th><th>Actions</th></tr></thead>
+        <tbody>${data.news.map(n=>`<tr>
+          <td style="font-size:12px">${n.date}</td>
+          <td><strong>${n.title}</strong></td>
+          <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:#fee2e2;color:#dc2626">${n.category}</span></td>
+          <td>${n.author}</td>
+          <td>${n.pinned?'📌':''}</td>
+          <td style="display:flex;gap:4px">
+            <button class="action-btn action-edit" onclick="editNews('${n.id}')">Edit</button>
+            <button class="action-btn action-delete" onclick="deleteNews('${n.id}')">Delete</button>
+          </td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+  `);
+}
+function addNews() {
+  openModal('Add Article', buildNewsForm(null), 'Publish', () => {
+    const d=loadData();
+    d.news.unshift({ id:'n'+Date.now(), title:val('nf-title'), category:val('nf-cat'), date:val('nf-date'), season:new Date().getFullYear().toString(), excerpt:val('nf-excerpt'), content:val('nf-content'), image:val('nf-image'), author:val('nf-author'), pinned:document.getElementById('nf-pinned').checked });
+    saveData(d); closeModal(); renderNews(); toast('Article published!');
+  });
+}
+function editNews(id) {
+  const data=loadData(); const n=data.news.find(x=>x.id===id);
+  openModal('Edit Article', buildNewsForm(n), 'Save', () => {
+    const d=loadData(); const idx=d.news.findIndex(x=>x.id===id);
+    d.news[idx]={...d.news[idx],title:val('nf-title'),category:val('nf-cat'),date:val('nf-date'),excerpt:val('nf-excerpt'),content:val('nf-content'),image:val('nf-image'),author:val('nf-author'),pinned:document.getElementById('nf-pinned').checked};
+    saveData(d); closeModal(); renderNews(); toast('Article updated!');
+  });
+}
+function deleteNews(id) {
+  if(!confirm('Delete?')) return;
+  const d=loadData(); d.news=d.news.filter(n=>n.id!==id); saveData(d); renderNews();
+}
+function buildNewsForm(n) {
+  const cats = ['Announcement','Tournament','Game Recap','Season Update','Team News','Community'];
+  return `
+    <div class="form-group"><label class="form-label">Title*</label><input id="nf-title" class="form-input" value="${n?.title||''}"></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Category</label>
+        <select id="nf-cat" class="form-select">${cats.map(c=>`<option${n?.category===c?' selected':''}>${c}</option>`).join('')}</select>
+      </div>
+      <div class="form-group"><label class="form-label">Date</label><input type="date" id="nf-date" class="form-input" value="${n?.date||new Date().toISOString().slice(0,10)}"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Author</label><input id="nf-author" class="form-input" value="${n?.author||''}"></div>
+    <div class="form-group"><label class="form-label">Excerpt (short preview)</label><textarea id="nf-excerpt" class="form-textarea" rows="2">${n?.excerpt||''}</textarea></div>
+    <div class="form-group"><label class="form-label">Full Content</label><textarea id="nf-content" class="form-textarea" rows="6">${n?.content||''}</textarea></div>
+    <div class="form-group"><label class="form-label">Image URL</label><input id="nf-image" class="form-input" value="${n?.image||''}" placeholder="https://..."></div>
+    <label class="form-check"><input type="checkbox" id="nf-pinned"${n?.pinned?' checked':''}> Pin to top of news</label>
+  `;
+}
+
+// ─── AWARDS ────────────────────────────────────────────────
+function renderAwards() {
+  const data = loadData();
+  setContent(`
+    <div class="admin-table-wrap">
+      <div class="admin-table-header"><h3>Awards & Achievements</h3><button class="btn btn-primary btn-sm" onclick="addAward()">+ Add Award</button></div>
+      <table class="admin-table">
+        <thead><tr><th>Icon</th><th>Year</th><th>Title</th><th>Team</th><th>Actions</th></tr></thead>
+        <tbody>${data.awards.map(a=>`<tr>
+          <td style="font-size:20px">${a.icon}</td>
+          <td>${a.year}</td>
+          <td><strong>${a.title}</strong><br><span style="font-size:12px;color:var(--gray)">${a.description}</span></td>
+          <td>${data.teams.find(t=>t.id===a.team)?.name||'All Teams'}</td>
+          <td style="display:flex;gap:4px">
+            <button class="action-btn action-edit" onclick="editAward('${a.id}')">Edit</button>
+            <button class="action-btn action-delete" onclick="deleteAward('${a.id}')">Del</button>
+          </td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+  `);
+}
+function addAward() {
+  const data=loadData();
+  openModal('Add Award', buildAwardForm(null,data), 'Add Award', () => {
+    const d=loadData();
+    d.awards.unshift({id:'a'+Date.now(),year:val('af-year'),title:val('af-title'),team:val('af-team'),description:val('af-desc'),icon:val('af-icon')});
+    saveData(d); closeModal(); renderAwards(); toast('Award added!');
+  });
+}
+function editAward(id) {
+  const data=loadData(); const a=data.awards.find(x=>x.id===id);
+  openModal('Edit Award', buildAwardForm(a,data), 'Save', () => {
+    const d=loadData(); const idx=d.awards.findIndex(x=>x.id===id);
+    d.awards[idx]={...d.awards[idx],year:val('af-year'),title:val('af-title'),team:val('af-team'),description:val('af-desc'),icon:val('af-icon')};
+    saveData(d); closeModal(); renderAwards(); toast('Award updated!');
+  });
+}
+function deleteAward(id) {
+  if(!confirm('Delete?')) return;
+  const d=loadData(); d.awards=d.awards.filter(a=>a.id!==id); saveData(d); renderAwards();
+}
+function buildAwardForm(a, data) {
+  return `
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Icon (emoji)</label><input id="af-icon" class="form-input" value="${a?.icon||'🏆'}" placeholder="🏆"></div>
+      <div class="form-group"><label class="form-label">Year</label><input id="af-year" class="form-input" value="${a?.year||new Date().getFullYear()}"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Title*</label><input id="af-title" class="form-input" value="${a?.title||''}"></div>
+    <div class="form-group"><label class="form-label">Team</label>
+      <select id="af-team" class="form-select"><option value="">All Teams</option>
+        ${data.teams.map(t=>`<option value="${t.id}"${a?.team===t.id?' selected':''}>${t.name}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Description</label><textarea id="af-desc" class="form-textarea">${a?.description||''}</textarea></div>
+  `;
+}
+
+// ─── SPONSORS ─────────────────────────────────────────────
+function renderSponsors() {
+  const data = loadData();
+  setContent(`
+    <div class="admin-table-wrap">
+      <div class="admin-table-header"><h3>Sponsors</h3><button class="btn btn-primary btn-sm" onclick="addSponsor()">+ Add Sponsor</button></div>
+      <table class="admin-table">
+        <thead><tr><th>Name</th><th>Tier</th><th>URL</th><th>Actions</th></tr></thead>
+        <tbody>${data.sponsors.map(s=>`<tr>
+          <td><strong>${s.name}</strong></td>
+          <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:${s.tier==='gold'?'#fef9c3':s.tier==='silver'?'#f3f4f6':'#fff7ed'};color:#92400e">${s.tier}</span></td>
+          <td style="font-size:12px;color:var(--gray)">${s.url}</td>
+          <td style="display:flex;gap:4px">
+            <button class="action-btn action-edit" onclick="editSponsor('${s.id}')">Edit</button>
+            <button class="action-btn action-delete" onclick="deleteSponsor('${s.id}')">Del</button>
+          </td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>
+  `);
+}
+function addSponsor() {
+  openModal('Add Sponsor', buildSponsorForm(null), 'Add Sponsor', () => {
+    const d=loadData();
+    d.sponsors.push({id:'s'+Date.now(),name:val('sf-name'),url:val('sf-url'),logo:val('sf-logo'),tier:val('sf-tier')});
+    saveData(d); closeModal(); renderSponsors(); toast('Sponsor added!');
+  });
+}
+function editSponsor(id) {
+  const data=loadData(); const s=data.sponsors.find(x=>x.id===id);
+  openModal('Edit Sponsor', buildSponsorForm(s), 'Save', () => {
+    const d=loadData(); const idx=d.sponsors.findIndex(x=>x.id===id);
+    d.sponsors[idx]={...d.sponsors[idx],name:val('sf-name'),url:val('sf-url'),logo:val('sf-logo'),tier:val('sf-tier')};
+    saveData(d); closeModal(); renderSponsors(); toast('Updated!');
+  });
+}
+function deleteSponsor(id) {
+  if(!confirm('Delete?')) return;
+  const d=loadData(); d.sponsors=d.sponsors.filter(s=>s.id!==id); saveData(d); renderSponsors();
+}
+function buildSponsorForm(s) {
+  return `
+    <div class="form-group"><label class="form-label">Sponsor Name*</label><input id="sf-name" class="form-input" value="${s?.name||''}"></div>
+    <div class="form-group"><label class="form-label">Website URL</label><input id="sf-url" class="form-input" value="${s?.url||''}"></div>
+    <div class="form-group"><label class="form-label">Logo URL</label><input id="sf-logo" class="form-input" value="${s?.logo||''}" placeholder="https://..."></div>
+    <div class="form-group"><label class="form-label">Tier</label>
+      <select id="sf-tier" class="form-select">${['gold','silver','bronze'].map(x=>`<option value="${x}"${s?.tier===x?' selected':''}>${x}</option>`).join('')}</select>
+    </div>
+  `;
+}
+
+// ─── PAGE BUILDER ─────────────────────────────────────────
+function renderPageBuilder() {
+  const data = loadData();
+  const layout = data.pageLayouts?.home || [];
+  const components = [
+    { type:'hero', icon:'🏆', name:'Hero Banner', desc:'Big banner with team info & CTAs' },
+    { type:'team-cards', icon:'⚾', name:'Team Cards', desc:'Grid of team cards with records' },
+    { type:'latest-results', icon:'📊', name:'Latest Results', desc:'Recent game scores list' },
+    { type:'stat-leaders', icon:'📈', name:'Stat Leaders', desc:'Leaderboard by category' },
+    { type:'news-feed', icon:'📰', name:'News Feed', desc:'Recent news and announcements' },
+    { type:'awards', icon:'🥇', name:'Awards', desc:'Trophy case and achievements' },
+    { type:'sponsors', icon:'🤝', name:'Sponsors', desc:'Sponsor logos and links' },
+    { type:'custom-text', icon:'📝', name:'Text Block', desc:'Rich text / HTML block' },
+    { type:'photo-gallery', icon:'🖼️', name:'Photo Gallery', desc:'Image grid gallery' },
+    { type:'upcoming-events', icon:'📅', name:'Upcoming Events', desc:'Event schedule list' },
+  ];
+
+  setContent(`
+    <div style="display:grid;grid-template-columns:1fr 320px;gap:20px">
+      <div>
+        <div class="admin-table-wrap">
+          <div class="admin-table-header">
+            <h3>Home Page Layout</h3>
+            <button class="btn btn-success btn-sm" onclick="savePageLayout()">💾 Save Layout</button>
+          </div>
+          <div style="padding:16px" id="page-layout-list">
+            <p style="font-size:12px;color:var(--gray);margin-bottom:12px">Drag to reorder · Toggle to show/hide · Click settings to configure</p>
+            ${layout.map((section,i) => {
+              const comp = components.find(c=>c.type===section.type);
+              return `<div class="pb-page-section" draggable="true" data-idx="${i}" id="pbs-${i}"
+                ondragstart="pbDragStart(event,${i})" ondragover="pbDragOver(event)" ondrop="pbDrop(event,${i})">
+                <div class="pb-section-drag">⠿</div>
+                <div class="pb-section-info">
+                  <div class="pb-section-type">${comp?.icon||'📄'} ${section.type}</div>
+                  <div class="pb-section-name">${comp?.name||section.id}</div>
+                </div>
+                <div class="pb-section-actions">
+                  <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+                    <input type="checkbox" ${section.visible?'checked':''} onchange="pbToggleVisible(${i},this.checked)"> Visible
+                  </label>
+                  <button class="btn btn-xs btn-secondary" onclick="pbEditSection(${i})">⚙</button>
+                  <button class="btn btn-xs btn-danger" onclick="pbRemoveSection(${i})">✕</button>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="admin-table-wrap">
+          <div class="admin-table-header"><h3>Add Component</h3></div>
+          <div style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            ${components.map(c=>`
+              <div onclick="pbAddSection('${c.type}')" style="background:var(--gray-light);border-radius:6px;padding:12px;cursor:pointer;text-align:center;transition:all 0.15s;border:1px solid transparent" onmouseover="this.style.borderColor='var(--red)';this.style.background='#fff5f5'" onmouseout="this.style.borderColor='transparent';this.style.background='var(--gray-light)'">
+                <div style="font-size:20px;margin-bottom:4px">${c.icon}</div>
+                <div style="font-size:12px;font-weight:700">${c.name}</div>
+                <div style="font-size:10px;color:var(--gray);margin-top:2px">${c.desc}</div>
+              </div>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+}
+
+let pbDragIdx = null;
+window.pbDragStart = function(e, idx) { pbDragIdx = idx; e.dataTransfer.effectAllowed = 'move'; };
+window.pbDragOver = function(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
+window.pbDrop = function(e, targetIdx) {
+  e.preventDefault();
+  if (pbDragIdx === null || pbDragIdx === targetIdx) return;
+  const d = loadData();
+  const layout = d.pageLayouts.home;
+  const [item] = layout.splice(pbDragIdx, 1);
+  layout.splice(targetIdx, 0, item);
+  saveData(d); renderPageBuilder();
+};
+window.pbToggleVisible = function(idx, visible) {
+  const d = loadData(); d.pageLayouts.home[idx].visible = visible; saveData(d);
+};
+window.pbRemoveSection = function(idx) {
+  if(!confirm('Remove this section?')) return;
+  const d = loadData(); d.pageLayouts.home.splice(idx,1); saveData(d); renderPageBuilder();
+};
+window.pbAddSection = function(type) {
+  const d = loadData();
+  if (!d.pageLayouts) d.pageLayouts = { home: [] };
+  d.pageLayouts.home.push({ id: type+'-'+Date.now(), type, visible: true, settings: {} });
+  saveData(d); renderPageBuilder(); toast(`${type} section added!`);
+};
+window.pbEditSection = function(idx) {
+  const data = loadData(); const section = data.pageLayouts.home[idx];
+  openModal('Configure Section', `
+    <div class="form-group"><label class="form-label">Section Title</label><input id="pbs-title" class="form-input" value="${section.settings?.title||''}"></div>
+    <div class="form-group"><label class="form-label">Subtitle</label><input id="pbs-sub" class="form-input" value="${section.settings?.subtitle||''}"></div>
+    <div class="form-group"><label class="form-label">Number of items to show</label><input type="number" id="pbs-count" class="form-input" value="${section.settings?.count||5}"></div>
+    <label class="form-check"><input type="checkbox" id="pbs-visible"${section.visible?' checked':''}> Section visible</label>
+  `, 'Save Settings', () => {
+    const d = loadData();
+    d.pageLayouts.home[idx].settings = { ...d.pageLayouts.home[idx].settings, title: val('pbs-title'), subtitle: val('pbs-sub'), count: parseInt(val('pbs-count')||5) };
+    d.pageLayouts.home[idx].visible = document.getElementById('pbs-visible').checked;
+    saveData(d); closeModal(); renderPageBuilder(); toast('Section updated!');
+  });
+};
+window.savePageLayout = function() { toast('Layout saved! ✓', 'success'); };
+
+// ─── SETTINGS ─────────────────────────────────────────────
+function renderSettings() {
+  const data = loadData();
+  setContent(`
+    <div class="admin-form">
+      <div class="admin-form-header"><h3>Site Settings</h3></div>
+      <div class="admin-form-body">
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Organization Name</label><input id="cfg-org" class="form-input" value="${data.config.orgName}"></div>
+          <div class="form-group"><label class="form-label">City</label><input id="cfg-city" class="form-input" value="${data.config.city}"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Founded Year</label><input type="number" id="cfg-year" class="form-input" value="${data.config.foundedYear}"></div>
+          <div class="form-group"><label class="form-label">Contact Email</label><input id="cfg-email" class="form-input" value="${data.config.contactEmail}"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Facebook URL</label><input id="cfg-fb" class="form-input" value="${data.config.facebookUrl}"></div>
+          <div class="form-group"><label class="form-label">Store URL</label><input id="cfg-store" class="form-input" value="${data.config.storeUrl}"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Venmo Handle</label><input id="cfg-venmo" class="form-input" value="${data.config.venmoHandle}"></div>
+          <div class="form-group">
+            <label class="form-label">Admin Password</label>
+            <input type="password" id="cfg-pw" class="form-input" placeholder="Enter new password (leave blank to keep current)">
+          </div>
+        </div>
+      </div>
+      <div class="admin-form-footer">
+        <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+        <button class="btn btn-secondary" onclick="renderSettings()">Cancel</button>
+      </div>
+    </div>
+  `);
+}
+window.saveSettings = function() {
+  const d = loadData();
+  d.config = { ...d.config,
+    orgName: val('cfg-org'), city: val('cfg-city'), foundedYear: parseInt(val('cfg-year')),
+    contactEmail: val('cfg-email'), facebookUrl: val('cfg-fb'), storeUrl: val('cfg-store'), venmoHandle: val('cfg-venmo')
+  };
+  const newPw = val('cfg-pw');
+  if (newPw) d.config.adminPassword = newPw;
+  saveData(d); renderSettings(); toast('Settings saved!');
+};
+
+// ─── ACCOUNT REQUESTS ─────────────────────────────────────
+function updateReqBadge() {
+  const d = loadData();
+  const count = (d.accountRequests || []).filter(r => r.status === 'pending').length;
+  const badge = document.getElementById('req-badge');
+  if (badge) {
+    badge.textContent = count;
+    badge.style.display = count > 0 ? 'inline-block' : 'none';
+  }
+}
+
+function renderAccountRequests() {
+  const d = loadData();
+  const requests = (d.accountRequests || []).sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
+  const pending = requests.filter(r => r.status === 'pending');
+  const reviewed = requests.filter(r => r.status !== 'pending');
+
+  const pendingRows = pending.length ? pending.map(r => `
+    <tr>
+      <td>
+        <strong>${r.firstName} ${r.lastName}</strong><br>
+        <span style="font-size:11px;color:#888">${r.email || 'No email'}</span>
+      </td>
+      <td><code style="background:#f3f4f6;padding:2px 6px;border-radius:4px">${r.username}</code></td>
+      <td>${r.number ? '#' + r.number : '—'} · ${r.position || '—'}</td>
+      <td>${(r.teams || []).map(tid => {
+        const team = d.teams.find(t => t.id === tid);
+        return team ? `<span style="font-size:11px;background:#f3f4f6;padding:2px 6px;border-radius:10px">${team.shortName}</span>` : '';
+      }).join(' ')}</td>
+      <td style="font-size:12px;color:#888">${r.requestedAt}</td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <button class="action-btn action-edit" onclick="approveAsNew('${r.id}')">✅ Approve (New Player)</button>
+        <button class="action-btn action-view" onclick="showLinkExisting('${r.id}')">🔗 Link Existing</button>
+        <button class="action-btn action-delete" onclick="denyRequest('${r.id}')">❌ Deny</button>
+      </td>
+    </tr>`).join('') :
+    '<tr><td colspan="6" style="text-align:center;padding:32px;color:#888">No pending requests</td></tr>';
+
+  const reviewedRows = reviewed.length ? reviewed.map(r => `
+    <tr style="opacity:0.7">
+      <td><strong>${r.firstName} ${r.lastName}</strong></td>
+      <td><code style="background:#f3f4f6;padding:2px 6px;border-radius:4px">${r.username}</code></td>
+      <td><span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;
+        background:${r.status==='approved'?'#dcfce7':'#fee2e2'};
+        color:${r.status==='approved'?'#166534':'#991b1b'}">${r.status}</span></td>
+      <td style="font-size:12px;color:#888">${r.reviewedAt || '—'}</td>
+      <td style="font-size:12px;color:#888">${r.reviewNotes || ''}</td>
+      <td><button class="action-btn action-delete" onclick="deleteRequest('${r.id}')">Remove</button></td>
+    </tr>`).join('') :
+    '<tr><td colspan="6" style="text-align:center;padding:16px;color:#888;font-size:12px">No reviewed requests</td></tr>';
+
+  setContent(`
+    <div class="admin-table-wrap" style="margin-bottom:24px">
+      <div class="admin-table-header">
+        <h3>⏳ Pending Requests <span style="background:#C8102E;color:#fff;border-radius:10px;padding:2px 9px;font-size:12px;margin-left:8px">${pending.length}</span></h3>
+      </div>
+      <div style="padding:0 16px 16px;font-size:13px;color:#666">
+        <strong>Approve as New Player</strong> — creates a new player record with their info and credentials.<br>
+        <strong>Link to Existing</strong> — adds their login credentials to an existing player record (use when the player is already in the system).
+      </div>
+      <div id="link-existing-panel" style="display:none;padding:16px;background:#fefce8;border-top:1px solid #fde68a">
+        <strong style="font-size:13px">Select existing player to link credentials to:</strong>
+        <div id="link-player-list" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px"></div>
+        <button class="btn btn-secondary btn-sm" style="margin-top:10px" onclick="document.getElementById('link-existing-panel').style.display='none'">Cancel</button>
+      </div>
+      <table class="admin-table">
+        <thead><tr><th>Name</th><th>Username</th><th>Jersey / Pos</th><th>Teams</th><th>Requested</th><th>Actions</th></tr></thead>
+        <tbody id="pending-tbody">${pendingRows}</tbody>
+      </table>
+    </div>
+
+    <div class="admin-table-wrap">
+      <div class="admin-table-header"><h3>✅ Reviewed Requests</h3></div>
+      <table class="admin-table">
+        <thead><tr><th>Name</th><th>Username</th><th>Status</th><th>Reviewed</th><th>Notes</th><th>Actions</th></tr></thead>
+        <tbody>${reviewedRows}</tbody>
+      </table>
+    </div>
+  `);
+}
+
+function approveAsNew(reqId) {
+  const d = loadData();
+  const req = d.accountRequests.find(r => r.id === reqId);
+  if (!req) return;
+
+  // Check username not already taken
+  if (d.players.some(p => p.credentials?.username === req.username)) {
+    toast('Username already exists — use "Link Existing" instead.', 'danger'); return;
+  }
+
+  const newPlayer = {
+    id: 'p' + Date.now(),
+    firstName: req.firstName, lastName: req.lastName,
+    number: req.number || '', position: req.position || 'UT',
+    teams: req.teams || [], bats: 'R', throws: 'R',
+    joinYear: new Date().getFullYear(), active: true,
+    photo: '', email: req.email || '', phone: req.phone || '',
+    credentials: { username: req.username, password: req.password }
+  };
+  d.players.push(newPlayer);
+
+  const idx = d.accountRequests.findIndex(r => r.id === reqId);
+  d.accountRequests[idx].status = 'approved';
+  d.accountRequests[idx].reviewedAt = new Date().toISOString().split('T')[0];
+  d.accountRequests[idx].reviewNotes = 'Approved as new player';
+  d.accountRequests[idx].playerId = newPlayer.id;
+  saveData(d);
+  toast(`✅ Account approved! ${req.firstName} ${req.lastName} is now a player.`);
+  renderAccountRequests();
+  updateReqBadge();
+}
+
+let _linkingReqId = null;
+function showLinkExisting(reqId) {
+  _linkingReqId = reqId;
+  const d = loadData();
+  const req = d.accountRequests.find(r => r.id === reqId);
+  const panel = document.getElementById('link-existing-panel');
+  const list = document.getElementById('link-player-list');
+  if (!panel || !list || !req) return;
+
+  list.innerHTML = d.players.filter(p => p.active).map(p => `
+    <button class="btn btn-secondary btn-sm" onclick="confirmLinkExisting('${reqId}','${p.id}')">
+      ${p.firstName} ${p.lastName} #${p.number}
+    </button>`).join('');
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function confirmLinkExisting(reqId, playerId) {
+  const d = loadData();
+  const req = d.accountRequests.find(r => r.id === reqId);
+  const pIdx = d.players.findIndex(p => p.id === playerId);
+  if (!req || pIdx < 0) return;
+
+  if (!confirm(`Link @${req.username} login to ${d.players[pIdx].firstName} ${d.players[pIdx].lastName}?`)) return;
+
+  d.players[pIdx].credentials = { username: req.username, password: req.password };
+  if (req.email) d.players[pIdx].email = req.email;
+
+  const rIdx = d.accountRequests.findIndex(r => r.id === reqId);
+  d.accountRequests[rIdx].status = 'approved';
+  d.accountRequests[rIdx].reviewedAt = new Date().toISOString().split('T')[0];
+  d.accountRequests[rIdx].reviewNotes = 'Linked to existing player';
+  d.accountRequests[rIdx].playerId = playerId;
+  saveData(d);
+  toast(`✅ Credentials linked to ${d.players[pIdx].firstName} ${d.players[pIdx].lastName}`);
+  renderAccountRequests();
+  updateReqBadge();
+}
+
+function denyRequest(reqId) {
+  const reason = prompt('Optional: reason for denial (shown in log only)');
+  if (reason === null) return; // cancelled
+  const d = loadData();
+  const idx = d.accountRequests.findIndex(r => r.id === reqId);
+  if (idx < 0) return;
+  d.accountRequests[idx].status = 'denied';
+  d.accountRequests[idx].reviewedAt = new Date().toISOString().split('T')[0];
+  d.accountRequests[idx].reviewNotes = reason || '';
+  saveData(d);
+  toast('Request denied.', 'danger');
+  renderAccountRequests();
+  updateReqBadge();
+}
+
+function deleteRequest(reqId) {
+  if (!confirm('Remove this request record?')) return;
+  const d = loadData();
+  d.accountRequests = d.accountRequests.filter(r => r.id !== reqId);
+  saveData(d);
+  renderAccountRequests();
+}
+
+// ─── DATA MANAGEMENT ──────────────────────────────────────
+function renderData() {
+  setContent(`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div class="admin-form">
+        <div class="admin-form-header"><h3>⬇ Export Data</h3></div>
+        <div class="admin-form-body">
+          <p style="color:var(--gray);font-size:14px;margin-bottom:16px">Download a full backup of all Heroes data as a JSON file. Keep this safe — it includes all players, games, stats, and settings.</p>
+          <button class="btn btn-primary" onclick="exportData()">Download JSON Backup</button>
+        </div>
+      </div>
+      <div class="admin-form">
+        <div class="admin-form-header"><h3>⬆ Import Data</h3></div>
+        <div class="admin-form-body">
+          <p style="color:var(--gray);font-size:14px;margin-bottom:16px">Restore data from a previously exported JSON backup. <strong>Warning: this will overwrite all current data.</strong></p>
+          <input type="file" id="import-file" accept=".json" style="margin-bottom:12px;font-size:13px">
+          <br><button class="btn btn-danger" onclick="doImport()">Import & Overwrite</button>
+        </div>
+      </div>
+      <div class="admin-form">
+        <div class="admin-form-header"><h3>🔄 Reset to Defaults</h3></div>
+        <div class="admin-form-body">
+          <p style="color:var(--gray);font-size:14px;margin-bottom:16px">Reset all data to the original default values. <strong>Warning: this will permanently delete all your changes.</strong></p>
+          <button class="btn btn-danger" onclick="if(confirm('Reset ALL data to defaults? This cannot be undone!')){resetData();toast('Data reset');renderDashboard();showPage('dashboard')}">Reset All Data</button>
+        </div>
+      </div>
+      <div class="admin-form">
+        <div class="admin-form-header"><h3>📤 Deploy Instructions</h3></div>
+        <div class="admin-form-body">
+          <p style="color:var(--gray);font-size:14px;margin-bottom:10px">To deploy to GoDaddy or Namecheap:</p>
+          <ol style="font-size:13px;color:var(--text);line-height:2;padding-left:20px">
+            <li>Export your data using the button above</li>
+            <li>Paste the JSON into <code>assets/js/data.js</code> as the HeroesData object</li>
+            <li>Upload all files via FTP or File Manager</li>
+            <li>Navigate to your domain to see the site</li>
+          </ol>
+          <p style="font-size:12px;color:var(--gray);margin-top:10px">No server-side code required — works on any web host that serves HTML files!</p>
+        </div>
+      </div>
+    </div>
+  `);
+}
+window.doImport = function() {
+  const file = document.getElementById('import-file')?.files?.[0];
+  if (!file) { toast('Select a file first', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    if (importData(e.target.result)) { toast('Data imported!'); showPage('dashboard'); }
+    else toast('Invalid file format', 'error');
+  };
+  reader.readAsText(file);
+};
+
+// ─── HELPERS ──────────────────────────────────────────────
+function val(id) { return (document.getElementById(id)?.value||'').trim(); }
+
+// Initialize
+if (sessionStorage.getItem('heroes_admin') === '1') {
+  showPage('dashboard');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+# Protect data files from direct browser access
+<Files "*.json">
+  Order Allow,Deny
+  Deny from all
+</Files>

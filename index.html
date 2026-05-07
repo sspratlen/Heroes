@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Heroes Senior Softball — Competitive senior men's softball organization featuring 55's AAA, 50's AAA, and 50's AA teams in Omaha, NE.">
+  <meta name="theme-color" content="#C8102E">
+  <title>Heroes Senior Softball</title>
+  <link rel="icon" href="assets/img/favicon.ico">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <!-- Preload key assets -->
+  <link rel="preload" href="assets/img/heroes-logo.jpg" as="image">
+</head>
+<body>
+
+<!-- ════ SITE HEADER ════════════════════════════════════════ -->
+<header id="site-header">
+  <div class="header-inner">
+    <a class="site-logo" data-route="/" href="#">
+      <img src="assets/img/heroes-logo.jpg" alt="Heroes Logo" onerror="this.style.display='none'">
+      <div class="site-logo-text">
+        <span class="org">Senior Softball</span>
+        <span class="name">Heroes <span>SSB</span></span>
+      </div>
+    </a>
+    <nav id="main-nav" role="navigation" aria-label="Main navigation">
+      <!-- Built dynamically by app.js -->
+    </nav>
+    <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Toggle menu">☰</button>
+  </div>
+  <div id="mobile-nav" aria-label="Mobile navigation">
+    <!-- Built dynamically by app.js -->
+  </div>
+</header>
+
+<!-- ════ MAIN CONTENT ═══════════════════════════════════════ -->
+<main id="main-content" role="main">
+  <!-- Pages rendered here by router -->
+  <div style="display:flex;align-items:center;justify-content:center;min-height:400px">
+    <div class="spinner"></div>
+  </div>
+</main>
+
+<!-- ════ SITE FOOTER ════════════════════════════════════════ -->
+<footer id="site-footer" role="contentinfo">
+  <!-- Built dynamically by app.js -->
+</footer>
+
+<!-- ════ SCRIPTS ════════════════════════════════════════════ -->
+<script src="assets/js/data.js"></script>
+<script src="assets/js/player-auth.js"></script>
+<script src="assets/js/app.js"></script>
+
+</body>
+</html>
