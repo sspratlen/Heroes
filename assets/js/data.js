@@ -266,13 +266,31 @@ function getLeaders(stat, limit = 5, filters = {}) {
   return results.slice(0, limit);
 }
 
+// ─── SUPABASE CONFIG ──────────────────────────────────────
+// Replace these two values after creating your Supabase project
+const SUPABASE_URL     = 'YOUR_SUPABASE_URL';
+const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+
+// Collections that get synced to Supabase
+const DB_COLLECTIONS = ['config','teams','players','games','events','news','awards','sponsors','accountRequests','pageLayouts'];
+
+let _sb = null;
+function _getClient() {
+  if (_sb) return _sb;
+  if (typeof supabase === 'undefined' || SUPABASE_URL === 'YOUR_SUPABASE_URL') return null;
+  _sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  return _sb;
+}
+
 // ─── DATA PERSISTENCE ──────────────────────────────────────
+
+// loadData() stays synchronous — always reads from localStorage cache.
+// Supabase data is pre-loaded into the cache by initData() on startup.
 function loadData() {
   const saved = localStorage.getItem('heroes_data');
   if (saved) {
     try {
       const d = JSON.parse(saved);
-      // Ensure new fields exist on legacy saved data
       if (!d.accountRequests) d.accountRequests = [];
       return d;
     } catch(e) {}
@@ -280,13 +298,66 @@ function loadData() {
   return JSON.parse(JSON.stringify(HeroesData));
 }
 
+// saveData: write to localStorage immediately (keeps UI snappy),
+// then async-push each changed collection to Supabase in the background.
 function saveData(data) {
   localStorage.setItem('heroes_data', JSON.stringify(data));
+  _pushToSupabase(data);
+}
+
+async function _pushToSupabase(data) {
+  const client = _getClient();
+  if (!client) return;
+  try {
+    const rows = DB_COLLECTIONS
+      .filter(col => data[col] !== undefined)
+      .map(col => ({ collection: col, value: data[col], updated_at: new Date().toISOString() }));
+    const { error } = await client.from('heroes_data').upsert(rows, { onConflict: 'collection' });
+    if (error) console.warn('Supabase push error:', error.message);
+  } catch(e) {
+    console.warn('Supabase push failed (offline?):', e.message);
+  }
+}
+
+// initData() — called once on app startup.
+// Pulls all collections from Supabase and merges into localStorage cache.
+// Falls back to localStorage (or HeroesData defaults) if offline.
+async function initData() {
+  const client = _getClient();
+  if (!client) return; // Supabase not configured yet — use localStorage only
+
+  try {
+    const { data: rows, error } = await client
+      .from('heroes_data')
+      .select('collection, value');
+
+    if (error) { console.warn('Supabase fetch error:', error.message); return; }
+    if (!rows || rows.length === 0) {
+      // First run — push defaults up to Supabase so other devices get them
+      const defaults = JSON.parse(JSON.stringify(HeroesData));
+      localStorage.setItem('heroes_data', JSON.stringify(defaults));
+      await _pushToSupabase(defaults);
+      return;
+    }
+
+    // Merge Supabase rows into the local data object
+    const base = JSON.parse(JSON.stringify(HeroesData));
+    const current = loadData(); // may have unsaved local changes
+    const merged = { ...base, ...current };
+    rows.forEach(row => { if (row.collection) merged[row.collection] = row.value; });
+    if (!merged.accountRequests) merged.accountRequests = [];
+    localStorage.setItem('heroes_data', JSON.stringify(merged));
+    console.log('✓ Synced from Supabase');
+  } catch(e) {
+    console.warn('Supabase unavailable, using local cache:', e.message);
+  }
 }
 
 function resetData() {
   localStorage.removeItem('heroes_data');
-  return JSON.parse(JSON.stringify(HeroesData));
+  const defaults = JSON.parse(JSON.stringify(HeroesData));
+  _pushToSupabase(defaults);
+  return defaults;
 }
 
 function exportData() {

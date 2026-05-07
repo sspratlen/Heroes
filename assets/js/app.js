@@ -1625,4 +1625,10 @@ Router.register('/sponsors', renderSponsors);
 Router.register('*', renderNotFound);
 
 // ─── BOOT ────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => App.init());
+document.addEventListener('DOMContentLoaded', async () => {
+  // Show subtle loading state while syncing from Supabase
+  const main = document.getElementById('main-content');
+  if (main) main.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:400px"><div class="spinner"></div></div>';
+  await initData();   // pull latest data from Supabase into localStorage cache
+  App.init();         // then render normally from cache
+});
