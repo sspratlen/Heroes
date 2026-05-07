@@ -268,8 +268,8 @@ function getLeaders(stat, limit = 5, filters = {}) {
 
 // ─── SUPABASE CONFIG ──────────────────────────────────────
 // Replace these two values after creating your Supabase project
-const SUPABASE_URL     = 'YOUR_SUPABASE_URL';
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const SUPABASE_URL     = 'https://mpgbgucmnxowteonldoh.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_qEfH752_O5r7F9pdKTalEA_B8P0LkV0';
 
 // Collections that get synced to Supabase
 const DB_COLLECTIONS = ['config','teams','players','games','events','news','awards','sponsors','accountRequests','pageLayouts'];
