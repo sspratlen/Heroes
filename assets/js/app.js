@@ -19,11 +19,11 @@ const Router = {
   navigate(path) { window.location.hash = path; },
   dispatch() {
     const hash = window.location.hash.replace('#', '') || '/';
-    const [base, ...params] = hash.split('/').filter(Boolean);
-    const route = '/' + base;
+    const parts = hash.split('/').filter(Boolean);
+    const route = parts.length ? '/' + parts[0] : '/';
     this.currentPage = route;
     const fn = this.routes[route] || this.routes['*'];
-    if (fn) fn(...params);
+    if (fn) fn(...parts.slice(1));
     else this.routes['/'] && this.routes['/']();
     window.scrollTo(0, 0);
     App.updateNav(route);
@@ -43,7 +43,10 @@ const App = {
   },
   updateNav(route) {
     document.querySelectorAll('.nav-link').forEach(el => {
-      el.classList.toggle('active', el.dataset.route && ('/' + el.dataset.route.split('/')[1]) === route);
+      if (!el.dataset.route) { el.classList.remove('active'); return; }
+      // Normalise both sides to just the first path segment for comparison
+      const elBase = el.dataset.route === '/' ? '/' : '/' + el.dataset.route.split('/').filter(Boolean)[0];
+      el.classList.toggle('active', elBase === route);
     });
   },
   buildNav() {
