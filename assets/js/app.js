@@ -1411,12 +1411,14 @@ function renderNotFound() {
 
 // ─── UTILITIES ──────────────────────────────────────────────
 window.switchTab = function(e, tabId) {
-  const container = e.target.closest('.section, .container, .tab-parent') || document;
   const allBtns = e.target.parentElement.querySelectorAll('.tab-btn');
   allBtns.forEach(b => b.classList.remove('active'));
   e.target.classList.add('active');
-  const allContents = document.querySelectorAll('[id^="' + tabId.split('-')[0] + '-' + tabId.split('-')[1] + '"]');
-  allContents.forEach(c => c.classList.remove('active'));
+  // Use only the first segment as the group prefix (e.g. "stab", "tab", "ptab")
+  const prefix = tabId.split('-')[0] + '-';
+  document.querySelectorAll('.tab-content').forEach(c => {
+    if (c.id && c.id.startsWith(prefix)) c.classList.remove('active');
+  });
   const target = document.getElementById(tabId);
   if (target) target.classList.add('active');
 };
