@@ -78,7 +78,7 @@
 
       <div class="sidebar-section-label" style="margin-top:12px">Events</div>
       <a class="sidebar-link" onclick="showPage('events')">
-        <span class="icon">📅</span> Tournaments & Events
+        <span class="icon">📅</span> Events
       </a>
       <a class="sidebar-link" onclick="showPage('availability')">
         <span class="icon">✅</span> Availability
@@ -90,6 +90,9 @@
       </a>
       <a class="sidebar-link" onclick="showPage('awards')">
         <span class="icon">🏆</span> Awards
+      </a>
+      <a class="sidebar-link" onclick="showPage('gallery')">
+        <span class="icon">📷</span> Photo Gallery
       </a>
       <a class="sidebar-link" onclick="showPage('page-builder')">
         <span class="icon">🎨</span> Page Builder
@@ -350,6 +353,13 @@ async function doLogout() {
   try {
     const sb = _getClient();
     if (!sb) return;
+
+    // If this is a password-recovery redirect, let the onAuthStateChange
+    // handler show the "Set New Password" form — don't auto-login to admin.
+    const hashParams = new URLSearchParams(window.location.hash.slice(1));
+    const urlParams  = new URLSearchParams(window.location.search);
+    if (hashParams.get('type') === 'recovery' || urlParams.get('type') === 'recovery') return;
+
     const { data: { session } } = await sb.auth.getSession();
     if (!session) return;
     const { data: profile } = await sb
@@ -392,8 +402,8 @@ function showPage(page) {
     'teams': ['Teams','Manage Teams',true],
     'games': ['Scoreboard','Manage Games & Results',true],
     'stats-entry': ['Stat Entry','Enter Game Statistics',false],
-    'events': ['Tournaments & Events','Manage Events',true],
-    'availability': ['Player Availability','Tournament Availability',false],
+    'events': ['Events','Manage Events',true],
+    'availability': ['Player Availability','Event Availability',false],
     'news': ['News','Manage Announcements',true],
     'awards': ['Awards','Manage Achievements',true],
     'sponsors': ['Sponsors','Manage Sponsors',true],
@@ -401,6 +411,7 @@ function showPage(page) {
     'settings': ['Settings','Site Configuration',false],
     'data': ['Data Management','Import / Export',false],
     'account-requests': ['Account Requests','Review & Approve Player Accounts',false],
+    'gallery': ['Photo Gallery','Manage Albums & Photos',true],
   };
   
   const [title, sub, showAdd] = pages[page] || ['Unknown','',false];
@@ -412,11 +423,12 @@ function showPage(page) {
     games: renderGames, 'stats-entry': renderStatsEntry, events: renderEvents,
     availability: renderAvailability, news: renderNews, awards: renderAwards,
     sponsors: renderSponsors, 'page-builder': renderPageBuilder,
-    settings: renderSettings, data: renderData, 'account-requests': renderAccountRequests }[page];
+    settings: renderSettings, data: renderData, 'account-requests': renderAccountRequests,
+    gallery: renderGalleryAdmin }[page];
   if (fn) fn();
 }
 function triggerAddNew() {
-  const fns = { players: addPlayer, teams: addTeam, games: addGame, events: addEvent, news: addNews, awards: addAward, sponsors: addSponsor };
+  const fns = { players: addPlayer, teams: addTeam, games: addGame, events: addEvent, news: addNews, awards: addAward, sponsors: addSponsor, gallery: addAlbum };
   if (fns[currentPage]) fns[currentPage]();
 }
 
@@ -485,7 +497,7 @@ function renderDashboard() {
           <button class="btn btn-secondary" onclick="showPage('games')">➕ Add New Game</button>
           <button class="btn btn-secondary" onclick="showPage('players')">👤 Add Player</button>
           ${(function(){ const p=(loadData().accountRequests||[]).filter(r=>r.status==='pending').length; return p>0?`<button class="btn btn-danger" onclick="showPage('account-requests')">🆕 ${p} Pending Account Request${p>1?'s':''}</button>`:''; })()}
-          <button class="btn btn-secondary" onclick="showPage('events')">📅 Add Tournament</button>
+          <button class="btn btn-secondary" onclick="showPage('events')">📅 Add Event</button>
           <button class="btn btn-secondary" onclick="showPage('news')">📰 Add Announcement</button>
           <button class="btn btn-gold btn-sm" onclick="exportData()">⬇ Export All Data</button>
         </div>
@@ -921,7 +933,7 @@ function renderEvents() {
   const data = loadData();
   setContent(`
     <div class="admin-table-wrap">
-      <div class="admin-table-header"><h3>Events & Tournaments</h3><button class="btn btn-primary btn-sm" onclick="addEvent()">+ Add Event</button></div>
+      <div class="admin-table-header"><h3>Events</h3><button class="btn btn-primary btn-sm" onclick="addEvent()">+ Add Event</button></div>
       <table class="admin-table">
         <thead><tr><th>Date</th><th>Event</th><th>Type</th><th>Teams</th><th>Location</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>${data.events.map(ev=>{
@@ -961,7 +973,7 @@ function addEvent() {
         hotelInfo:val('ef-hotel'), hotelCode:val('ef-hotelcode'), hotelUrl:val('ef-hotelurl'),
         placement:val('ef-placement')
       } : {}),
-      availability:[] });
+      availability:[], bracket: (()=>{ try { return JSON.parse(val('ef-bracket')||'null'); } catch(e){ return null; } })() });
     saveData(d); closeModal(); renderEvents(); toast('Event added!');
   });
 }
@@ -980,7 +992,7 @@ function editEvent(id) {
         director:val('ef-director'), directorPhone:val('ef-dirphone'),
         hotelInfo:val('ef-hotel'), hotelCode:val('ef-hotelcode'), hotelUrl:val('ef-hotelurl'),
         placement:val('ef-placement')
-      } : {}) };
+      } : {}), bracket: (()=>{ try { return JSON.parse(val('ef-bracket')||'null'); } catch(e){ return null; } })() };
     saveData(d); closeModal(); renderEvents(); toast('Event updated!');
   });
 }
@@ -1047,6 +1059,10 @@ function buildEventForm(ev, data) {
     </div>
 
     <div class="form-group" style="margin-top:16px"><label class="form-label">Notes</label><textarea id="ef-notes" class="form-textarea">${ev?.notes||''}</textarea></div>
+    <div class="form-group" id="ef-bracket-group">
+      <label class="form-label">Bracket Data (JSON) <span style="font-size:11px;color:var(--gray);font-weight:400">— optional, for visual bracket display</span></label>
+      <textarea id="ef-bracket" class="form-input" rows="5" placeholder='{"rounds":[{"name":"Pool Play","games":[{"home":"Heroes","away":"Opponent","homeScore":13,"awayScore":9,"winner":"Heroes"}]}]}'>${ev?.bracket ? JSON.stringify(ev.bracket, null, 2) : ''}</textarea>
+    </div>
   `;
 }
 
@@ -1239,6 +1255,104 @@ function buildAwardForm(a, data) {
     <div class="form-group"><label class="form-label">Description</label><textarea id="af-desc" class="form-textarea">${a?.description||''}</textarea></div>
   `;
 }
+
+// ─── GALLERY ──────────────────────────────────────────────
+function renderGalleryAdmin() {
+  const data = loadData();
+  const albums = (data.albums || []).sort((a,b) => b.date?.localeCompare(a.date||''));
+  setContent(`
+    <div class="admin-table-wrap">
+      <div class="admin-table-header"><h3>Albums</h3><button class="btn btn-primary btn-sm" onclick="addAlbum()">+ Add Album</button></div>
+      <table class="admin-table">
+        <thead><tr><th>Name</th><th>Date</th><th>Team</th><th>Photos</th><th>Actions</th></tr></thead>
+        <tbody>${albums.length ? albums.map(al => {
+          const photoCount = (data.photos||[]).filter(p=>p.albumId===al.id).length;
+          const team = data.teams.find(t=>t.id===al.teamId);
+          return `<tr>
+            <td><strong>${al.name}</strong>${al.description?`<div style="font-size:11px;color:var(--gray)">${al.description}</div>`:''}
+            </td>
+            <td style="font-size:13px">${al.date||''}</td>
+            <td style="font-size:13px">${team?.shortName||'—'}</td>
+            <td><span class="tag tag-dark">${photoCount}</span></td>
+            <td style="display:flex;gap:4px;flex-wrap:wrap">
+              <button class="action-btn action-edit" onclick="editAlbum('${al.id}')">Edit</button>
+              <button class="action-btn action-view" onclick="managePhotos('${al.id}')">Photos</button>
+              <button class="action-btn action-delete" onclick="deleteAlbum('${al.id}')">Del</button>
+            </td>
+          </tr>`;
+        }).join('') : '<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--gray)">No albums yet</td></tr>'}</tbody>
+      </table>
+    </div>
+  `);
+}
+function buildAlbumForm(al, data) {
+  return `
+    <div class="form-group"><label class="form-label">Album Name*</label><input id="al-name" class="form-input" value="${al?.name||''}"></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Date</label><input type="date" id="al-date" class="form-input" value="${al?.date||''}"></div>
+      <div class="form-group"><label class="form-label">Team</label>
+        <select id="al-team" class="form-select">
+          <option value="">All Teams</option>
+          ${data.teams.map(t=>`<option value="${t.id}"${al?.teamId===t.id?' selected':''}>${t.name}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Description</label><textarea id="al-desc" class="form-input" rows="2">${al?.description||''}</textarea></div>
+    <div class="form-group"><label class="form-label">Cover Image URL</label><input id="al-cover" class="form-input" placeholder="https://..." value="${al?.coverUrl||''}"></div>
+  `;
+}
+function addAlbum() {
+  const data = loadData();
+  openModal('Add Album', buildAlbumForm(null, data), 'Add Album', () => {
+    const d = loadData();
+    if (!d.albums) d.albums = [];
+    d.albums.push({ id:'al'+Date.now(), name:val('al-name'), date:val('al-date'), teamId:val('al-team'), description:val('al-desc'), coverUrl:val('al-cover') });
+    saveData(d); closeModal(); renderGalleryAdmin(); toast('Album added!');
+  });
+}
+function editAlbum(id) {
+  const data = loadData(); const al = (data.albums||[]).find(a=>a.id===id);
+  openModal('Edit Album', buildAlbumForm(al, data), 'Save Changes', () => {
+    const d = loadData(); const idx = (d.albums||[]).findIndex(a=>a.id===id);
+    if (idx>=0) d.albums[idx] = { ...d.albums[idx], name:val('al-name'), date:val('al-date'), teamId:val('al-team'), description:val('al-desc'), coverUrl:val('al-cover') };
+    saveData(d); closeModal(); renderGalleryAdmin(); toast('Album updated!');
+  });
+}
+function deleteAlbum(id) {
+  if(!confirm('Delete album and all its photos?')) return;
+  const d = loadData();
+  d.albums = (d.albums||[]).filter(a=>a.id!==id);
+  d.photos = (d.photos||[]).filter(p=>p.albumId!==id);
+  saveData(d); renderGalleryAdmin(); toast('Album deleted');
+}
+function managePhotos(albumId) {
+  const data = loadData();
+  const album = (data.albums||[]).find(a=>a.id===albumId);
+  const photos = (data.photos||[]).filter(p=>p.albumId===albumId);
+  const photoList = photos.map((p,i)=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+      ${p.url?`<img src="${p.url}" style="width:48px;height:48px;object-fit:cover;border-radius:4px" onerror="this.style.display='none'">`:'<div style="width:48px;height:48px;background:var(--light);border-radius:4px;display:flex;align-items:center;justify-content:center">📷</div>'}
+      <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.url}</div>${p.caption?`<div style="font-size:11px;color:var(--gray)">${p.caption}</div>`:''}</div>
+      <button class="action-btn action-delete" onclick="deletePhoto('${p.id}','${albumId}')">Del</button>
+    </div>`).join('') || '<p style="color:var(--gray);font-size:13px">No photos yet</p>';
+  openModal(`Photos: ${album?.name||albumId}`, `
+    <div style="max-height:240px;overflow-y:auto;margin-bottom:16px">${photoList}</div>
+    <hr style="margin:12px 0;border-color:var(--border)">
+    <div style="font-weight:700;margin-bottom:10px;font-size:13px">Add Photo by URL</div>
+    <div class="form-group"><label class="form-label">Image URL*</label><input id="ph-url" class="form-input" placeholder="https://..."></div>
+    <div class="form-group"><label class="form-label">Caption</label><input id="ph-caption" class="form-input" placeholder="Optional caption"></div>
+  `, 'Add Photo', () => {
+    const u = val('ph-url'); if (!u) { toast('URL required','error'); return false; }
+    const d = loadData(); if (!d.photos) d.photos = [];
+    d.photos.push({ id:'ph'+Date.now(), albumId, url:u, caption:val('ph-caption') });
+    saveData(d); closeModal(); managePhotos(albumId); toast('Photo added!');
+  });
+}
+window.deletePhoto = function(photoId, albumId) {
+  if(!confirm('Delete photo?')) return;
+  const d = loadData(); d.photos = (d.photos||[]).filter(p=>p.id!==photoId);
+  saveData(d); toast('Photo deleted'); managePhotos(albumId);
+};
 
 // ─── SPONSORS ─────────────────────────────────────────────
 function renderSponsors() {

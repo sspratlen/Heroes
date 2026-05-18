@@ -64,7 +64,9 @@ const App = {
       <li class="nav-item"><a class="nav-link" data-route="/stats">Stats</a></li>
       <li class="nav-item"><a class="nav-link" data-route="/schedule">Scoreboard</a></li>
       <li class="nav-item"><a class="nav-link" data-route="/news">News</a></li>
-      <li class="nav-item"><a class="nav-link" data-route="/tournaments">Tournaments</a></li>
+      <li class="nav-item"><a class="nav-link" data-route="/events">Events</a></li>
+      <li class="nav-item"><a class="nav-link" data-route="/awards">Awards</a></li>
+      <li class="nav-item"><a class="nav-link" data-route="/gallery">Gallery</a></li>
       <li class="nav-item"><a class="nav-link" data-route="/about">About</a></li>
     `;
     // Inject auth slot — populated by HeroesAuth.refreshNavAuth()
@@ -81,7 +83,9 @@ const App = {
       <a class="mobile-nav-link" data-route="/stats">Stats</a>
       <a class="mobile-nav-link" data-route="/schedule">Scoreboard</a>
       <a class="mobile-nav-link" data-route="/news">News</a>
-      <a class="mobile-nav-link" data-route="/tournaments">Tournaments</a>
+      <a class="mobile-nav-link" data-route="/events">Events</a>
+      <a class="mobile-nav-link" data-route="/awards">Awards</a>
+      <a class="mobile-nav-link" data-route="/gallery">Gallery</a>
       <a class="mobile-nav-link" data-route="/about">About</a>
     `;
   },
@@ -112,7 +116,9 @@ const App = {
             <a class="footer-link" data-route="/stats">Stats & Leaderboards</a>
             <a class="footer-link" data-route="/schedule">Scoreboard</a>
             <a class="footer-link" data-route="/players">Player Directory</a>
-            <a class="footer-link" data-route="/tournaments">Tournaments</a>
+            <a class="footer-link" data-route="/events">Events</a>
+            <a class="footer-link" data-route="/awards">Awards</a>
+            <a class="footer-link" data-route="/gallery">Gallery</a>
             <a class="footer-link" data-route="/news">News</a>
           </div>
         </div>
@@ -358,7 +364,7 @@ function renderHome() {
               <h2>Upcoming <span>Events</span></h2>
             </div>
             ${eventsHtml || '<p style="color:var(--gray)">No upcoming events</p>'}
-            <div style="margin-top:16px"><a class="btn btn-dark btn-sm" data-route="/tournaments">All Events →</a></div>
+            <div style="margin-top:16px"><a class="btn btn-dark btn-sm" data-route="/events">All Events →</a></div>
           </div>
         </div>
       </div>
@@ -694,12 +700,26 @@ function renderStats() {
     </div>
     <section class="section">
       <div class="container">
-        <div class="filter-row">
-          <label style="font-size:13px;font-weight:700">Season:</label>
-          <select class="form-select" id="stats-season" onchange="renderStatsContent()">
-            <option value="">All Time</option>
-            ${seasons.map(s=>`<option value="${s}"${s===defaultSeason?' selected':''}>${s}</option>`).join('')}
-          </select>
+        <div class="stats-controls">
+          <div class="stats-filter-group">
+            <label class="stats-filter-label">Team</label>
+            <div class="stats-team-btns" id="stats-team-btns">
+              <button class="filter-btn active" data-team="" onclick="filterStatsByTeam(this,'')">All</button>
+              ${data.teams.map(t=>`<button class="filter-btn" data-team="${t.id}" onclick="filterStatsByTeam(this,'${t.id}')">${t.shortName}</button>`).join('')}
+            </div>
+          </div>
+          <div class="stats-filter-group">
+            <label class="stats-filter-label">Player</label>
+            <input type="text" class="stats-search-input" id="stats-player-search" placeholder="Search name…" oninput="renderStatsContent()">
+          </div>
+          <div class="stats-filter-group">
+            <label class="stats-filter-label">Date Range</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="date" class="stats-date-input" id="stats-date-from" onchange="renderStatsContent()">
+              <span style="color:var(--gray);font-size:13px">to</span>
+              <input type="date" class="stats-date-input" id="stats-date-to" onchange="renderStatsContent()">
+            </div>
+          </div>
         </div>
         <div class="tabs">
           <button class="tab-btn active" onclick="switchTab(event,'stab-batting')">Batting</button>
@@ -725,8 +745,16 @@ function renderStats() {
 }
 
 window.renderStatsContent = function() {
-  const season = document.getElementById('stats-season')?.value || '';
   const data = loadData();
+  const teamId  = document.querySelector('#stats-team-btns .filter-btn.active')?.dataset.team || '';
+  const search  = (document.getElementById('stats-player-search')?.value || '').toLowerCase().trim();
+  const dateFrom = document.getElementById('stats-date-from')?.value || '';
+  const dateTo   = document.getElementById('stats-date-to')?.value || '';
+
+  const filters = {};
+  if (teamId)   filters.teamId   = teamId;
+  if (dateFrom) filters.dateFrom = dateFrom;
+  if (dateTo)   filters.dateTo   = dateTo;
 
   const battingEl = document.getElementById('stats-batting');
   const powerEl   = document.getElementById('stats-power');
@@ -736,20 +764,27 @@ window.renderStatsContent = function() {
   battingEl.innerHTML = ['avg','obp','slg'].map(stat => `
     <div class="leaderboard-card">
       <div class="leaderboard-card-header"><h3>${STAT_LABELS[stat]}</h3><span>Leaders</span></div>
-      ${buildSimpleLeaderboard(stat, season, data)}
+      ${buildSimpleLeaderboard(stat, '', data, filters, search)}
     </div>`).join('');
 
   powerEl.innerHTML = ['hr','rbi','h','tb'].map(stat => `
     <div class="leaderboard-card">
       <div class="leaderboard-card-header"><h3>${STAT_LABELS[stat]}</h3><span>Leaders</span></div>
-      ${buildSimpleLeaderboard(stat, season, data)}
+      ${buildSimpleLeaderboard(stat, '', data, filters, search)}
     </div>`).join('');
 
-  fullEl.innerHTML = buildFullStatsTable(data, season);
+  fullEl.innerHTML = buildFullStatsTable(data, '', filters, search);
 };
 
-function buildSimpleLeaderboard(stat, season, data) {
-  const top = getLeaders(stat, 5, season ? { season } : {});
+window.filterStatsByTeam = function(btn, teamId) {
+  document.querySelectorAll('#stats-team-btns .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderStatsContent();
+};
+
+function buildSimpleLeaderboard(stat, season, data, filters = {}, search = '') {
+  const top = getLeaders(stat, 5, { ...filters, ...(season ? { season } : {}) })
+    .filter(x => !search || `${x.player.firstName} ${x.player.lastName}`.toLowerCase().includes(search));
   if (!top.length) return '<div style="padding:16px;color:var(--gray);text-align:center">No data</div>';
   return top.map((x, i) => `
     <div class="leaderboard-item">
@@ -760,10 +795,12 @@ function buildSimpleLeaderboard(stat, season, data) {
     </div>`).join('');
 }
 
-function buildFullStatsTable(data, season) {
-  const players = data.players.filter(p => p.active);
+function buildFullStatsTable(data, season, filters = {}, search = '') {
+  let players = data.players.filter(p => p.active);
+  if (filters.teamId) players = players.filter(p => p.teams.includes(filters.teamId));
+  if (search) players = players.filter(p => `${p.firstName} ${p.lastName}`.toLowerCase().includes(search));
   const rows = players.map(p => {
-    const s = getPlayerStats(p.id, season ? { season } : {});
+    const s = getPlayerStats(p.id, { ...filters, ...(season ? { season } : {}) });
     if (!s.ab) return '';
     return `<tr>
       <td><span class="player-name" data-route="/player/${p.id}">${p.firstName} ${p.lastName}</span></td>
@@ -796,7 +833,7 @@ function renderSchedule() {
   const rows = games.map(g => {
     const team = data.teams.find(t => t.id === g.teamId);
     const d = new Date(g.date + 'T12:00:00');
-    return `<div class="game-item ${g.result==='W'?'win':g.result==='L'?'loss':'upcoming'}">
+    return `<div class="game-item ${g.result==='W'?'win':g.result==='L'?'loss':'upcoming'} ${g.playerStats?.length?'has-boxscore':''}" onclick="showBoxScore('${g.id}')">
       <div>
         <div class="game-date-day">${d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>
         <div class="game-date">${d.getFullYear()}</div>
@@ -809,7 +846,9 @@ function renderSchedule() {
       <div class="game-score"><div class="score">
         <span class="score-hero">${g.heroScore??'–'}</span><span class="score-sep">-</span><span class="score-opp">${g.oppScore??'–'}</span>
       </div></div>
-      <div class="game-result">${g.result?`<span class="result-badge result-${g.result}">${g.result}</span>`:'<span style="color:var(--gray);font-size:12px">TBD</span>'}</div>
+      <div class="game-result">${g.result?`<span class="result-badge result-${g.result}">${g.result}</span>`:'<span style="color:var(--gray);font-size:12px">TBD</span>'}
+      ${g.playerStats?.length ? '<div class="boxscore-hint">📊 Box Score</div>' : ''}
+      </div>
     </div>`;
   }).join('');
 
@@ -836,6 +875,79 @@ function renderSchedule() {
     </section>
   `);
 }
+
+window.showBoxScore = function(gameId) {
+  const data = loadData();
+  const g = data.games.find(x => x.id === gameId);
+  if (!g) return;
+  if (!g.playerStats?.length) {
+    App.toast('Box score not available for this game', 'info');
+    return;
+  }
+  const d = new Date(g.date + 'T12:00:00');
+  const team = data.teams.find(t => t.id === g.teamId);
+  const dateStr = d.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric', year:'numeric'});
+
+  const rows = g.playerStats.map((ps, i) => {
+    const p = data.players.find(x => x.id === ps.playerId);
+    const name = p ? `${p.firstName} ${p.lastName}` : ps.playerId;
+    const singles = (ps.h||0) - (ps.d||0) - (ps.t||0) - (ps.hr||0);
+    const avg = ps.ab ? (ps.h/ps.ab).toFixed(3).replace(/^0/,'') : '.000';
+    return `<tr>
+      <td style="font-weight:700">${name}</td>
+      <td>${ps.ab||0}</td><td>${ps.r||0}</td><td>${ps.h||0}</td>
+      <td>${singles}</td><td>${ps.d||0}</td><td>${ps.t||0}</td><td>${ps.hr||0}</td>
+      <td>${ps.rbi||0}</td><td>${ps.bb||0}</td><td>${ps.k||0}</td>
+      <td style="font-weight:800;color:var(--red)">${avg}</td>
+    </tr>`;
+  }).join('');
+
+  // Totals row
+  const tot = g.playerStats.reduce((acc, ps) => {
+    ['ab','r','h','d','t','hr','rbi','bb','k'].forEach(k => acc[k] = (acc[k]||0) + (ps[k]||0));
+    return acc;
+  }, {});
+  const totSingles = (tot.h||0) - (tot.d||0) - (tot.t||0) - (tot.hr||0);
+  const totAvg = tot.ab ? (tot.h/tot.ab).toFixed(3).replace(/^0/,'') : '.000';
+
+  const existing = document.getElementById('boxscore-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'boxscore-modal';
+  modal.className = 'boxscore-overlay';
+  modal.innerHTML = `
+    <div class="boxscore-modal" onclick="event.stopPropagation()">
+      <div class="boxscore-header">
+        <div>
+          <div class="boxscore-game-info">${dateStr} · ${team?.name || ''}</div>
+          <div class="boxscore-matchup">Heroes <span>${g.heroScore}</span> – <span>${g.oppScore}</span> ${g.opponent}</div>
+          <div class="boxscore-result ${g.result==='W'?'w':g.result==='L'?'l':''}">${g.result==='W'?'✅ Win':g.result==='L'?'❌ Loss':'—'}</div>
+        </div>
+        <button class="boxscore-close" onclick="document.getElementById('boxscore-modal').remove()">✕</button>
+      </div>
+      <div class="boxscore-table-wrap">
+        <table class="boxscore-table">
+          <thead>
+            <tr><th>Player</th><th>AB</th><th>R</th><th>H</th><th>1B</th><th>2B</th><th>3B</th><th>HR</th><th>RBI</th><th>BB</th><th>K</th><th>AVG</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+          <tfoot>
+            <tr class="boxscore-totals">
+              <td>TOTALS</td>
+              <td>${tot.ab||0}</td><td>${tot.r||0}</td><td>${tot.h||0}</td>
+              <td>${totSingles}</td><td>${tot.d||0}</td><td>${tot.t||0}</td><td>${tot.hr||0}</td>
+              <td>${tot.rbi||0}</td><td>${tot.bb||0}</td><td>${tot.k||0}</td>
+              <td style="font-weight:800">${totAvg}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      ${g.notes ? `<div class="boxscore-notes">📌 ${g.notes}</div>` : ''}
+    </div>`;
+  modal.addEventListener('click', () => modal.remove());
+  document.body.appendChild(modal);
+};
 
 // ─── PAGE: NEWS ──────────────────────────────────────────────
 function renderNews() {
@@ -896,158 +1008,368 @@ function renderNewsArticle(articleId) {
 }
 
 // ─── PAGE: TOURNAMENTS ──────────────────────────────────
+let _tevFilter = 'all';
+let _tevSort   = 'date-asc';
+
 function renderTournaments() {
-  const data = loadData();
-  const tournaments = data.events.filter(e => e.type === 'tournament' || e.type === 'social');
+  // Inject styles once
+  if (!document.getElementById('ev-styles')) {
+    const s = document.createElement('style');
+    s.id = 'ev-styles';
+    s.textContent = `
+      .ev-card {
+        display:flex; background:#fff; border-radius:14px;
+        box-shadow:0 2px 12px rgba(0,0,0,0.07); border:1px solid var(--border);
+        overflow:hidden; margin-bottom:16px;
+        transition:box-shadow 0.2s, transform 0.2s;
+      }
+      .ev-card:hover { box-shadow:0 6px 28px rgba(0,0,0,0.11); transform:translateY(-1px); }
+      .ev-accent { width:5px; flex-shrink:0; background:var(--red); }
+      .ev-accent-social { background:var(--gold); }
+      .ev-accent-completed { background:#9ca3af; }
+      .ev-inner { flex:1; padding:20px 24px; min-width:0; }
 
-  const statusBadge = (ev) => {
-    const map = {
-      upcoming: ['tag-gold', '📅 Upcoming'],
-      active: ['tag-green', '⚡ In Progress'],
-      completed: ['tag-dark', '✓ Completed'],
-      cancelled: ['tag-gray', '✕ Cancelled'],
-    };
-    const [cls, label] = map[ev.status] || ['tag-gray', ev.status];
-    return `<span class="tag ${cls}">${label}</span>`;
-  };
+      /* ── head row ── */
+      .ev-head { display:flex; align-items:flex-start; gap:16px; }
+      .ev-datebox {
+        flex-shrink:0; text-align:center; background:var(--light);
+        border-radius:10px; padding:10px 14px; min-width:58px;
+      }
+      .ev-datebox-month { display:block; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:var(--red); }
+      .ev-datebox-day   { display:block; font-size:28px; font-weight:900; color:var(--dark); line-height:1.05; }
+      .ev-datebox-dow   { display:block; font-size:10px; font-weight:600; color:var(--gray); margin-top:1px; }
+      .ev-datebox-range { display:block; font-size:13px; font-weight:800; color:var(--dark); line-height:1.3; }
 
-  const regBadge = (ev) => {
-    if (ev.type === 'social') return '';
-    const map = { open: ['#dcfce7','#15803d','📋 Registration Open'], closed: ['#fee2e2','#dc2626','🔒 Roster Closed'], pending: ['#fef9c3','#92400e','⏳ Pending'] };
-    const [bg, color, label] = map[ev.registrationStatus] || ['#f3f4f6','#6b7280','Unknown'];
-    return `<span style="background:${bg};color:${color};padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700">${label}</span>`;
-  };
+      .ev-title-col { flex:1; min-width:0; }
+      .ev-name { font-size:20px; font-weight:900; color:var(--dark); margin-bottom:4px; line-height:1.2; }
+      .ev-loc  { font-size:13px; color:var(--gray); display:flex; align-items:center; gap:5px; }
+      .ev-mobile-badges { display:none; flex-wrap:wrap; gap:6px; margin-top:10px; }
 
-  function buildAttendanceSummary(ev) {
-    const avail = ev.availability || [];
-    const yes = avail.filter(a=>a.status==='yes').length;
-    const no = avail.filter(a=>a.status==='no').length;
-    const maybe = avail.filter(a=>a.status==='maybe').length;
-    const eligible = data.players.filter(p=>p.active && ev.teams.some(tid=>p.teams.includes(tid))).length;
-    const pending = eligible - yes - no - maybe;
-    const yPct = eligible ? (yes/eligible*100).toFixed(0) : 0;
-    const mPct = eligible ? (maybe/eligible*100).toFixed(0) : 0;
-    const nPct = eligible ? (no/eligible*100).toFixed(0) : 0;
-    return { yes, no, maybe, pending, eligible, yPct, mPct, nPct };
+      .ev-badge-col { flex-shrink:0; display:flex; flex-direction:column; align-items:flex-end; gap:6px; padding-left:8px; }
+      .ev-status-pill {
+        display:inline-block; padding:4px 11px; border-radius:20px;
+        font-size:11px; font-weight:700; white-space:nowrap;
+      }
+      .ev-status-upcoming  { background:#fef9c3; color:#92400e; }
+      .ev-status-active    { background:#dcfce7; color:#15803d; }
+      .ev-status-completed { background:#f3f4f6; color:#6b7280; }
+      .ev-status-cancelled { background:#fee2e2; color:#dc2626; }
+      .ev-team-pill {
+        display:inline-block; padding:3px 10px; border-radius:20px;
+        background:var(--dark); color:rgba(255,255,255,0.85);
+        font-size:11px; font-weight:700;
+      }
+      .ev-type-pill {
+        display:inline-block; padding:3px 10px; border-radius:20px;
+        background:rgba(240,165,0,0.15); color:#92400e;
+        font-size:11px; font-weight:700;
+      }
+      .ev-reg-pill {
+        display:inline-block; padding:3px 10px; border-radius:20px;
+        font-size:11px; font-weight:700;
+      }
+      .ev-badge-row { display:flex; gap:5px; flex-wrap:wrap; justify-content:flex-end; }
+
+      /* ── divider ── */
+      .ev-divider { border:none; border-top:1px solid var(--border); margin:14px 0; }
+
+      /* ── meta strip ── */
+      .ev-meta { display:flex; flex-wrap:wrap; gap:0; margin-bottom:14px; }
+      .ev-meta-item {
+        padding:8px 20px 8px 0; border-right:1px solid var(--border);
+        margin-right:20px; margin-bottom:4px;
+      }
+      .ev-meta-item:last-child { border-right:none; }
+      .ev-meta-item label { display:block; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; color:var(--gray); margin-bottom:2px; }
+      .ev-meta-item .val  { font-size:13px; font-weight:700; color:var(--text); }
+      .ev-meta-item .val a { color:var(--red); }
+
+      /* ── notes / hotel ── */
+      .ev-notes {
+        display:flex; gap:10px; align-items:flex-start;
+        background:var(--light); border-radius:8px; padding:12px 14px;
+        margin-bottom:12px; font-size:13px; line-height:1.6; color:var(--text);
+      }
+      .ev-hotel {
+        background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px;
+        padding:12px 14px; margin-bottom:12px; font-size:13px; line-height:1.6;
+      }
+      .ev-hotel-label { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; color:#1d4ed8; margin-bottom:3px; }
+      .ev-placement {
+        display:inline-flex; align-items:center; gap:8px;
+        background:linear-gradient(135deg,#fef3c7,#fffbeb);
+        border:1px solid #fcd34d; border-radius:8px;
+        padding:10px 16px; margin-bottom:12px; font-size:15px; font-weight:800; color:#92400e;
+      }
+
+      /* ── attendance ── */
+      .ev-attend { padding-top:14px; border-top:1px solid var(--border); }
+      .ev-attend-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+      .ev-attend-label { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; color:var(--gray); }
+      .ev-attend-counts { display:flex; gap:14px; }
+      .ev-attend-count  { font-size:12px; font-weight:700; display:flex; align-items:center; gap:4px; color:var(--text); }
+      .ev-attend-dot    { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+      .ev-attend-bar    { height:5px; border-radius:20px; background:#e5e7eb; overflow:hidden; display:flex; margin-bottom:12px; }
+      .ev-bar-yes       { background:#22c55e; transition:width 0.4s; }
+      .ev-bar-maybe     { background:#eab308; transition:width 0.4s; }
+      .ev-bar-no        { background:#ef4444; transition:width 0.4s; }
+      .ev-avatars       { display:flex; flex-wrap:wrap; gap:5px; }
+      .ev-av {
+        width:30px; height:30px; border-radius:50%; font-size:10px; font-weight:800;
+        color:#fff; display:flex; align-items:center; justify-content:center;
+        cursor:default; position:relative; flex-shrink:0;
+      }
+      .ev-av:hover::after {
+        content:attr(title); position:absolute; bottom:115%; left:50%; transform:translateX(-50%);
+        background:var(--dark); color:#fff; padding:3px 8px; border-radius:4px;
+        font-size:11px; white-space:nowrap; z-index:10; pointer-events:none;
+      }
+      .ev-av-yes     { background:#16a34a; border:2px solid #dcfce7; }
+      .ev-av-maybe   { background:#ca8a04; border:2px solid #fef9c3; }
+      .ev-av-no      { background:#dc2626; border:2px solid #fee2e2; opacity:0.45; }
+      .ev-av-pending { background:#9ca3af; border:2px solid #f3f4f6; opacity:0.6; }
+
+      /* ── filter/sort controls ── */
+      .ev-controls-row { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:28px; }
+      .ev-controls-row .filter-row { flex:1; min-width:0; flex-wrap:wrap; }
+      .ev-sort-wrap { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+      .ev-sort-label { font-size:13px; font-weight:700; color:var(--gray); }
+      .ev-sort-select { border:1px solid var(--border); border-radius:20px; padding:6px 12px; font-size:12px; font-weight:700; background:#fff; cursor:pointer; outline:none; }
+
+      /* ── empty state ── */
+      .ev-empty { text-align:center; padding:60px 20px; color:var(--gray); }
+      .ev-empty-icon { font-size:48px; margin-bottom:16px; }
+      .ev-empty h3 { font-size:18px; font-weight:800; margin-bottom:8px; color:var(--text); }
+
+      @media(max-width:640px) {
+        .ev-inner { padding:16px; }
+        .ev-badge-col { display:none; }
+        .ev-mobile-badges { display:flex; }
+        .ev-name { font-size:17px; }
+        .ev-datebox-day { font-size:22px; }
+        .ev-controls-row { flex-direction:column; align-items:flex-start; }
+      }
+    `;
+    document.head.appendChild(s);
   }
 
-  function buildPlayerAvatars(ev) {
-    const avail = ev.availability || [];
-    const eligible = data.players.filter(p=>p.active && ev.teams.some(tid=>p.teams.includes(tid)));
-    
-    // Sort: yes first, maybe, pending, no last
-    const order = { yes:0, maybe:1, pending:2, no:3 };
-    const withStatus = eligible.map(p => {
-      const a = avail.find(x=>x.playerId===p.id);
-      const status = a?.status || 'pending';
-      const note = a?.note || '';
-      return { player: p, status, note };
-    }).sort((a,b) => (order[a.status]||2) - (order[b.status]||2));
+  const data = loadData();
 
-    return withStatus.map(({player:p, status, note}) => {
-      const tooltip = `${p.firstName} ${p.lastName} — ${status==='yes'?'✅ Attending':status==='no'?'❌ Not Attending':status==='maybe'?'🟡 Maybe':'⏳ TBD'}${note?': '+note:''}`;
-      return `<div class="attend-avatar attend-avatar-${status}" title="${tooltip.replace(/"/g,"'")}">${p.firstName[0]}${p.lastName[0]}</div>`;
+  // Filter
+  let tournaments = data.events.filter(e => e.type === 'tournament' || e.type === 'social');
+  if (_tevFilter === 'upcoming')        tournaments = tournaments.filter(e => e.status === 'upcoming');
+  else if (_tevFilter === 'completed')  tournaments = tournaments.filter(e => e.status === 'completed');
+  else if (_tevFilter === 'tournament') tournaments = data.events.filter(e => e.type === 'tournament');
+  else if (_tevFilter === 'social')     tournaments = data.events.filter(e => e.type === 'social');
+
+  // Sort
+  const statusOrder = { upcoming:0, active:1, completed:2, cancelled:3 };
+  if (_tevSort === 'date-desc') {
+    tournaments = [...tournaments].sort((a,b) => new Date(b.date) - new Date(a.date));
+  } else if (_tevSort === 'upcoming') {
+    tournaments = [...tournaments].sort((a,b) => {
+      const sd = (statusOrder[a.status]??2) - (statusOrder[b.status]??2);
+      return sd !== 0 ? sd : new Date(a.date) - new Date(b.date);
+    });
+  } else {
+    tournaments = [...tournaments].sort((a,b) => new Date(a.date) - new Date(b.date));
+  }
+
+  function buildCards(events) {
+    if (!events.length) return `
+      <div class="ev-empty">
+        <div class="ev-empty-icon">🏟️</div>
+        <h3>No events found</h3>
+        <p>Try a different filter</p>
+      </div>`;
+
+    return events.map(ev => {
+      const d1 = new Date(ev.date + 'T12:00:00');
+      const d2 = ev.endDate && ev.endDate !== ev.date ? new Date(ev.endDate + 'T12:00:00') : null;
+      const isSocial = ev.type === 'social';
+      const isDone   = ev.status === 'completed' || ev.status === 'cancelled';
+
+      // Date display
+      const datebox = d2
+        ? `<div class="ev-datebox" style="min-width:72px">
+            <span class="ev-datebox-month">${d1.toLocaleDateString('en-US',{month:'short'})}</span>
+            <span class="ev-datebox-range">${d1.getDate()} – ${d2.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
+            <span class="ev-datebox-dow">${d1.toLocaleDateString('en-US',{year:'numeric'})}</span>
+           </div>`
+        : `<div class="ev-datebox">
+            <span class="ev-datebox-month">${d1.toLocaleDateString('en-US',{month:'short'})}</span>
+            <span class="ev-datebox-day">${d1.getDate()}</span>
+            <span class="ev-datebox-dow">${d1.toLocaleDateString('en-US',{weekday:'short'})}</span>
+           </div>`;
+
+      const teams = ev.teams.map(id => data.teams.find(t => t.id === id)).filter(Boolean);
+
+      // Status pill
+      const statusMap = {
+        upcoming:  ['ev-status-upcoming',  '\u{1F4C5} Upcoming'],
+        active:    ['ev-status-active',    '⚡ In Progress'],
+        completed: ['ev-status-completed', '✓ Completed'],
+        cancelled: ['ev-status-cancelled', '✕ Cancelled'],
+      };
+      const [sCls, sLabel] = statusMap[ev.status] || ['ev-status-upcoming', ev.status];
+      const statusPill = `<span class="ev-status-pill ${sCls}">${sLabel}</span>`;
+
+      // Registration pill
+      const regMap = {
+        open:   ['#dcfce7','#15803d','\u{1F4CB} Open'],
+        closed: ['#fee2e2','#dc2626','\u{1F512} Closed'],
+        pending:['#fef9c3','#92400e','⏳ Pending'],
+      };
+      const regPill = (!isSocial && ev.registrationStatus && regMap[ev.registrationStatus])
+        ? `<span class="ev-reg-pill" style="background:${regMap[ev.registrationStatus][0]};color:${regMap[ev.registrationStatus][1]}">${regMap[ev.registrationStatus][2]}</span>`
+        : '';
+
+      const teamPills  = teams.map(t => `<span class="ev-team-pill">${t.name}</span>`).join('');
+      const typePill   = isSocial ? `<span class="ev-type-pill">\u{1F389} Team Event</span>` : '';
+
+      // Attendance summary
+      const avail    = ev.availability || [];
+      const eligible = data.players.filter(p => p.active && ev.teams.some(tid => p.teams.includes(tid)));
+      const yes    = avail.filter(a => a.status === 'yes').length;
+      const no     = avail.filter(a => a.status === 'no').length;
+      const maybe  = avail.filter(a => a.status === 'maybe').length;
+      const pending = eligible.length - yes - no - maybe;
+      const yPct   = eligible.length ? (yes / eligible.length * 100).toFixed(0) : 0;
+      const mPct   = eligible.length ? (maybe / eligible.length * 100).toFixed(0) : 0;
+      const nPct   = eligible.length ? (no / eligible.length * 100).toFixed(0) : 0;
+
+      // Avatars (yes → maybe → pending → no)
+      const order = { yes:0, maybe:1, pending:2, no:3 };
+      const sorted = eligible.map(p => {
+        const a = avail.find(x => x.playerId === p.id);
+        return { p, status: a?.status || 'pending', note: a?.note || '' };
+      }).sort((a, b) => (order[a.status]||2) - (order[b.status]||2));
+      const avatarHtml = sorted.map(({ p, status, note }) => {
+        const tip = `${p.firstName} ${p.lastName} — ${status==='yes'?'✅ Attending':status==='no'?'❌ Not Attending':status==='maybe'?'\u{1F7E1} Maybe':'⏳ TBD'}${note ? ': ' + note : ''}`;
+        return `<div class="ev-av ev-av-${status}" title="${tip.replace(/"/g,"'")}">${p.firstName[0]}${p.lastName[0]}</div>`;
+      }).join('');
+
+      // Meta items (only populated fields)
+      const metaItems = [
+        ev.address   ? `<div class="ev-meta-item"><label>Venue</label><div class="val"><a href="https://maps.google.com?q=${encodeURIComponent(ev.address)}" target="_blank">\u{1F4CD} ${ev.venue||ev.location}</a></div></div>` : '',
+        !isSocial && ev.entryFee     ? `<div class="ev-meta-item"><label>Entry Fee</label><div class="val">$${ev.entryFee} / team</div></div>` : '',
+        !isSocial && ev.division     ? `<div class="ev-meta-item"><label>Division</label><div class="val">${ev.division}</div></div>` : '',
+        ev.rsvpDeadline              ? `<div class="ev-meta-item"><label>RSVP By</label><div class="val" style="color:var(--red)">\u{1F4C5} ${new Date(ev.rsvpDeadline+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div></div>` : '',
+        !isSocial && ev.rosterDeadline ? `<div class="ev-meta-item"><label>Roster Deadline</label><div class="val">\u{1F4CB} ${new Date(ev.rosterDeadline+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div></div>` : '',
+        !isSocial && ev.director     ? `<div class="ev-meta-item"><label>Director</label><div class="val">${ev.director}</div></div>` : '',
+      ].filter(Boolean).join('');
+
+      const accentClass = isSocial ? 'ev-accent-social' : (isDone ? 'ev-accent-completed' : '');
+
+      return `
+        <div class="ev-card">
+          <div class="ev-accent ${accentClass}"></div>
+          <div class="ev-inner">
+
+            <!-- Head row -->
+            <div class="ev-head">
+              ${datebox}
+              <div class="ev-title-col">
+                <div class="ev-name">${ev.name}</div>
+                <div class="ev-loc">\u{1F4CD} ${ev.venue ? ev.venue + ', ' : ''}${ev.location}</div>
+                <!-- Badges shown below title on mobile -->
+                <div class="ev-mobile-badges">
+                  ${statusPill}${regPill}${typePill}${teamPills}
+                </div>
+              </div>
+              <div class="ev-badge-col">
+                ${statusPill}
+                ${regPill ? `<div class="ev-badge-row">${regPill}</div>` : ''}
+                <div class="ev-badge-row">${typePill}${teamPills}</div>
+              </div>
+            </div>
+
+            ${ev.placement ? `<div class="ev-placement">\u{1F3C6} ${ev.placement}</div>` : ''}
+
+            ${metaItems ? `<hr class="ev-divider"><div class="ev-meta">${metaItems}</div>` : ''}
+
+            ${ev.notes ? `<div class="ev-notes"><span style="font-size:16px">\u{1F4CC}</span><div><div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray);margin-bottom:3px">Notes from Manager</div>${ev.notes}</div></div>` : ''}
+
+            ${ev.hotelInfo ? `<div class="ev-hotel"><div class="ev-hotel-label">\u{1F3E8} Hotel Info</div>${ev.hotelInfo}${ev.hotelUrl?`<br><a href="${ev.hotelUrl}" target="_blank" style="color:#1d4ed8;font-weight:700">Book Now →</a>`:''}${ev.hotelCode?`<br><span style="font-size:12px">Code: <strong>${ev.hotelCode}</strong></span>`:''}</div>` : ''}
+
+            <!-- Attendance -->
+            <div class="ev-attend">
+              <div class="ev-attend-head">
+                <span class="ev-attend-label">Player Attendance</span>
+                <div class="ev-attend-counts">
+                  <span class="ev-attend-count"><span class="ev-attend-dot" style="background:#22c55e"></span>${yes} going</span>
+                  <span class="ev-attend-count"><span class="ev-attend-dot" style="background:#eab308"></span>${maybe} maybe</span>
+                  <span class="ev-attend-count"><span class="ev-attend-dot" style="background:#9ca3af"></span>${pending} TBD</span>
+                </div>
+              </div>
+              <div class="ev-attend-bar">
+                <div class="ev-bar-yes"   style="width:${yPct}%"></div>
+                <div class="ev-bar-maybe" style="width:${mPct}%"></div>
+                <div class="ev-bar-no"    style="width:${nPct}%"></div>
+              </div>
+              <div class="ev-avatars">${avatarHtml}</div>
+            </div>
+
+          </div>
+        </div>`;
     }).join('');
   }
-
-  const cards = tournaments.map(ev => {
-    const d1 = new Date(ev.date + 'T12:00:00');
-    const d2 = ev.endDate ? new Date(ev.endDate + 'T12:00:00') : null;
-    const dateStr = d2 && ev.date !== ev.endDate
-      ? `${d1.toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${d2.toLocaleDateString('en-US',{month:'short',day:'numeric', year:'numeric'})}`
-      : d1.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
-    const teams = ev.teams.map(id=>data.teams.find(t=>t.id===id)).filter(Boolean);
-    const summ = buildAttendanceSummary(ev);
-    const isSocial = ev.type === 'social';
-
-    return `<div class="tourney-card">
-      <div class="tourney-header">
-        <div class="tourney-dates">${dateStr}</div>
-        <div class="tourney-name">${ev.name}</div>
-        <div class="tourney-location">📍 ${ev.venue ? ev.venue + ', ' : ''}${ev.location}</div>
-        <div class="tourney-badges">
-          ${statusBadge(ev)}
-          ${regBadge(ev)}
-          ${teams.map(t=>`<span class="tag tag-dark">${t.name}</span>`).join('')}
-          ${isSocial ? '<span class="tag" style="background:rgba(255,255,255,0.15);color:#fff">🎉 Team Event</span>' : ''}
-        </div>
-      </div>
-      <div class="tourney-body">
-        <div class="tourney-meta-grid">
-          ${ev.address ? `<div class="tourney-meta-item"><label>Venue</label><div class="val"><a href="https://maps.google.com?q=${encodeURIComponent(ev.address)}" target="_blank">📍 ${ev.venue||ev.location}</a></div></div>` : ''}
-          ${!isSocial && ev.entryFee ? `<div class="tourney-meta-item"><label>Entry Fee</label><div class="val">$${ev.entryFee} / team</div></div>` : ''}
-          ${!isSocial && ev.division ? `<div class="tourney-meta-item"><label>Division</label><div class="val">${ev.division}</div></div>` : ''}
-          ${ev.rsvpDeadline ? `<div class="tourney-meta-item"><label>RSVP By</label><div class="val" style="color:var(--red)">📅 ${new Date(ev.rsvpDeadline+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div></div>` : ''}
-          ${!isSocial && ev.rosterDeadline ? `<div class="tourney-meta-item"><label>Roster Deadline</label><div class="val">📋 ${new Date(ev.rosterDeadline+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div></div>` : ''}
-          ${!isSocial && ev.director ? `<div class="tourney-meta-item"><label>Director</label><div class="val">${ev.director}</div></div>` : ''}
-          ${ev.placement ? `<div class="tourney-meta-item"><label>Result</label><div class="val" style="color:var(--gold);font-size:16px">🏆 ${ev.placement}</div></div>` : ''}
-        </div>
-        ${ev.notes ? `<div style="background:var(--light);border-radius:8px;padding:14px 16px;margin-bottom:18px;font-size:13px;line-height:1.6;color:var(--text)">
-          <span style="font-weight:800;font-size:11px;text-transform:uppercase;color:var(--gray);letter-spacing:0.5px">📌 Notes from Manager</span><br>${ev.notes}</div>` : ''}
-        ${ev.hotelInfo ? `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px 16px;margin-bottom:18px;font-size:13px;line-height:1.6">
-          <span style="font-weight:800;font-size:11px;text-transform:uppercase;color:#1d4ed8;letter-spacing:0.5px">🏨 Hotel Info</span><br>${ev.hotelInfo}
-          ${ev.hotelUrl ? `<br><a href="${ev.hotelUrl}" target="_blank" style="color:#1d4ed8;font-weight:700">Book Now →</a>` : ''}
-          ${ev.hotelCode ? `<br><span style="font-size:12px">Code: <strong>${ev.hotelCode}</strong></span>` : ''}
-        </div>` : ''}
-
-        <div class="tourney-attendance-section">
-          <div class="tourney-attendance-header">
-            <h4>Player Attendance (${summ.yes} of ${summ.eligible} confirmed)</h4>
-            <div class="attend-counts">
-              <span class="attend-count"><span class="attend-count-dot" style="background:#22c55e"></span>${summ.yes}</span>
-              <span class="attend-count"><span class="attend-count-dot" style="background:#eab308"></span>${summ.maybe}</span>
-              <span class="attend-count"><span class="attend-count-dot" style="background:#ef4444"></span>${summ.no}</span>
-              <span class="attend-count"><span class="attend-count-dot" style="background:var(--gray)"></span>${summ.pending}</span>
-            </div>
-          </div>
-          <div class="attend-bar">
-            <div class="attend-bar-yes" style="width:${summ.yPct}%"></div>
-            <div class="attend-bar-maybe" style="width:${summ.mPct}%"></div>
-            <div class="attend-bar-no" style="width:${summ.nPct}%"></div>
-          </div>
-          <div style="margin-top:14px">
-            <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--gray);letter-spacing:0.5px;margin-bottom:10px">All Players</div>
-            <div class="attend-avatars">${buildPlayerAvatars(ev)}</div>
-          </div>
-        </div>
-      </div>
-    </div>`;
-  }).join('') || '<p style="color:var(--gray)">No tournaments scheduled yet</p>';
 
   App.render(`
     <div class="page-banner">
       <div class="page-banner-inner">
-        <div class="breadcrumb"><a data-route="/">Home</a><span>Tournaments</span></div>
-        <h1>Tournament <span>Schedule</span></h1>
-        <p>Upcoming events and team schedule</p>
+        <div class="breadcrumb"><a data-route="/">Home</a><span>Events</span></div>
+        <h1>Heroes <span>Events</span></h1>
+        <p>Tournaments, team events, and social gatherings</p>
       </div>
     </div>
     <section class="section">
       <div class="container" style="max-width:900px">
-        <div class="filter-row" style="margin-bottom:24px">
-          <button class="filter-btn active" onclick="filterTourneys(this,'all')">All Events</button>
-          <button class="filter-btn" onclick="filterTourneys(this,'upcoming')">Upcoming</button>
-          <button class="filter-btn" onclick="filterTourneys(this,'completed')">Completed</button>
-          <button class="filter-btn" onclick="filterTourneys(this,'tournament')">Tournaments</button>
-          <button class="filter-btn" onclick="filterTourneys(this,'social')">Team Events</button>
+        <div class="ev-controls-row">
+          <div class="filter-row">
+            <button class="filter-btn ${_tevFilter==='all'?'active':''}"        onclick="filterTourneys(this,'all')">All Events</button>
+            <button class="filter-btn ${_tevFilter==='upcoming'?'active':''}"   onclick="filterTourneys(this,'upcoming')">Upcoming</button>
+            <button class="filter-btn ${_tevFilter==='completed'?'active':''}"  onclick="filterTourneys(this,'completed')">Completed</button>
+            <button class="filter-btn ${_tevFilter==='tournament'?'active':''}" onclick="filterTourneys(this,'tournament')">Tournaments</button>
+            <button class="filter-btn ${_tevFilter==='social'?'active':''}"     onclick="filterTourneys(this,'social')">Team Events</button>
+          </div>
+          <div class="ev-sort-wrap">
+            <label class="ev-sort-label">Sort:</label>
+            <select class="ev-sort-select" onchange="sortTourneys(this.value)">
+              <option value="date-asc"  ${_tevSort==='date-asc' ?'selected':''}>Soonest First</option>
+              <option value="date-desc" ${_tevSort==='date-desc'?'selected':''}>Latest First</option>
+              <option value="upcoming"  ${_tevSort==='upcoming' ?'selected':''}>Upcoming First</option>
+            </select>
+          </div>
         </div>
-        <div id="tourney-list">${cards}</div>
+        <div id="tourney-list">${buildCards(tournaments)}</div>
       </div>
     </section>
   `);
 }
 
 window.filterTourneys = function(btn, filter) {
-  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  _tevFilter = filter;
+  renderTournaments();
+};
+
+window.sortTourneys = function(val) {
+  _tevSort = val;
+  renderTournaments();
+};
+
+window.toggleAttendGrid = function(evId, btn) {
+  const grid = document.getElementById('attend-grid-' + evId);
+  const open = grid.style.display === 'none';
+  grid.style.display = open ? 'block' : 'none';
+  btn.textContent = open ? 'Hide Players ▴' : 'Show Players ▾';
+};
+
+window.sortAttendGrid = function(evId, by, btn) {
+  btn.closest('.attend-grid-controls').querySelectorAll('.attend-sort-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  const data = loadData();
-  let events = data.events;
-  if (filter === 'upcoming') events = events.filter(e => e.status === 'upcoming');
-  else if (filter === 'completed') events = events.filter(e => e.status === 'completed');
-  else if (filter === 'tournament') events = events.filter(e => e.type === 'tournament');
-  else if (filter === 'social') events = events.filter(e => e.type === 'social');
-  // Re-render just the list portion
-  Router.navigate('/tournaments');
+  document.getElementById('attend-grouped-' + evId).style.display = by === 'status' ? '' : 'none';
+  document.getElementById('attend-alpha-' + evId).style.display  = by === 'name'   ? '' : 'none';
 };
 
 // ─── PAGE: ABOUT ─────────────────────────────────────────────
@@ -1220,6 +1542,118 @@ window.switchTab = function(e, tabId) {
   if (target) target.classList.add('active');
 };
 
+// ─── PAGE: AWARDS ─────────────────────────────────────────────
+function renderAwards() {
+  const data = loadData();
+  const byYear = {};
+  data.awards.forEach(a => { byYear[a.year] = byYear[a.year] || []; byYear[a.year].push(a); });
+  const years = Object.keys(byYear).sort().reverse();
+
+  const sections = years.map(year => {
+    const cards = byYear[year].map(a => {
+      const team = data.teams.find(t => t.id === a.team);
+      return `<div class="award-card fade-in">
+        <div class="award-icon">${a.icon}</div>
+        <div class="award-content">
+          <div class="award-title">${a.title}</div>
+          <div class="award-desc">${a.description}</div>
+          <div class="award-team-badge">${team?.name || ''}</div>
+        </div>
+      </div>`;
+    }).join('');
+    return `<div class="awards-year-section">
+      <div class="awards-year-header">
+        <span class="awards-year-label">${year}</span>
+        <span class="awards-year-sub">Season Awards</span>
+      </div>
+      <div class="awards-grid">${cards}</div>
+    </div>`;
+  }).join('');
+
+  App.render(`
+    <div class="page-banner">
+      <div class="page-banner-inner">
+        <div class="breadcrumb"><a data-route="/">Home</a><span>Awards</span></div>
+        <h1>Heroes <span>Awards</span></h1>
+        <p>Season honors, all-tournament teams, and individual achievements</p>
+      </div>
+    </div>
+    <section class="section">
+      <div class="container" style="max-width:900px">
+        ${sections || '<p style="color:var(--gray);text-align:center">No awards yet</p>'}
+      </div>
+    </section>
+  `);
+}
+
+// ─── PAGE: GALLERY ─────────────────────────────────────────────
+function renderGallery() {
+  const data = loadData();
+  const albums = (data.albums || []).sort((a,b) => b.date.localeCompare(a.date));
+
+  const albumCards = albums.map(al => {
+    const photos = (data.photos || []).filter(p => p.albumId === al.id);
+    const cover = al.coverUrl || photos[0]?.url || '';
+    const team = data.teams.find(t => t.id === al.teamId);
+    return `<div class="gallery-album-card" onclick="openAlbum('${al.id}')">
+      <div class="gallery-album-cover">
+        ${cover ? `<img src="${cover}" alt="${al.name}" onerror="this.parentElement.innerHTML='📷'">` : '<div class="gallery-album-empty">📷</div>'}
+        <div class="gallery-album-count">${photos.length} photos</div>
+      </div>
+      <div class="gallery-album-info">
+        <div class="gallery-album-name">${al.name}</div>
+        <div class="gallery-album-meta">${al.date ? new Date(al.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : ''} ${team?'· '+team.shortName:''}</div>
+        ${al.description ? `<div class="gallery-album-desc">${al.description}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('') || '<div class="gallery-empty"><div style="font-size:48px;margin-bottom:16px">📷</div><p>No photos yet. Check back soon!</p></div>';
+
+  App.render(`
+    <div class="page-banner">
+      <div class="page-banner-inner">
+        <div class="breadcrumb"><a data-route="/">Home</a><span>Gallery</span></div>
+        <h1>Photo <span>Gallery</span></h1>
+        <p>Memories from tournaments, events, and team gatherings</p>
+      </div>
+    </div>
+    <section class="section">
+      <div class="container">
+        <div class="gallery-grid" id="gallery-grid">${albumCards}</div>
+      </div>
+    </section>
+  `);
+}
+
+window.openAlbum = function(albumId) {
+  const data = loadData();
+  const album = (data.albums||[]).find(a => a.id === albumId);
+  if (!album) return;
+  const photos = (data.photos||[]).filter(p => p.albumId === albumId);
+  if (!photos.length) { App.toast('No photos in this album yet', 'info'); return; }
+
+  const grid = photos.map((p, i) => `
+    <div class="lightbox-thumb" onclick="lightboxGoto(${i})">
+      <img src="${p.url}" alt="${p.caption||''}" loading="lazy" onerror="this.parentElement.style.display='none'">
+    </div>`).join('');
+
+  const existing = document.getElementById('lightbox-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'lightbox-overlay';
+  overlay.className = 'lightbox-overlay';
+  overlay.innerHTML = `
+    <div class="lightbox-panel" onclick="event.stopPropagation()">
+      <div class="lightbox-header">
+        <div class="lightbox-album-name">${album.name}</div>
+        <button class="lightbox-close" onclick="document.getElementById('lightbox-overlay').remove()">✕</button>
+      </div>
+      <div class="lightbox-grid">${grid}</div>
+    </div>`;
+  overlay.addEventListener('click', () => overlay.remove());
+  document.body.appendChild(overlay);
+};
+
 // ─── REGISTER ROUTES ────────────────────────────────────────
 Router.register('/', renderHome);
 Router.register('/team', (teamId) => renderTeam(teamId));
@@ -1228,10 +1662,12 @@ Router.register('/player', (playerId) => renderPlayer(playerId));
 Router.register('/stats', renderStats);
 Router.register('/schedule', renderSchedule);
 Router.register('/news', (...args) => { if (args[0] === 'article') renderNewsArticle(args[1]); else renderNews(); });
-Router.register('/tournaments', renderTournaments);
+Router.register('/events', () => { window._heroesEventFilter = 'all'; window._heroesEventSort = 'newest'; renderTournaments(); });
 Router.register('/about', renderAbout);
 Router.register('/contact', renderContact);
 Router.register('/sponsors', renderSponsors);
+Router.register('/awards', renderAwards);
+Router.register('/gallery', renderGallery);
 Router.register('*', renderNotFound);
 
 // ─── BOOT ────────────────────────────────────────────────────

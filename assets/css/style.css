@@ -531,6 +531,147 @@ button { cursor: pointer; border: none; font-family: inherit; font-size: inherit
 .tournament-meta-item strong { color: var(--dark); }
 .tournament-body { padding: 20px 24px; }
 
+/* ---- EVENT CONTROLS ROW ---- */
+.ev-controls-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+.ev-controls-row .filter-row { margin-bottom: 0; flex-wrap: wrap; }
+.ev-sort-wrap { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.ev-sort-label { font-size: 12px; font-weight: 700; color: var(--gray); text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
+.ev-sort-select { border: 1px solid var(--border); border-radius: 20px; padding: 7px 14px; font-size: 13px; font-weight: 600; color: var(--text); background: var(--white); cursor: pointer; outline: none; transition: border-color 0.2s; font-family: inherit; }
+.ev-sort-select:focus, .ev-sort-select:hover { border-color: var(--red); }
+
+/* ---- BOX SCORE MODAL ---- */
+.game-item { cursor: pointer; transition: all 0.15s; }
+.game-item:hover { transform: translateX(3px); box-shadow: 3px 0 0 var(--red) inset; }
+.game-item.has-boxscore .boxscore-hint { display: block; }
+.boxscore-hint { display: none; font-size: 10px; font-weight: 700; color: var(--red); margin-top: 4px; letter-spacing: 0.3px; }
+.boxscore-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 3000; display: flex; align-items: center; justify-content: center; padding: 20px; animation: fadeIn 0.15s ease; }
+.boxscore-modal { background: #fff; border-radius: 16px; width: 100%; max-width: 720px; max-height: 85vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+.boxscore-header { background: linear-gradient(135deg, #1a1a2e, #0f3460); padding: 20px 24px; display: flex; justify-content: space-between; align-items: flex-start; flex-shrink: 0; }
+.boxscore-game-info { font-size: 11px; color: rgba(255,255,255,0.55); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+.boxscore-matchup { font-size: 20px; font-weight: 900; color: #fff; margin-bottom: 6px; }
+.boxscore-matchup span { color: var(--gold); }
+.boxscore-result { font-size: 13px; font-weight: 700; }
+.boxscore-result.w { color: #4ade80; }
+.boxscore-result.l { color: #f87171; }
+.boxscore-close { background: rgba(255,255,255,0.1); border: none; color: #fff; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background 0.2s; }
+.boxscore-close:hover { background: rgba(255,255,255,0.2); }
+.boxscore-table-wrap { overflow-x: auto; flex: 1; overflow-y: auto; }
+.boxscore-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.boxscore-table th { background: var(--dark); color: rgba(255,255,255,0.8); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 12px; text-align: center; position: sticky; top: 0; }
+.boxscore-table th:first-child { text-align: left; }
+.boxscore-table td { padding: 9px 12px; text-align: center; border-bottom: 1px solid var(--gray-light); font-size: 13px; }
+.boxscore-table td:first-child { text-align: left; font-size: 13px; }
+.boxscore-table tr:hover td { background: var(--light); }
+.boxscore-totals td { font-weight: 800; background: var(--light); border-top: 2px solid var(--border); }
+.boxscore-notes { padding: 12px 20px; font-size: 12px; color: var(--text-light); background: var(--light); border-top: 1px solid var(--border); flex-shrink: 0; }
+
+/* ---- TOURNAMENT BRACKET ---- */
+.ev-bracket-section { margin-bottom: 20px; }
+.ev-bracket-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: var(--gray); margin-bottom: 12px; }
+.bkt-wrapper { display: flex; gap: 0; overflow-x: auto; padding-bottom: 8px; }
+.bkt-round { min-width: 160px; flex-shrink: 0; }
+.bkt-round-name { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray); text-align: center; padding: 6px 8px; background: var(--light); border: 1px solid var(--border); border-bottom: none; border-radius: 6px 6px 0 0; }
+.bkt-games { display: flex; flex-direction: column; gap: 10px; padding: 10px 8px; border: 1px solid var(--border); border-radius: 0 0 6px 6px; background: #fff; }
+.bkt-game { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.bkt-team { display: flex; justify-content: space-between; align-items: center; padding: 7px 10px; font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--gray-light); }
+.bkt-team:last-child { border-bottom: none; }
+.bkt-winner { background: #f0fdf4; font-weight: 800; color: #15803d; }
+.bkt-score { font-weight: 900; font-size: 14px; }
+
+/* ---- STATS FILTERS ---- */
+.stats-controls { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 24px; padding: 18px 20px; background: var(--light); border-radius: 12px; border: 1px solid var(--border); }
+.stats-filter-group { display: flex; flex-direction: column; gap: 6px; }
+.stats-filter-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: var(--gray); }
+.stats-team-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.stats-search-input { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 13px; outline: none; font-family: inherit; min-width: 180px; transition: border-color 0.2s; }
+.stats-search-input:focus { border-color: var(--red); }
+.stats-date-input { border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; font-size: 13px; outline: none; font-family: inherit; transition: border-color 0.2s; }
+.stats-date-input:focus { border-color: var(--red); }
+
+/* ---- AWARDS PAGE ---- */
+.awards-year-section { margin-bottom: 48px; }
+.awards-year-header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 20px; padding-bottom: 14px; border-bottom: 3px solid var(--red); }
+.awards-year-label { font-size: 32px; font-weight: 900; color: var(--dark); }
+.awards-year-sub { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--gray); }
+.award-content { flex: 1; min-width: 0; }
+.award-desc { font-size: 13px; color: var(--text-light); line-height: 1.5; margin-bottom: 6px; }
+.award-team-badge { display: inline-block; background: var(--dark); color: #fff; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 3px 8px; border-radius: 20px; }
+
+/* ---- PHOTO GALLERY ---- */
+.gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+.gallery-album-card { background: #fff; border-radius: 14px; overflow: hidden; border: 1px solid var(--border); cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.gallery-album-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
+.gallery-album-cover { aspect-ratio: 16/9; background: var(--dark); overflow: hidden; position: relative; display: flex; align-items: center; justify-content: center; font-size: 36px; color: rgba(255,255,255,0.3); }
+.gallery-album-cover img { width: 100%; height: 100%; object-fit: cover; }
+.gallery-album-count { position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.6); color: #fff; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 20px; }
+.gallery-album-info { padding: 14px 16px; }
+.gallery-album-name { font-size: 15px; font-weight: 800; color: var(--dark); margin-bottom: 4px; }
+.gallery-album-meta { font-size: 12px; color: var(--gray); margin-bottom: 4px; }
+.gallery-album-desc { font-size: 12px; color: var(--text-light); line-height: 1.4; }
+.gallery-empty { text-align: center; padding: 60px 20px; color: var(--gray); }
+.lightbox-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 3000; display: flex; align-items: center; justify-content: center; padding: 20px; animation: fadeIn 0.2s ease; }
+.lightbox-panel { background: #fff; border-radius: 16px; width: 100%; max-width: 900px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; }
+.lightbox-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+.lightbox-album-name { font-size: 16px; font-weight: 800; }
+.lightbox-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--gray); padding: 4px 8px; border-radius: 4px; }
+.lightbox-close:hover { background: var(--light); }
+.lightbox-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; padding: 16px; overflow-y: auto; }
+.lightbox-thumb { aspect-ratio: 1; border-radius: 8px; overflow: hidden; cursor: pointer; background: var(--light); }
+.lightbox-thumb img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.2s; }
+.lightbox-thumb:hover img { transform: scale(1.05); }
+
+/* ---- EVENT CARD BODY ---- */
+.ev-result-banner {
+  background: linear-gradient(135deg, #78350f, #b45309);
+  border-radius: 12px; padding: 16px 20px; margin-bottom: 22px;
+  display: flex; align-items: center; gap: 16px;
+}
+.ev-result-trophy { font-size: 36px; line-height: 1; flex-shrink: 0; }
+.ev-result-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: rgba(255,255,255,0.7); margin-bottom: 4px; }
+.ev-result-value { font-size: 20px; font-weight: 900; color: var(--gold); line-height: 1.2; }
+
+.ev-meta-strip { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 22px; padding-bottom: 22px; border-bottom: 1px solid var(--border); }
+.ev-meta-chip { display: flex; align-items: center; gap: 10px; background: var(--light); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; }
+.ev-meta-chip-icon { font-size: 20px; line-height: 1; flex-shrink: 0; }
+.ev-meta-chip-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray); margin-bottom: 2px; }
+.ev-meta-chip-val { font-size: 13px; font-weight: 700; color: var(--text); }
+
+.ev-notes-callout { border-left: 4px solid var(--red); background: #fff8f8; border-radius: 0 10px 10px 0; padding: 14px 18px; margin-bottom: 20px; }
+.ev-notes-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: var(--red); margin-bottom: 7px; }
+.ev-notes-text { font-size: 13px; line-height: 1.7; color: var(--text); }
+
+.ev-hotel-card { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; }
+.ev-hotel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.ev-hotel-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: #1d4ed8; }
+.ev-hotel-book { background: #1d4ed8; color: #fff; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; text-decoration: none; transition: background 0.2s; }
+.ev-hotel-book:hover { background: #1e40af; }
+.ev-hotel-text { font-size: 13px; color: var(--text); line-height: 1.6; }
+.ev-hotel-code { margin-top: 8px; font-size: 12px; color: #1d4ed8; }
+
+/* ---- ATTENDANCE GRID ---- */
+.attend-summary-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.attend-summary-left { display: flex; flex-direction: column; gap: 6px; }
+.attend-summary-title { font-size: 14px; font-weight: 800; color: var(--text); }
+.attend-pips { display: flex; gap: 14px; font-size: 13px; }
+.attend-toggle-btn { background: none; border: 1px solid var(--border); border-radius: 20px; padding: 6px 14px; font-size: 12px; font-weight: 700; cursor: pointer; color: var(--text-light); transition: all 0.2s; white-space: nowrap; flex-shrink: 0; }
+.attend-toggle-btn:hover { border-color: var(--red); color: var(--red); }
+.attend-grid-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.attend-sort-btn { background: none; border: 1px solid var(--border); border-radius: 20px; padding: 5px 12px; font-size: 11px; font-weight: 700; cursor: pointer; color: var(--gray); transition: all 0.2s; }
+.attend-sort-btn.active, .attend-sort-btn:hover { background: var(--dark); color: #fff; border-color: var(--dark); }
+.attend-status-group { margin-bottom: 20px; }
+.attend-status-group-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray); padding-bottom: 8px; margin-bottom: 10px; border-bottom: 1px solid var(--gray-light); }
+.attend-player-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+.attend-player-card { display: flex; flex-direction: column; align-items: center; padding: 12px 8px; border-radius: 10px; border: 1px solid var(--gray-light); background: var(--light); text-align: center; transition: all 0.15s; }
+.attend-player-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+.attend-card-yes { border-color: #86efac; background: #f0fdf4; }
+.attend-card-maybe { border-color: #fde68a; background: #fefce8; }
+.attend-card-no { border-color: #fca5a5; background: #fff5f5; opacity: 0.65; }
+.attend-card-pending { border-color: var(--border); background: var(--light); }
+.attend-player-avatar { width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; color: #fff; margin-bottom: 7px; flex-shrink: 0; }
+.attend-player-name { font-size: 12px; font-weight: 700; color: var(--text); line-height: 1.3; }
+.attend-player-status-icon { font-size: 13px; margin-top: 4px; }
+.attend-player-note { font-size: 10px; color: var(--gray); margin-top: 3px; font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+
 /* ---- MODAL ---- */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 20px; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
 .modal-overlay.open { opacity: 1; pointer-events: all; }
