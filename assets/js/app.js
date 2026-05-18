@@ -173,7 +173,7 @@ function renderHome() {
   
   // Build team cards
   const teamCards = data.teams.map(team => {
-    const rec = getTeamRecord(team.id, { season: '2025' });
+    const rec = getTeamRecord(team.id);
     return `
       <div class="team-card fade-in" data-route="/team/${team.id}" style="cursor:pointer">
         <div class="team-card-banner" style="background:${team.color}"></div>
