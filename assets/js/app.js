@@ -19,11 +19,11 @@ const Router = {
   navigate(path) { window.location.hash = path; },
   dispatch() {
     const hash = window.location.hash.replace('#', '') || '/';
-    const [base, ...params] = hash.split('/').filter(Boolean);
-    const route = '/' + base;
+    const parts = hash.split('/').filter(Boolean);
+    const route = parts.length ? '/' + parts[0] : '/';
     this.currentPage = route;
     const fn = this.routes[route] || this.routes['*'];
-    if (fn) fn(...params);
+    if (fn) fn(...parts.slice(1));
     else this.routes['/'] && this.routes['/']();
     window.scrollTo(0, 0);
     App.updateNav(route);
@@ -43,7 +43,10 @@ const App = {
   },
   updateNav(route) {
     document.querySelectorAll('.nav-link').forEach(el => {
-      el.classList.toggle('active', el.dataset.route && ('/' + el.dataset.route.split('/')[1]) === route);
+      if (!el.dataset.route) { el.classList.remove('active'); return; }
+      // Normalise both sides to just the first path segment for comparison
+      const elBase = el.dataset.route === '/' ? '/' : '/' + el.dataset.route.split('/').filter(Boolean)[0];
+      el.classList.toggle('active', elBase === route);
     });
   },
   buildNav() {
@@ -59,38 +62,27 @@ const App = {
       </li>
       <li class="nav-item"><a class="nav-link" data-route="/players">Players</a></li>
       <li class="nav-item"><a class="nav-link" data-route="/stats">Stats</a></li>
-      <li class="nav-item"><a class="nav-link" data-route="/schedule">Schedule</a></li>
+      <li class="nav-item"><a class="nav-link" data-route="/schedule">Scoreboard</a></li>
       <li class="nav-item"><a class="nav-link" data-route="/news">News</a></li>
       <li class="nav-item"><a class="nav-link" data-route="/tournaments">Tournaments</a></li>
       <li class="nav-item"><a class="nav-link" data-route="/about">About</a></li>
-      <a class="nav-link nav-admin-btn" href="admin.html">⚙ Admin</a>
     `;
-    // Inject auth slot after nav is built
+    // Inject auth slot — populated by HeroesAuth.refreshNavAuth()
     const navEl = document.getElementById('main-nav');
     const authSlot = document.createElement('div');
     authSlot.id = 'auth-nav-slot';
     navEl.parentElement.insertBefore(authSlot, navEl.nextSibling);
-    // PlayerAuth initialises itself in DOMContentLoaded, but if already loaded, refresh
-    if (typeof PlayerAuth !== 'undefined') PlayerAuth.refreshNavAuth();
+
     const mobileLinks = document.getElementById('mobile-nav');
-    const _loggedIn = typeof PlayerAuth !== 'undefined' && PlayerAuth.isLoggedIn();
-    const _mPlayer = _loggedIn ? PlayerAuth.getPlayer() : null;
     mobileLinks.innerHTML = `
       <a class="mobile-nav-link" data-route="/">Home</a>
       ${data.teams.map(t => `<a class="mobile-nav-link" data-route="/team/${t.id}">${t.name}</a>`).join('')}
       <a class="mobile-nav-link" data-route="/players">Players</a>
       <a class="mobile-nav-link" data-route="/stats">Stats</a>
-      <a class="mobile-nav-link" data-route="/schedule">Schedule</a>
+      <a class="mobile-nav-link" data-route="/schedule">Scoreboard</a>
       <a class="mobile-nav-link" data-route="/news">News</a>
       <a class="mobile-nav-link" data-route="/tournaments">Tournaments</a>
       <a class="mobile-nav-link" data-route="/about">About</a>
-      ${_mPlayer ? `<hr style="border-color:rgba(255,255,255,0.15);margin:6px 0">
-        <a class="mobile-nav-link" data-route="/profile">👤 My Profile</a>
-        <a class="mobile-nav-link" data-route="/my-schedule">📅 My Schedule</a>
-        <a class="mobile-nav-link" onclick="PlayerAuth.logout()">🚪 Sign Out</a>` :
-        `<a class="mobile-nav-link" onclick="PlayerAuth.showLoginModal ? PlayerAuth.showLoginModal() : null">🔐 Player Login</a>
-        <a class="mobile-nav-link" onclick="PlayerAuth.showRegisterModal ? PlayerAuth.showRegisterModal() : null">✏️ Create Account</a>`}
-      <a class="mobile-nav-link" href="admin.html">⚙ Admin Panel</a>
     `;
   },
   buildFooter() {
@@ -118,7 +110,7 @@ const App = {
           <h4>Quick Links</h4>
           <div class="footer-links">
             <a class="footer-link" data-route="/stats">Stats & Leaderboards</a>
-            <a class="footer-link" data-route="/schedule">Schedule</a>
+            <a class="footer-link" data-route="/schedule">Scoreboard</a>
             <a class="footer-link" data-route="/players">Player Directory</a>
             <a class="footer-link" data-route="/tournaments">Tournaments</a>
             <a class="footer-link" data-route="/news">News</a>
@@ -906,7 +898,6 @@ function renderNewsArticle(articleId) {
 // ─── PAGE: TOURNAMENTS ──────────────────────────────────
 function renderTournaments() {
   const data = loadData();
-  const currentPlayer = typeof PlayerAuth !== 'undefined' ? PlayerAuth.getPlayer() : null;
   const tournaments = data.events.filter(e => e.type === 'tournament' || e.type === 'social');
 
   const statusBadge = (ev) => {
@@ -957,41 +948,6 @@ function renderTournaments() {
       const tooltip = `${p.firstName} ${p.lastName} — ${status==='yes'?'✅ Attending':status==='no'?'❌ Not Attending':status==='maybe'?'🟡 Maybe':'⏳ TBD'}${note?': '+note:''}`;
       return `<div class="attend-avatar attend-avatar-${status}" title="${tooltip.replace(/"/g,"'")}">${p.firstName[0]}${p.lastName[0]}</div>`;
     }).join('');
-  }
-
-  function buildMyAttendancePanel(ev) {
-    if (!currentPlayer) {
-      return `<div class="tourney-login-prompt">
-        <a onclick="PlayerAuth.showLoginModal()">🔐 Log in as a player</a> to mark your attendance for this tournament.
-      </div>`;
-    }
-    // Check if player is eligible for this tournament
-    const eligible = ev.teams.some(tid => currentPlayer.teams.includes(tid));
-    if (!eligible && ev.type !== 'social') {
-      return `<div style="font-size:13px;color:var(--gray);font-style:italic;margin-bottom:12px">You are not on a team assigned to this tournament.</div>`;
-    }
-    const myAttend = ev.availability?.find(a => a.playerId === currentPlayer.id);
-    const myStatus = myAttend?.status || 'pending';
-    const myNote = myAttend?.note || '';
-    const statusLabels = { yes:"✅ I'm Attending!", no:'❌ Not Attending', maybe:'🟡 Maybe / Unsure', pending:'⏳ Not Responded Yet' };
-
-    return `<div class="my-attendance-panel status-${myStatus}" id="my-panel-${ev.id}">
-      <div class="my-attend-label">Your Attendance</div>
-      <div class="my-attend-status">${statusLabels[myStatus]}</div>
-      <div class="attend-btn-row">
-        <button class="attend-btn attend-btn-yes ${myStatus==='yes'?'active':''}" onclick="markAttendance('${ev.id}','yes')">
-          <span class="attend-icon">✅</span> Yes, I'm In
-        </button>
-        <button class="attend-btn attend-btn-maybe ${myStatus==='maybe'?'active':''}" onclick="markAttendance('${ev.id}','maybe')">
-          <span class="attend-icon">🟡</span> Maybe
-        </button>
-        <button class="attend-btn attend-btn-no ${myStatus==='no'?'active':''}" onclick="markAttendance('${ev.id}','no')">
-          <span class="attend-icon">❌</span> Can't Make It
-        </button>
-      </div>
-      <input class="attend-note-input" id="attend-note-${ev.id}" placeholder="Add a note (optional: carpool available, hat size for shirt, etc.)" value="${myNote}">
-      <div id="attend-saved-${ev.id}" style="font-size:12px;color:#15803d;min-height:16px"></div>
-    </div>`;
   }
 
   const cards = tournaments.map(ev => {
@@ -1049,7 +1005,6 @@ function renderTournaments() {
             <div class="attend-bar-maybe" style="width:${summ.mPct}%"></div>
             <div class="attend-bar-no" style="width:${summ.nPct}%"></div>
           </div>
-          ${buildMyAttendancePanel(ev)}
           <div style="margin-top:14px">
             <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--gray);letter-spacing:0.5px;margin-bottom:10px">All Players</div>
             <div class="attend-avatars">${buildPlayerAvatars(ev)}</div>
@@ -1064,7 +1019,7 @@ function renderTournaments() {
       <div class="page-banner-inner">
         <div class="breadcrumb"><a data-route="/">Home</a><span>Tournaments</span></div>
         <h1>Tournament <span>Schedule</span></h1>
-        <p>Upcoming events — log in to mark your attendance</p>
+        <p>Upcoming events and team schedule</p>
       </div>
     </div>
     <section class="section">
@@ -1075,36 +1030,12 @@ function renderTournaments() {
           <button class="filter-btn" onclick="filterTourneys(this,'completed')">Completed</button>
           <button class="filter-btn" onclick="filterTourneys(this,'tournament')">Tournaments</button>
           <button class="filter-btn" onclick="filterTourneys(this,'social')">Team Events</button>
-          ${currentPlayer ? `<span style="margin-left:auto;font-size:13px;color:var(--gray)">Logged in as <strong style="color:var(--text)">${currentPlayer.firstName} ${currentPlayer.lastName}</strong></span>` : ''}
         </div>
         <div id="tourney-list">${cards}</div>
       </div>
     </section>
   `);
 }
-
-window.markAttendance = function(eventId, status) {
-  if (typeof PlayerAuth === 'undefined' || !PlayerAuth.isLoggedIn()) {
-    PlayerAuth.showLoginModal(); return;
-  }
-  const noteEl = document.getElementById(`attend-note-${eventId}`);
-  const note = noteEl?.value || '';
-  PlayerAuth.setAttendance(eventId, status, note);
-
-  // Update panel in place
-  const panel = document.getElementById(`my-panel-${eventId}`);
-  const statusLabels = { yes:'✅ I\'m Attending!', no:'❌ Not Attending', maybe:'🟡 Maybe / Unsure' };
-  if (panel) {
-    panel.className = `my-attendance-panel status-${status}`;
-    panel.querySelector('.my-attend-status').textContent = statusLabels[status];
-    panel.querySelectorAll('.attend-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.classList.contains(`attend-btn-${status}`));
-    });
-    const saved = document.getElementById(`attend-saved-${eventId}`);
-    if (saved) { saved.textContent = '✓ Saved!'; setTimeout(() => saved.textContent = '', 2000); }
-  }
-  if (typeof App !== 'undefined') App.toast(`Attendance marked: ${statusLabels[status]}`, 'success');
-};
 
 window.filterTourneys = function(btn, filter) {
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
@@ -1118,140 +1049,6 @@ window.filterTourneys = function(btn, filter) {
   // Re-render just the list portion
   Router.navigate('/tournaments');
 };
-
-// ─── PAGE: MY SCHEDULE ──────────────────────────────────────
-function renderMySchedule() {
-  const data = loadData();
-  const player = typeof PlayerAuth !== 'undefined' ? PlayerAuth.getPlayer() : null;
-
-  if (!player) {
-    App.render(`
-      <div class="page-banner"><div class="page-banner-inner"><h1>My <span>Schedule</span></h1></div></div>
-      <section class="section"><div class="container" style="max-width:500px;text-align:center">
-        <div style="font-size:64px;margin-bottom:20px">🔐</div>
-        <h2 style="margin-bottom:12px">Player Login Required</h2>
-        <p style="color:var(--text-light);margin-bottom:24px">Log in with your player credentials to view your personal schedule and manage your tournament attendance.</p>
-        <button class="btn btn-primary" onclick="PlayerAuth.showLoginModal()">🔐 Player Login</button>
-      </div></section>
-    `);
-    return;
-  }
-
-  const myEvents = data.events.filter(ev =>
-    ev.teams.some(tid => player.teams.includes(tid)) || ev.type === 'social'
-  );
-  const myGames = data.games.filter(g => player.teams.includes(g.teamId))
-    .sort((a,b) => a.date.localeCompare(b.date));
-
-  const myStats = getPlayerStats(player.id, { season: '2025' });
-
-  const eventCards = myEvents.map(ev => {
-    const d1 = new Date(ev.date + 'T12:00:00');
-    const myAttend = ev.availability?.find(a => a.playerId === player.id);
-    const myStatus = myAttend?.status || 'pending';
-    const statusLabels = { yes:'✅ Attending', no:'❌ Not Attending', maybe:'🟡 Maybe', pending:'⏳ Not Responded' };
-    const statusColors = { yes:'#dcfce7', no:'#fee2e2', maybe:'#fef9c3', pending:'#f3f4f6' };
-    const statusText = { yes:'#15803d', no:'#dc2626', maybe:'#92400e', pending:'#6b7280' };
-    return `<div style="background:#fff;border-radius:10px;box-shadow:var(--shadow);overflow:hidden;border:1px solid var(--border)">
-      <div style="background:var(--dark);padding:14px 18px;display:flex;justify-content:space-between;align-items:center">
-        <div>
-          <div style="font-size:11px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px">
-            ${d1.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'})}
-          </div>
-          <div style="font-weight:800;color:#fff;font-size:15px">${ev.name}</div>
-          <div style="font-size:12px;color:rgba(255,255,255,0.6);margin-top:3px">📍 ${ev.location}</div>
-        </div>
-        <div style="text-align:center">
-          <div style="background:${statusColors[myStatus]};color:${statusText[myStatus]};padding:6px 12px;border-radius:20px;font-size:12px;font-weight:700">${statusLabels[myStatus]}</div>
-        </div>
-      </div>
-      <div style="padding:14px 18px;display:flex;gap:8px">
-        <button class="btn btn-xs ${myStatus==='yes'?'btn-success':'btn-secondary'}" onclick="markAttendance('${ev.id}','yes')">✅ Attending</button>
-        <button class="btn btn-xs ${myStatus==='maybe'?'btn-gold':'btn-secondary'}" onclick="markAttendance('${ev.id}','maybe')">🟡 Maybe</button>
-        <button class="btn btn-xs ${myStatus==='no'?'btn-danger':'btn-secondary'}" onclick="markAttendance('${ev.id}','no')">❌ Can't Make It</button>
-        <a class="btn btn-xs btn-secondary" data-route="/tournaments">Details →</a>
-      </div>
-    </div>`;
-  }).join('');
-
-  const recentGames = myGames.filter(g => g.result).slice(-5).reverse().map(g => {
-    const d = new Date(g.date + 'T12:00:00');
-    const team = data.teams.find(t=>t.id===g.teamId);
-    return `<div style="display:flex;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
-      <div style="text-align:center;min-width:50px">
-        <div style="font-weight:800;font-size:14px">${d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>
-        <div style="font-size:10px;color:var(--gray)">${team?.shortName}</div>
-      </div>
-      <div style="flex:1">
-        <div style="font-weight:700;font-size:14px">vs ${g.opponent}</div>
-        <div style="font-size:12px;color:var(--gray)">${g.heroScore} - ${g.oppScore}</div>
-      </div>
-      <span class="result-badge result-${g.result}">${g.result}</span>
-    </div>`;
-  }).join('');
-
-  App.render(`
-    <div class="page-banner">
-      <div class="page-banner-inner">
-        <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px">
-          <div style="width:52px;height:52px;border-radius:50%;background:var(--red);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;color:#fff">${player.firstName[0]}${player.lastName[0]}</div>
-          <div>
-            <h1 style="margin-bottom:2px"><span>${player.firstName} ${player.lastName}</span></h1>
-            <p>
-              #${player.number} · ${player.position} · ${data.teams.filter(t=>player.teams.includes(t.id)).map(t=>t.name).join(', ')}
-            </p>
-          </div>
-        </div>
-        <div style="display:flex;gap:16px;flex-wrap:wrap">
-          <a class="btn btn-sm btn-outline" onclick="PlayerAuth.showChangePasswordModal()">🔑 Change Password</a>
-          <a class="btn btn-sm btn-outline" onclick="PlayerAuth.logout()">Sign Out</a>
-        </div>
-      </div>
-    </div>
-    <section class="section">
-      <div class="container">
-        <div style="display:grid;grid-template-columns:1fr 320px;gap:28px">
-          <div>
-            <h2 style="font-size:20px;font-weight:900;margin-bottom:16px">My Tournament Schedule</h2>
-            <div style="display:flex;flex-direction:column;gap:12px">
-              ${eventCards || '<p style="color:var(--gray)">No upcoming events for your teams</p>'}
-            </div>
-            <div style="margin-top:28px">
-              <a class="btn btn-primary" data-route="/tournaments">View All Tournament Details →</a>
-            </div>
-          </div>
-          <div>
-            <div style="background:#fff;border-radius:10px;box-shadow:var(--shadow);overflow:hidden;margin-bottom:20px">
-              <div style="background:var(--dark);padding:14px 18px"><h3 style="color:#fff;font-size:14px;font-weight:800">My 2025 Stats</h3></div>
-              <div style="padding:16px">
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
-                  ${[['AVG',myStats.avg],['HR',myStats.hr],['RBI',myStats.rbi]].map(([l,v])=>`
-                    <div style="text-align:center;background:var(--light);border-radius:8px;padding:12px">
-                      <div style="font-size:20px;font-weight:900;color:var(--red)">${v}</div>
-                      <div style="font-size:10px;text-transform:uppercase;color:var(--gray)">${l}</div>
-                    </div>`).join('')}
-                </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                  ${[['G',myStats.g],['AB',myStats.ab],['H',myStats.h],['OBP',myStats.obp]].map(([l,v])=>`
-                    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
-                      <span style="color:var(--gray)">${l}</span><span style="font-weight:700">${v}</span>
-                    </div>`).join('')}
-                </div>
-                <a class="btn btn-sm btn-dark" style="width:100%;justify-content:center;margin-top:12px" data-route="/player/${player.id}">Full Stats →</a>
-              </div>
-            </div>
-            <div style="background:#fff;border-radius:10px;box-shadow:var(--shadow);overflow:hidden">
-              <div style="background:var(--dark);padding:14px 18px"><h3 style="color:#fff;font-size:14px;font-weight:800">Recent Games</h3></div>
-              <div style="padding:14px 18px">
-                ${recentGames || '<p style="color:var(--gray);font-size:13px">No games yet</p>'}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  `);
-}
 
 // ─── PAGE: ABOUT ─────────────────────────────────────────────
 function renderAbout() {
@@ -1424,193 +1221,6 @@ window.switchTab = function(e, tabId) {
 };
 
 // ─── REGISTER ROUTES ────────────────────────────────────────
-// ─── PLAYER PROFILE PAGE ─────────────────────────────────────
-function renderPlayerProfile() {
-  if (typeof PlayerAuth === 'undefined' || !PlayerAuth.isLoggedIn()) {
-    Router.navigate('/');
-    return;
-  }
-  const player = PlayerAuth.getPlayer();
-  const data = loadData();
-  const myTeams = data.teams.filter(t => player.teams && player.teams.includes(t.id));
-  const myTourneys = data.events.filter(e =>
-    e.type === 'tournament' && e.status === 'upcoming' &&
-    e.teams && e.teams.some(tid => player.teams && player.teams.includes(tid))
-  ).sort((a, b) => a.date.localeCompare(b.date));
-
-  const photoHtml = player.photo
-    ? `<img src="${player.photo}" alt="${player.firstName}" onerror="this.parentElement.innerHTML='<span style=font-size:36px;font-weight:900;color:#fff>${player.firstName[0]}${player.lastName[0]}</span>'">`
-    : `<span style="font-size:36px;font-weight:900;color:#fff">${player.firstName[0]}${player.lastName[0]}</span>`;
-
-  const tourneyRows = myTourneys.length ? myTourneys.map(ev => {
-    const a = PlayerAuth.getMyAttendance(ev.id);
-    const st = a?.status || 'pending';
-    const stLabels = { yes:'✅ Going', no:'❌ Not Going', maybe:'🟡 Maybe', pending:'⏳ Not Set' };
-    const stColors = { yes:'#15803d', no:'#dc2626', maybe:'#92400e', pending:'#6b7280' };
-    return `<div class="profile-tourney-row">
-      <div>
-        <div style="font-weight:800;font-size:14px">${ev.name}</div>
-        <div style="font-size:12px;color:var(--gray);margin-top:2px">${ev.date}${ev.endDate && ev.endDate !== ev.date ? ' – ' + ev.endDate : ''} · ${ev.location || ''}</div>
-        <div style="font-size:12px;font-weight:700;color:${stColors[st]};margin-top:4px">${stLabels[st]}</div>
-      </div>
-      <div class="profile-attend-btns">
-        <button class="p-attend p-attend-yes${st==='yes'?' active':''}" onclick="profileSetAttend('${ev.id}','yes',this)">✅ Going</button>
-        <button class="p-attend p-attend-maybe${st==='maybe'?' active':''}" onclick="profileSetAttend('${ev.id}','maybe',this)">🟡 Maybe</button>
-        <button class="p-attend p-attend-no${st==='no'?' active':''}" onclick="profileSetAttend('${ev.id}','no',this)">❌ Can't Go</button>
-      </div>
-    </div>`;
-  }).join('') : '<p style="color:var(--gray);font-size:14px">No upcoming tournaments for your team(s).</p>';
-
-  App.render(`
-    <div class="player-profile-header" style="padding:40px 0 32px">
-      <div class="container" style="max-width:860px;margin:0 auto;padding:0 20px">
-        <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
-          <div class="profile-photo-circle" id="profile-photo-preview">${photoHtml}</div>
-          <div>
-            <div style="color:rgba(255,255,255,0.6);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">My Profile</div>
-            <h1 style="color:#fff;font-size:clamp(22px,5vw,36px);font-weight:900;margin-bottom:6px">${player.firstName} ${player.lastName}</h1>
-            <div style="color:rgba(255,255,255,0.7);font-size:14px">#${player.number} · ${player.position} · ${myTeams.map(t=>t.name).join(', ') || 'No team'}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <section style="background:var(--light);min-height:60vh;padding:32px 0">
-      <div class="container" style="max-width:860px;margin:0 auto;padding:0 20px">
-
-        <!-- Photo Upload -->
-        <div class="profile-section">
-          <div class="profile-section-title">📸 Profile Photo</div>
-          <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
-            <div class="profile-photo-circle" style="width:72px;height:72px;font-size:22px">${photoHtml}</div>
-            <div>
-              <label class="btn btn-secondary" style="cursor:pointer;display:inline-flex;align-items:center;gap:8px">
-                📁 Choose Photo
-                <input type="file" accept="image/*" style="display:none" onchange="profileHandlePhoto(this)">
-              </label>
-              <div style="font-size:12px;color:var(--gray);margin-top:6px">JPG or PNG · Max 8MB · Will be resized to 400×400</div>
-              <div id="photo-upload-msg" style="font-size:13px;margin-top:4px"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Edit Profile -->
-        <div class="profile-section">
-          <div class="profile-section-title">✏️ Personal Info</div>
-          <div class="profile-form-row">
-            <div><label style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.4px;color:#888;display:block;margin-bottom:5px">First Name</label>
-              <input id="prof-first" class="form-input" value="${player.firstName || ''}"></div>
-            <div><label style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.4px;color:#888;display:block;margin-bottom:5px">Last Name</label>
-              <input id="prof-last" class="form-input" value="${player.lastName || ''}"></div>
-          </div>
-          <div class="profile-form-row">
-            <div><label style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.4px;color:#888;display:block;margin-bottom:5px">Email</label>
-              <input id="prof-email" type="email" class="form-input" value="${player.email || ''}"></div>
-            <div><label style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.4px;color:#888;display:block;margin-bottom:5px">Phone</label>
-              <input id="prof-phone" class="form-input" value="${player.phone || ''}"></div>
-          </div>
-          <div id="profile-save-msg" style="font-size:13px;min-height:18px;margin-bottom:10px"></div>
-          <button class="btn btn-primary" onclick="profileSaveInfo()">Save Changes</button>
-        </div>
-
-        <!-- Change Password -->
-        <div class="profile-section">
-          <div class="profile-section-title">🔑 Change Password</div>
-          <div class="profile-form-row">
-            <div><label style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.4px;color:#888;display:block;margin-bottom:5px">Current Password</label>
-              <input type="password" id="prof-pw-cur" class="form-input" autocomplete="current-password"></div>
-            <div></div>
-          </div>
-          <div class="profile-form-row">
-            <div><label style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.4px;color:#888;display:block;margin-bottom:5px">New Password</label>
-              <input type="password" id="prof-pw-new" class="form-input" autocomplete="new-password"></div>
-            <div><label style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.4px;color:#888;display:block;margin-bottom:5px">Confirm New Password</label>
-              <input type="password" id="prof-pw-confirm" class="form-input" autocomplete="new-password"></div>
-          </div>
-          <div id="prof-pw-msg" style="font-size:13px;min-height:18px;margin-bottom:10px"></div>
-          <button class="btn btn-primary" onclick="profileChangePassword()">Update Password</button>
-        </div>
-
-        <!-- Tournament Availability -->
-        <div class="profile-section">
-          <div class="profile-section-title">📅 Tournament Availability</div>
-          ${myTourneys.length ? '' : ''}
-          <div id="profile-tourney-list">${tourneyRows}</div>
-        </div>
-
-      </div>
-    </section>
-  `);
-}
-
-// Profile page helper globals
-window.profileHandlePhoto = function(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const msg = document.getElementById('photo-upload-msg');
-  msg.style.color = 'var(--gray)';
-  msg.textContent = 'Uploading…';
-  PlayerAuth.handlePhotoUpload(file, function(dataUrl, err) {
-    if (err) {
-      msg.style.color = 'var(--red)';
-      msg.textContent = err;
-    } else {
-      msg.style.color = '#15803d';
-      msg.textContent = '✓ Photo saved!';
-      // Update all photo circles on the page
-      document.querySelectorAll('.profile-photo-circle').forEach(el => {
-        el.innerHTML = `<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover" alt="Profile">`;
-      });
-      // Refresh nav badge avatar
-      PlayerAuth.refreshNavAuth();
-    }
-  });
-};
-
-window.profileSaveInfo = function() {
-  const msg = document.getElementById('profile-save-msg');
-  const first = document.getElementById('prof-first')?.value.trim();
-  const last = document.getElementById('prof-last')?.value.trim();
-  if (!first || !last) { msg.style.color='var(--red)'; msg.textContent='First and last name are required.'; return; }
-  PlayerAuth.updateProfile({ firstName: first, lastName: last, email: document.getElementById('prof-email')?.value.trim() || '', phone: document.getElementById('prof-phone')?.value.trim() || '' });
-  msg.style.color = '#15803d';
-  msg.textContent = '✓ Profile saved!';
-  setTimeout(() => { if (msg) msg.textContent = ''; }, 3000);
-};
-
-window.profileChangePassword = function() {
-  const msg = document.getElementById('prof-pw-msg');
-  const cur = document.getElementById('prof-pw-cur')?.value;
-  const nw = document.getElementById('prof-pw-new')?.value;
-  const conf = document.getElementById('prof-pw-confirm')?.value;
-  const player = PlayerAuth.getPlayer();
-  if (!player) return;
-  if (player.credentials?.password !== cur) { msg.style.color='var(--red)'; msg.textContent='Current password is incorrect.'; return; }
-  if (!nw || nw.length < 4) { msg.style.color='var(--red)'; msg.textContent='New password must be at least 4 characters.'; return; }
-  if (nw !== conf) { msg.style.color='var(--red)'; msg.textContent='Passwords do not match.'; return; }
-  PlayerAuth.updateProfile({ credentials: { ...player.credentials, password: nw } });
-  msg.style.color = '#15803d';
-  msg.textContent = '✓ Password updated!';
-  document.getElementById('prof-pw-cur').value = '';
-  document.getElementById('prof-pw-new').value = '';
-  document.getElementById('prof-pw-confirm').value = '';
-  setTimeout(() => { if (msg) msg.textContent = ''; }, 3000);
-};
-
-window.profileSetAttend = function(eventId, status, btn) {
-  PlayerAuth.setAttendance(eventId, status);
-  // Update button states in this row
-  const row = btn.closest('.profile-tourney-row');
-  if (row) {
-    row.querySelectorAll('.p-attend').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    const stLabels = { yes:'✅ Going', no:'❌ Not Going', maybe:'🟡 Maybe' };
-    const stColors = { yes:'#15803d', no:'#dc2626', maybe:'#92400e' };
-    const statusEl = row.querySelector('[style*="font-weight:700"]');
-    if (statusEl) { statusEl.textContent = stLabels[status]; statusEl.style.color = stColors[status]; }
-  }
-};
-
 Router.register('/', renderHome);
 Router.register('/team', (teamId) => renderTeam(teamId));
 Router.register('/players', renderPlayers);
@@ -1619,8 +1229,6 @@ Router.register('/stats', renderStats);
 Router.register('/schedule', renderSchedule);
 Router.register('/news', (...args) => { if (args[0] === 'article') renderNewsArticle(args[1]); else renderNews(); });
 Router.register('/tournaments', renderTournaments);
-Router.register('/my-schedule', renderMySchedule);
-Router.register('/profile', renderPlayerProfile);
 Router.register('/about', renderAbout);
 Router.register('/contact', renderContact);
 Router.register('/sponsors', renderSponsors);

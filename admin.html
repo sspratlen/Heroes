@@ -15,14 +15,23 @@
   <div class="login-card">
     <img class="login-logo" src="assets/img/heroes-logo.jpg" alt="Heroes Logo" onerror="this.style.background='#C8102E'">
     <div class="login-title">Heroes Admin</div>
-    <div class="login-subtitle">Enter your password to access the admin panel</div>
+    <div class="login-subtitle">Sign in with your Heroes account</div>
+    <div class="form-group" style="text-align:left;margin-bottom:14px">
+      <label class="form-label">Email</label>
+      <input type="email" class="form-input" id="login-email" placeholder="your@email.com" autocomplete="email"
+        onkeydown="if(event.key==='Enter')document.getElementById('login-password').focus()">
+    </div>
     <div class="form-group" style="text-align:left;margin-bottom:20px">
       <label class="form-label">Password</label>
-      <input type="password" class="form-input" id="login-password" placeholder="Enter admin password" onkeydown="if(event.key==='Enter')doLogin()">
+      <input type="password" class="form-input" id="login-password" placeholder="Your password" autocomplete="current-password"
+        onkeydown="if(event.key==='Enter')doLogin()">
     </div>
-    <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="doLogin()">Sign In</button>
-    <div id="login-error" style="color:#dc2626;font-size:13px;margin-top:12px;display:none">Incorrect password</div>
-    <a href="index.html" style="display:block;margin-top:20px;font-size:13px;color:#888">← Back to Website</a>
+    <button class="btn btn-primary" style="width:100%;justify-content:center" id="login-btn" onclick="doLogin()">Sign In</button>
+    <div id="login-error" style="color:#dc2626;font-size:13px;margin-top:12px;min-height:18px"></div>
+    <div style="text-align:center;margin-top:10px">
+      <a onclick="showForgotPassword()" style="font-size:13px;color:#C8102E;cursor:pointer;font-weight:600">Forgot password?</a>
+    </div>
+    <a href="index.html" style="display:block;margin-top:12px;font-size:13px;color:#888;text-align:center">← Back to Website</a>
   </div>
 </div>
 
@@ -61,7 +70,7 @@
 
       <div class="sidebar-section-label" style="margin-top:12px">Game Management</div>
       <a class="sidebar-link" onclick="showPage('games')">
-        <span class="icon">🏟️</span> Games
+        <span class="icon">🏟️</span> Scoreboard
       </a>
       <a class="sidebar-link" onclick="showPage('stats-entry')">
         <span class="icon">📝</span> Stat Entry
@@ -135,29 +144,226 @@
 'use strict';
 
 // ─── AUTH ─────────────────────────────────────────────────
-function doLogin() {
-  const pw = document.getElementById('login-password').value;
-  const data = loadData();
-  if (pw === data.config.adminPassword) {
-    sessionStorage.setItem('heroes_admin', '1');
-    document.getElementById('admin-login').style.display = 'none';
-    document.getElementById('admin-layout').style.display = 'flex';
-    showPage('dashboard');
-  } else {
-    document.getElementById('login-error').style.display = 'block';
+const ADMIN_ROLES = ['admin', 'manager', 'coach'];
+
+function showForgotPassword() {
+  document.getElementById('admin-login').innerHTML = `
+    <div class="login-card">
+      <img class="login-logo" src="assets/img/heroes-logo.jpg" alt="Heroes Logo" onerror="this.style.background='#C8102E'">
+      <div class="login-title">Reset Password</div>
+      <div class="login-subtitle" style="margin-bottom:20px">Enter your email and we'll send a reset link</div>
+      <div class="form-group" style="text-align:left;margin-bottom:20px">
+        <label class="form-label">Email</label>
+        <input type="email" class="form-input" id="forgot-email" placeholder="your@email.com" autocomplete="email"
+          onkeydown="if(event.key==='Enter')submitForgotPassword()">
+      </div>
+      <div id="forgot-error" style="color:#dc2626;font-size:13px;margin-bottom:10px;min-height:18px"></div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center" id="forgot-btn" onclick="submitForgotPassword()">Send Reset Link</button>
+      <a onclick="location.reload()" style="display:block;margin-top:16px;font-size:13px;color:#888;cursor:pointer;text-align:center">← Back to sign in</a>
+    </div>`;
+  setTimeout(() => document.getElementById('forgot-email')?.focus(), 80);
+}
+
+async function submitForgotPassword() {
+  const email  = (document.getElementById('forgot-email')?.value || '').trim();
+  const errEl  = document.getElementById('forgot-error');
+  const btn    = document.getElementById('forgot-btn');
+
+  if (!email) { errEl.textContent = 'Please enter your email address.'; return; }
+
+  btn.textContent = 'Sending…';
+  btn.disabled = true;
+  errEl.textContent = '';
+
+  try {
+    const sb = _getClient();
+    const redirectTo = window.location.origin + window.location.pathname;
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo });
+    if (error) throw new Error(error.message);
+
+    document.getElementById('admin-login').innerHTML = `
+      <div class="login-card" style="text-align:center">
+        <div style="font-size:52px;margin-bottom:16px">📧</div>
+        <div class="login-title">Check Your Email</div>
+        <div class="login-subtitle" style="margin-top:8px;line-height:1.6">
+          A reset link has been sent to <strong>${email}</strong>.<br>
+          Click the link in the email to set a new password.
+        </div>
+        <a onclick="location.reload()" style="display:block;margin-top:24px;font-size:13px;color:#888;cursor:pointer">← Back to sign in</a>
+      </div>`;
+  } catch (err) {
+    errEl.textContent = err.message || 'Could not send reset email. Please try again.';
+    btn.textContent = 'Send Reset Link';
+    btn.disabled = false;
+  }
+}
+
+function showSetNewPassword() {
+  document.getElementById('admin-login').style.display = 'flex';
+  document.getElementById('admin-login').innerHTML = `
+    <div class="login-card">
+      <img class="login-logo" src="assets/img/heroes-logo.jpg" alt="Heroes Logo" onerror="this.style.background='#C8102E'">
+      <div class="login-title">Set New Password</div>
+      <div class="login-subtitle" style="margin-bottom:20px">Choose a new password for your account</div>
+      <div class="form-group" style="text-align:left;margin-bottom:14px">
+        <label class="form-label">New Password</label>
+        <input type="password" class="form-input" id="new-pw" placeholder="Min 6 characters" autocomplete="new-password"
+          onkeydown="if(event.key==='Enter')document.getElementById('new-pw2').focus()">
+      </div>
+      <div class="form-group" style="text-align:left;margin-bottom:20px">
+        <label class="form-label">Confirm Password</label>
+        <input type="password" class="form-input" id="new-pw2" placeholder="Repeat password" autocomplete="new-password"
+          onkeydown="if(event.key==='Enter')submitNewPassword()">
+      </div>
+      <div id="newpw-error" style="color:#dc2626;font-size:13px;margin-bottom:10px;min-height:18px"></div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center" id="newpw-btn" onclick="submitNewPassword()">Update Password</button>
+    </div>`;
+  setTimeout(() => document.getElementById('new-pw')?.focus(), 80);
+}
+
+async function submitNewPassword() {
+  const pw   = document.getElementById('new-pw')?.value || '';
+  const pw2  = document.getElementById('new-pw2')?.value || '';
+  const errEl = document.getElementById('newpw-error');
+  const btn   = document.getElementById('newpw-btn');
+
+  if (pw.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; return; }
+  if (pw !== pw2)    { errEl.textContent = 'Passwords do not match.'; return; }
+
+  btn.textContent = 'Updating…';
+  btn.disabled = true;
+  errEl.textContent = '';
+
+  try {
+    const sb = _getClient();
+    const { error } = await sb.auth.updateUser({ password: pw });
+    if (error) throw error;
+
+    document.getElementById('admin-login').innerHTML = `
+      <div class="login-card" style="text-align:center">
+        <div style="font-size:52px;margin-bottom:16px">✅</div>
+        <div class="login-title">Password Updated!</div>
+        <div class="login-subtitle" style="margin-top:8px">Your password has been changed. You can now sign in.</div>
+        <a onclick="location.reload()" style="display:block;margin-top:24px;font-size:13px;color:#C8102E;font-weight:600;cursor:pointer">Sign In →</a>
+      </div>`;
+  } catch (err) {
+    btn.textContent = 'Update Password';
+    btn.disabled = false;
+    const isSessionMissing = err.message?.toLowerCase().includes('session') || err.message?.toLowerCase().includes('auth');
+    if (isSessionMissing) {
+      document.getElementById('admin-login').innerHTML = `
+        <div class="login-card" style="text-align:center">
+          <div style="font-size:52px;margin-bottom:16px">⚠️</div>
+          <div class="login-title">Reset Link Expired</div>
+          <div class="login-subtitle" style="margin-top:8px;line-height:1.6">
+            Your reset link has expired or was already used.<br>Please request a new one.
+          </div>
+          <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:20px" onclick="showForgotPassword()">Request New Link</button>
+          <a onclick="location.reload()" style="display:block;margin-top:12px;font-size:13px;color:#888;cursor:pointer">← Back to sign in</a>
+        </div>`;
+    } else {
+      errEl.textContent = err.message || 'Could not update password. Please try again.';
+    }
+  }
+}
+
+async function doLogin() {
+  const email    = (document.getElementById('login-email')?.value || '').trim();
+  const password = document.getElementById('login-password')?.value || '';
+  const errEl    = document.getElementById('login-error');
+  const btn      = document.getElementById('login-btn');
+
+  errEl.textContent = '';
+  if (!email || !password) { errEl.textContent = 'Email and password are required.'; return; }
+
+  btn.textContent = 'Signing in…';
+  btn.disabled = true;
+
+  try {
+    const sb = _getClient();
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) throw new Error('Invalid email or password.');
+
+    const { data: profile, error: profErr } = await sb
+      .from('profiles').select('*').eq('id', data.session.user.id).single();
+
+    if (profErr || !profile) throw new Error('Account not found. Please contact an admin.');
+    if (!ADMIN_ROLES.includes(profile.role)) throw new Error('You don\'t have permission to access the admin panel.');
+    if (!profile.approved) throw new Error('Your account is pending approval.');
+
+    showAdminLayout(profile);
+  } catch (err) {
+    errEl.textContent = err.message;
+    btn.textContent = 'Sign In';
+    btn.disabled = false;
     document.getElementById('login-password').value = '';
   }
 }
-function doLogout() {
-  sessionStorage.removeItem('heroes_admin');
+
+// Register PASSWORD_RECOVERY handler immediately (not in DOMContentLoaded)
+// so we don't miss the event if Supabase processes the token before DOM is ready.
+(function initRecoveryHandler() {
+  const sb = _getClient();
+  if (!sb) return;
+
+  sb.auth.onAuthStateChange((event) => {
+    if (event !== 'PASSWORD_RECOVERY') return;
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', showSetNewPassword);
+    } else {
+      showSetNewPassword();
+    }
+  });
+
+  // Fallback: if event already fired, check URL + session on DOM ready
+  document.addEventListener('DOMContentLoaded', async () => {
+    const params     = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(window.location.hash.slice(1));
+    const isRecovery = params.get('type') === 'recovery' || hashParams.get('type') === 'recovery';
+    if (!isRecovery) return;
+    // Give Supabase a tick to finish the token exchange
+    setTimeout(async () => {
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) showSetNewPassword();
+    }, 300);
+  });
+}());
+
+function showAdminLayout(profile) {
+  document.getElementById('admin-login').style.display = 'none';
+  document.getElementById('admin-layout').style.display = 'flex';
+  // Show current user in sidebar footer if element exists
+  const userEl = document.getElementById('admin-current-user');
+  if (userEl) userEl.textContent = profile.display_name || profile.email;
+  showPage('dashboard');
+}
+
+async function doLogout() {
+  const sb = _getClient();
+  if (sb) await sb.auth.signOut();
   document.getElementById('admin-login').style.display = 'flex';
   document.getElementById('admin-layout').style.display = 'none';
 }
-// Check if already logged in
-if (sessionStorage.getItem('heroes_admin') === '1') {
-  document.getElementById('admin-login').style.display = 'none';
-  document.getElementById('admin-layout').style.display = 'flex';
-}
+
+// ── Check session on page load ──────────────────────────────
+(async function checkSession() {
+  try {
+    const sb = _getClient();
+    if (!sb) return;
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return;
+    const { data: profile } = await sb
+      .from('profiles').select('*').eq('id', session.user.id).single();
+    if (profile && ADMIN_ROLES.includes(profile.role) && profile.approved) {
+      showAdminLayout(profile);
+    } else if (session) {
+      // Has a session but no admin rights — sign out silently
+      await sb.auth.signOut();
+    }
+  } catch (err) {
+    console.warn('Session check failed:', err.message);
+  }
+})();
 
 // ─── MODAL ────────────────────────────────────────────────
 let modalSaveCallback = null;
@@ -184,7 +390,7 @@ function showPage(page) {
     'dashboard': ['Dashboard','Overview',false],
     'players': ['Players','Manage Roster',true],
     'teams': ['Teams','Manage Teams',true],
-    'games': ['Games','Manage Games & Results',true],
+    'games': ['Scoreboard','Manage Games & Results',true],
     'stats-entry': ['Stat Entry','Enter Game Statistics',false],
     'events': ['Tournaments & Events','Manage Events',true],
     'availability': ['Player Availability','Tournament Availability',false],
