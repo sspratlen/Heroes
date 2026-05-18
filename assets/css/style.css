@@ -121,8 +121,19 @@ button { cursor: pointer; border: none; font-family: inherit; font-size: inherit
   letter-spacing: 0.3px;
   cursor: pointer;
 }
-.nav-link:hover, .nav-link.active { color: var(--white); background: rgba(255,255,255,0.1); }
+/* Hover: subtle. Active (current page): clearly distinct with red fill */
+.nav-link:hover { color: var(--white); background: rgba(255,255,255,0.08); }
+.nav-link.active { color: var(--white); background: var(--red); }
 .nav-link.has-dropdown::after { content: '▾'; font-size: 10px; opacity: 0.7; }
+/* Invisible bridge under nav-item fills the gap so hover isn't lost */
+.nav-item::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 10px;
+}
 .dropdown-menu {
   position: absolute;
   top: 100%;
