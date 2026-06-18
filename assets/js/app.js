@@ -16,7 +16,7 @@ const Router = {
     this.dispatch();
   },
   register(path, fn) { this.routes[path] = fn; },
-  navigate(path) { window.location.hash = path; },
+  navigate(path) { if (window.location.hash === '#' + path) { this.dispatch(); } else { window.location.hash = path; } },
   dispatch() {
     const hash = window.location.hash.replace('#', '') || '/';
     const parts = hash.split('/').filter(Boolean);
