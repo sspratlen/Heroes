@@ -1,0 +1,772 @@
+/* ============================================================
+   HEROES — SCOREBOARD LIGHT IA OVERLAY
+   Loads AFTER app.js. Patches:
+     • App.buildNav  → 5 primary items + team switcher second tier
+     • App.buildFooter → About/Contact/Sponsors/Admin in footer
+     • Router '/my'  → player portal landing page
+     • Router '/all' → 'All Heroes' filter (alias for /)
+
+   Existing routes still work — nav items just map to consolidated hubs:
+     Home          → /
+     Tournaments   → /events
+     Season        → /stats
+     Players       → /players
+     Latest        → /news
+     My Heroes     → /my            (NEW)
+   ============================================================ */
+(function () {
+  'use strict';
+
+  if (typeof App === 'undefined' || typeof Router === 'undefined') {
+    console.warn('[scoreboard] App or Router not found — overlay disabled.');
+    return;
+  }
+
+  // Map of primary nav items.
+  // 'matches' is an array of route prefixes that should highlight this item.
+  const NAV = [
+    { label: 'Home',        route: '/',           matches: ['/'] },
+    { label: 'Events',      route: '/events',     matches: ['/events', '/event', '/tournaments', '/tournament'] },
+    { label: 'Season',      route: '/stats',      matches: ['/stats', '/schedule', '/season'] },
+    { label: 'Players',     route: '/players',    matches: ['/players', '/player', '/team'] },
+    { label: 'Latest',      route: '/news',       matches: ['/news', '/awards', '/gallery', '/latest'] },
+    { label: 'My Heroes',   route: '/my',         matches: ['/my'], primary: true },
+  ];
+
+  // ──────────────────────────────────────────────────────────
+  // Build nav
+  // ──────────────────────────────────────────────────────────
+  App.buildNav = function buildNavScoreboard() {
+    const data = loadData();
+
+    const mainNav = document.getElementById('main-nav');
+    mainNav.innerHTML = NAV.map(n => `
+      <li class="nav-item">
+        <a class="nav-link${n.primary ? ' nav-link-primary' : ''}" data-route="${n.route}">${n.label}</a>
+      </li>
+    `).join('');
+
+    // Auth slot (kept compatible with existing HeroesAuth.refreshNavAuth)
+    if (!document.getElementById('auth-nav-slot')) {
+      const slot = document.createElement('div');
+      slot.id = 'auth-nav-slot';
+      mainNav.parentElement.insertBefore(slot, mainNav.nextSibling);
+    }
+    // Populate auth slot now that it exists
+    if (typeof HeroesAuth !== 'undefined') HeroesAuth.refreshNavAuth();
+
+    // ───── Second tier: team strip ─────
+    // Build once, attach right under #site-header's flex row.
+    let strip = document.getElementById('team-strip');
+    if (!strip) {
+      strip = document.createElement('div');
+      strip.id = 'team-strip';
+      strip.className = 'team-strip';
+      document.getElementById('site-header').appendChild(strip);
+    }
+
+    const allTeams = [{ id: 'all', name: 'All Heroes', shortName: 'ALL' }].concat(
+      data.teams.map(t => ({ id: t.id, name: t.name, shortName: t.shortName || t.name }))
+    );
+    strip.innerHTML = `
+      <span class="team-strip-label">Viewing</span>
+      ${allTeams.map(t => `
+        <a class="team-chip" data-route="${t.id === 'all' ? '/' : '/team/' + t.id}" data-team="${t.id}">${t.shortName}</a>
+      `).join('')}
+      <span class="team-strip-meta" id="team-strip-meta"></span>
+    `;
+    updateTeamStripMeta();
+
+    // ───── Mobile nav ─────
+    const mobile = document.getElementById('mobile-nav');
+    mobile.innerHTML = `
+      ${NAV.map(n => `<a class="mobile-nav-link" data-route="${n.route}">${n.label}</a>`).join('')}
+      <div style="height:1px;background:rgba(255,255,255,.1);margin:8px 0"></div>
+      ${data.teams.map(t => `<a class="mobile-nav-link" data-route="/team/${t.id}">${t.name}</a>`).join('')}
+      <div style="height:1px;background:rgba(255,255,255,.1);margin:8px 0"></div>
+      <a class="mobile-nav-link" data-route="/about">About</a>
+      <a class="mobile-nav-link" data-route="/contact">Contact</a>
+      <a class="mobile-nav-link" data-route="/sponsors">Sponsors</a>
+    `;
+  };
+
+  // Compute team-strip meta (record across teams)
+  function updateTeamStripMeta() {
+    const meta = document.getElementById('team-strip-meta');
+    if (!meta) return;
+    try {
+      const data = loadData();
+      const year = new Date().getFullYear();
+      const games = data.games.filter(g => (g.season + '') === (year + ''));
+      const w = games.filter(g => g.result === 'W').length;
+      const l = games.filter(g => g.result === 'L').length;
+      const total = w + l;
+      const pct = total ? (w / total).toFixed(3).replace(/^0/, '') : '.000';
+      meta.innerHTML = `${year} · <strong style="color:#111">${w}W&ndash;${l}L</strong> · ${pct}`;
+    } catch (e) {
+      meta.textContent = '';
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Override active highlighting — match by route prefix
+  // ──────────────────────────────────────────────────────────
+  const origUpdateNav = App.updateNav.bind(App);
+  App.updateNav = function updateNavScoreboard(route) {
+    document.querySelectorAll('#main-nav .nav-link').forEach(el => {
+      const target = el.dataset.route;
+      const cfg = NAV.find(n => n.route === target);
+      if (!cfg) { el.classList.remove('active'); return; }
+      const active = cfg.matches.some(m =>
+        m === '/' ? route === '/' : route.startsWith(m)
+      );
+      el.classList.toggle('active', active);
+    });
+    // Team strip highlighting
+    document.querySelectorAll('#team-strip .team-chip').forEach(el => {
+      const t = el.dataset.team;
+      const path = window.location.hash.replace('#', '') || '/';
+      const active = t === 'all'
+        ? path === '/'
+        : path === `/team/${t}`;
+      el.classList.toggle('active', active);
+    });
+  };
+
+  // ──────────────────────────────────────────────────────────
+  // Build footer  (About / Contact / Sponsors / Admin live here)
+  // ──────────────────────────────────────────────────────────
+  App.buildFooter = function buildFooterScoreboard() {
+    const data = loadData();
+    const cfg = data.config;
+    document.getElementById('site-footer').innerHTML = `
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <div class="footer-brand-logo">
+            <img src="assets/img/heroes-logo.jpg" alt="Heroes Logo">
+            <div class="footer-brand-name">${cfg.orgName}</div>
+          </div>
+          <p class="footer-tagline">A competitive senior men's softball organization — 55's AAA, 50's AAA, and 50's AA. Building a legacy since ${cfg.foundedYear}.</p>
+          <div class="footer-social">
+            <a class="social-btn" href="${cfg.facebookUrl || '#'}" target="_blank" title="Facebook">f</a>
+            <a class="social-btn" href="${cfg.storeUrl || '#'}" target="_blank" title="Store">🛒</a>
+          </div>
+        </div>
+        <div class="footer-col">
+          <h4>Site</h4>
+          <div class="footer-links">
+            <a class="footer-link" data-route="/events">Events</a>
+            <a class="footer-link" data-route="/stats">Season</a>
+            <a class="footer-link" data-route="/players">Players</a>
+            <a class="footer-link" data-route="/news">Latest</a>
+            <a class="footer-link" data-route="/my">My Heroes</a>
+          </div>
+        </div>
+        <div class="footer-col">
+          <h4>Teams</h4>
+          <div class="footer-links">
+            ${data.teams.map(t => `<a class="footer-link" data-route="/team/${t.id}">${t.name}</a>`).join('')}
+          </div>
+        </div>
+        <div class="footer-col">
+          <h4>Org</h4>
+          <div class="footer-links">
+            <a class="footer-link" data-route="/about">About</a>
+            <a class="footer-link" data-route="/contact">Contact</a>
+            <a class="footer-link" data-route="/sponsors">Sponsors</a>
+            <a class="footer-link" data-route="/awards">Awards</a>
+            <a class="footer-link" data-route="/gallery">Gallery</a>
+            <a class="footer-link" href="${cfg.storeUrl || '#'}" target="_blank">Heroes Store</a>
+            <a class="footer-link" href="admin.html">Admin Login</a>
+          </div>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>© ${new Date().getFullYear()} ${cfg.orgName} · ${cfg.city}, ${cfg.state}</p>
+      </div>
+    `;
+  };
+
+  // ──────────────────────────────────────────────────────────
+  // ROUTE: /my  →  Tournament Availability Portal
+  // ──────────────────────────────────────────────────────────
+
+  // auth.js uses `const HeroesAuth = {...}` — a top-level const is NOT a window property.
+  // Access it directly (all scripts share the global scope) via a typeof guard.
+  function getHA() {
+    try { return (typeof HeroesAuth !== 'undefined') ? HeroesAuth : null; } catch(e) { return null; }
+  }
+
+  function getCurrentPlayer() {
+    const ha = getHA();
+    if (ha && typeof ha.isLoggedIn === 'function') {
+      // Auth module loaded but init() hasn't finished yet — signal "wait"
+      if (!ha._initialized) return { _loading: true };
+      if (!ha.isLoggedIn()) return null;
+      if (!ha.isApproved()) return { _pendingApproval: true };
+      const profile = ha.getProfile();
+      if (!profile) return null;
+      try {
+        const data = loadData();
+        const match = (data.players || []).find(p =>
+          p.email && p.email.toLowerCase() === (profile.email || '').toLowerCase()
+        );
+        if (match) return match;
+      } catch {}
+      const parts = (profile.display_name || '').trim().split(/\s+/);
+      return {
+        id: profile.id,
+        firstName: parts[0] || '',
+        lastName: parts.slice(1).join(' ') || '',
+        number: '', position: '', teams: [],
+        email: profile.email,
+        _supabaseProfile: profile,
+      };
+    }
+    try {
+      const raw = localStorage.getItem('heroes_current_player');
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return null;
+  }
+
+  function daysUntil(iso) {
+    if (!iso) return null;
+    const d = new Date(iso + 'T12:00:00');
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    return Math.round((d - now) / 86400000);
+  }
+
+  function fmtEvDate(iso) {
+    if (!iso) return '';
+    return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric'
+    }).toUpperCase();
+  }
+
+  // ── Global action handlers ──────────────────────────────────
+
+  // Change Password — called from /my page "Change Password" link
+  window.showPasswordChangeModal = function() {
+    const existing = document.getElementById('mh-pw-overlay');
+    if (existing) existing.remove();
+
+    const el = document.createElement('div');
+    el.id = 'mh-pw-overlay';
+    el.innerHTML = `
+      <div id="mh-pw-backdrop" style="position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px">
+        <div style="background:#fff;border-radius:14px;padding:32px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+          <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#aaa;margin-bottom:8px">ACCOUNT SECURITY</div>
+          <h2 style="font-size:20px;font-weight:900;margin:0 0 6px">Change Password</h2>
+          <p style="font-size:13px;color:#666;margin:0 0 22px;line-height:1.5">Enter a new password for your Heroes account.</p>
+          <div style="margin-bottom:14px">
+            <label style="display:block;font-size:11px;font-weight:800;letter-spacing:0.5px;color:#555;margin-bottom:6px">NEW PASSWORD</label>
+            <input type="password" id="mh-pw-new"
+              style="width:100%;padding:11px 13px;border:1.5px solid #ddd;border-radius:7px;font-size:14px;outline:none;box-sizing:border-box;font-family:inherit"
+              placeholder="Min 6 characters" autocomplete="new-password"
+              onfocus="this.style.borderColor='#C8102E'" onblur="this.style.borderColor='#ddd'">
+          </div>
+          <div style="margin-bottom:8px">
+            <label style="display:block;font-size:11px;font-weight:800;letter-spacing:0.5px;color:#555;margin-bottom:6px">CONFIRM PASSWORD</label>
+            <input type="password" id="mh-pw-confirm"
+              style="width:100%;padding:11px 13px;border:1.5px solid #ddd;border-radius:7px;font-size:14px;outline:none;box-sizing:border-box;font-family:inherit"
+              placeholder="Repeat password" autocomplete="new-password"
+              onfocus="this.style.borderColor='#C8102E'" onblur="this.style.borderColor='#ddd'"
+              onkeydown="if(event.key==='Enter')submitPasswordChangeModal()">
+          </div>
+          <div id="mh-pw-err" style="min-height:18px;font-size:13px;color:#dc2626;margin-bottom:12px"></div>
+          <button onclick="submitPasswordChangeModal()"
+            style="width:100%;padding:13px;background:#C8102E;color:#fff;border:none;border-radius:7px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;margin-bottom:8px">
+            Update Password
+          </button>
+          <button onclick="document.getElementById('mh-pw-overlay').remove()"
+            style="width:100%;padding:13px;background:transparent;color:#666;border:1.5px solid #ddd;border-radius:7px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">
+            Cancel
+          </button>
+        </div>
+      </div>`;
+    document.body.appendChild(el);
+    document.getElementById('mh-pw-backdrop').addEventListener('click', e => {
+      if (e.target.id === 'mh-pw-backdrop') el.remove();
+    });
+    setTimeout(() => document.getElementById('mh-pw-new')?.focus(), 60);
+  };
+
+  window.submitPasswordChangeModal = async function() {
+    const newPw   = document.getElementById('mh-pw-new')?.value || '';
+    const confirm = document.getElementById('mh-pw-confirm')?.value || '';
+    const errEl   = document.getElementById('mh-pw-err');
+    if (!newPw || newPw.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; return; }
+    if (newPw !== confirm)          { errEl.textContent = 'Passwords do not match.'; return; }
+    errEl.textContent = '';
+
+    const ha = getHA();
+    if (!ha) { errEl.textContent = 'Not signed in.'; return; }
+    const { error } = await ha.updatePassword(newPw);
+    if (error) { errEl.textContent = error.message || 'Could not update password.'; return; }
+
+    document.getElementById('mh-pw-overlay')?.remove();
+    if (typeof App !== 'undefined' && App.toast) App.toast('Password updated! ✓', 'success');
+  };
+
+  // Open the shared photo picker for the current player
+  window.myOpenPhotoPicker = function() {
+    const player = getCurrentPlayer();
+    if (!player || player._loading || player._pendingApproval) return;
+    if (typeof showPhotoPickerModal !== 'function') {
+      if (typeof App !== 'undefined' && App.toast)
+        App.toast('Photo picker not available.', 'error');
+      return;
+    }
+    const teamId = (player.teams || [])[0] || 'general';
+    showPhotoPickerModal({
+      currentUrl : player.photo || '',
+      teamId,
+      playerId   : player.id,
+      onSave(url) { saveMyPhoto(player.id, url); },
+    });
+  };
+
+  // Save the new photo URL and refresh the avatar in-place
+  window.saveMyPhoto = function(playerId, url) {
+    const d   = loadData();
+    const idx = d.players.findIndex(p => p.id === playerId);
+    if (idx >= 0) {
+      d.players[idx].photo = url;
+      saveData(d);
+    }
+    // Pre-compute initials for onerror fallback
+    const p0  = (idx >= 0 ? d.players[idx] : null) || {};
+    const fn0 = `${p0.firstName||''} ${p0.lastName||''}`.trim();
+    const ini = fn0.split(/\s+/).slice(0,2).map(w=>w[0]?.toUpperCase()||'').join('') || '?';
+    // Update avatar without full re-render
+    const inner = document.getElementById('mh-avatar-inner');
+    if (inner) {
+      inner.innerHTML = `<img src="${url}"
+        style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block"
+        onerror="this.parentElement.innerHTML='<span class=mh-av-initials>${ini}</span>'">`;
+    }
+    if (typeof App !== 'undefined' && App.toast) App.toast('Photo updated! ✓', 'success');
+  };
+
+  // status is passed directly — no radio buttons, instant save
+  window.saveMyAvailability = function(evId, playerId, status) {
+    const d = loadData();
+    const evIdx = d.events.findIndex(e => e.id === evId);
+    if (evIdx < 0) return;
+    if (!d.events[evIdx].availability) d.events[evIdx].availability = [];
+    const aIdx = d.events[evIdx].availability.findIndex(a => a.playerId === playerId);
+    if (aIdx >= 0) d.events[evIdx].availability[aIdx].status = status;
+    else d.events[evIdx].availability.push({ playerId, status });
+    saveData(d);
+
+    // Inline UI update — highlight selected button, no page re-render
+    const card = document.querySelector(`.mh-evc[data-ev-id="${evId}"]`);
+    if (card) {
+      card.querySelectorAll('.mh-av-btn').forEach(btn => {
+        btn.classList.remove('mh-av-sel');
+        if (btn.dataset.status === status) btn.classList.add('mh-av-sel');
+      });
+    }
+    const labels = { yes: "You're IN! ✓", maybe: 'Marked as Maybe', no: "Marked as Can't Make It" };
+    if (typeof App !== 'undefined' && App.toast) App.toast(labels[status] || 'Saved', 'success');
+  };
+
+
+  // ── Main render ─────────────────────────────────────────────
+
+  function renderMyHeroes() {
+    const data = loadData();
+    const player = getCurrentPlayer();
+
+    // Auth module present but init() not yet resolved — show spinner and poll
+    if (player?._loading) {
+      App.render(`
+        <div class="mh-locked">
+          <div class="mh-locked-inner" style="text-align:center">
+            <div style="font-size:36px;margin-bottom:12px;animation:spin 1s linear infinite;display:inline-block">⚙</div>
+            <p style="color:#aaa;font-size:13px;letter-spacing:0.5px">LOADING…</p>
+          </div>
+        </div>
+        <style>.mh-locked{display:flex;align-items:center;justify-content:center;min-height:60vh}
+        @keyframes spin{to{transform:rotate(360deg)}}</style>`);
+      // Poll until HeroesAuth finishes init, then re-render
+      let tries = 0;
+      const poll = setInterval(() => {
+        tries++;
+        if (getHA()?._initialized || tries > 40) {
+          clearInterval(poll);
+          if (typeof Router !== 'undefined') Router.dispatch();
+        }
+      }, 100);
+      return;
+    }
+
+    // Not signed in
+    if (!player) {
+      App.render(`
+        <div class="mh-locked">
+          <div class="mh-locked-inner">
+            <div class="mh-locked-eye">MY HEROES · PLAYER PORTAL</div>
+            <h2 class="mh-locked-title">Sign In to Continue</h2>
+            <p class="mh-locked-sub">Set your event availability, see your stats, and read team-only updates.</p>
+            <div class="mh-locked-btns">
+              <button class="mh-btn-red" onclick="HeroesAuth.showLoginModal()">PLAYER SIGN IN</button>
+              <a class="mh-btn-ghost" data-route="/">← BACK TO HOME</a>
+            </div>
+          </div>
+        </div>${MH_CSS}`);
+      return;
+    }
+
+    // Pending approval
+    if (player._pendingApproval) {
+      const profile = getHA()?.getProfile();
+      const name = profile?.display_name || profile?.email?.split('@')[0] || 'there';
+      App.render(`
+        <div class="mh-locked">
+          <div class="mh-locked-inner" style="text-align:center">
+            <div style="font-size:48px;margin-bottom:16px">⏳</div>
+            <div class="mh-locked-eye">MY HEROES · PLAYER PORTAL</div>
+            <h2 class="mh-locked-title">Account Pending Approval</h2>
+            <p class="mh-locked-sub">Hey ${name}! Your account is waiting for a team admin to review it. You'll have full access within 24 hours.</p>
+            <div class="mh-locked-btns">
+              <button class="mh-btn-ghost" onclick="HeroesAuth.signOut()">Sign Out</button>
+            </div>
+          </div>
+        </div>${MH_CSS}`);
+      return;
+    }
+
+    // Resolve role
+    const supaProfile = player._supabaseProfile || getHA()?.getProfile() || {};
+    const role = supaProfile.role || player.role || 'player';
+    const isStaff = ['admin', 'manager', 'coach'].includes(role);
+    // Find ALL upcoming events — endDate checked so multi-day events don't vanish mid-run
+    // No team filter: every player can see and respond to every upcoming event
+    const today = new Date().toISOString().slice(0, 10);
+    const upcomingAll = (data.events || [])
+      .filter(e => {
+        const end   = e.endDate   || e.startDate || e.date || '';
+        const start = e.startDate || e.date || '';
+        return end >= today || start >= today;
+      })
+      .sort((a, b) =>
+        (a.startDate || a.date || '').localeCompare(b.startDate || b.date || ''));
+
+    // No events
+    if (!upcomingAll.length) {
+      App.render(`
+        <div class="mh-locked">
+          <div class="mh-locked-inner" style="text-align:center">
+            <div style="font-size:48px;margin-bottom:16px">📅</div>
+            <div class="mh-locked-eye">MY HEROES · PLAYER PORTAL</div>
+            <h2 class="mh-locked-title">No Upcoming Events</h2>
+            <p class="mh-locked-sub">No events are scheduled yet. Check back soon.</p>
+            ${isStaff ? '<div class="mh-locked-btns"><a href="admin.html" class="mh-btn-red" style="text-decoration:none">⚙ Admin Panel</a></div>' : ''}
+          </div>
+        </div>${MH_CSS}`);
+      return;
+    }
+
+    // Player identity for hero banner
+    const fullName    = `${player.firstName||''} ${player.lastName||''}`.trim();
+    const initials    = fullName.split(/\s+/).slice(0,2).map(w=>w[0]?.toUpperCase()||'').join('') || '?';
+    const playerTeams = (player.teams||[]).map(tid=>data.teams.find(t=>t.id===tid)).filter(Boolean);
+    const teamNamesStr = playerTeams.map(t=>t.shortName||t.name).join(' · ') || '';
+    const teamColor    = playerTeams[0]?.color || '#C8102E';
+
+    // Next event for hero banner countdown
+    const nextEv    = upcomingAll[0];
+    const nextStart = nextEv.startDate || nextEv.date || '';
+    const nextDays  = daysUntil(nextStart);
+
+    // Build one card per upcoming event
+    const evCards = upcomingAll.map(ev => {
+      const start   = ev.startDate || ev.date || '';
+      const end     = ev.endDate || start;
+      const d1      = start ? new Date(start + 'T12:00:00') : null;
+      const d2      = end && end !== start ? new Date(end + 'T12:00:00') : null;
+      const evDays  = daysUntil(start);
+      const evTeams = (ev.teams || []).map(tid => data.teams.find(t => t.id === tid)).filter(Boolean);
+      const myStatus = ((ev.availability || []).find(a => a.playerId === player.id) || {}).status || null;
+
+      // Attendance counts (all players)
+      const avail = ev.availability || [];
+      const inCnt    = avail.filter(a => a.status === 'yes').length;
+      const maybeCnt = avail.filter(a => a.status === 'maybe').length;
+      const outCnt   = avail.filter(a => a.status === 'no').length;
+
+      const monthStr = d1 ? d1.toLocaleDateString('en-US', {month:'short'}).toUpperCase() : '';
+      const locStr   = [ev.venue, ev.location].filter(Boolean).join(', ');
+      const teamStr  = evTeams.map(t => t.shortName || t.name).join(' · ');
+
+      const daysLbl  = evDays === null ? '' :
+                       evDays === 0    ? '🟢 TODAY' :
+                       evDays < 0      ? '⚡ IN PROGRESS' :
+                       evDays === 1    ? '🔴 TOMORROW' :
+                       evDays <= 7     ? `🔴 ${evDays} days away` :
+                                         `${evDays} days away`;
+
+      const rsvpNote = ev.rsvpDeadline
+        ? `<div class="mh-evc-rsvp">RSVP by ${new Date(ev.rsvpDeadline + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>`
+        : '';
+
+      return `
+        <div class="mh-evc" data-ev-id="${ev.id}">
+          <div class="mh-evc-left">
+            <div class="mh-evc-date">
+              <span class="mh-evc-month">${monthStr}</span>
+              ${d2
+                ? `<span class="mh-evc-range">${d1.getDate()}–${d2.getDate()}</span>`
+                : `<span class="mh-evc-day">${d1 ? d1.getDate() : ''}</span>`}
+              <span class="mh-evc-year">${d1 ? d1.getFullYear() : ''}</span>
+            </div>
+            <div class="mh-evc-info">
+              <div class="mh-evc-name">${ev.name}</div>
+              <div class="mh-evc-meta">${locStr ? '📍 ' + locStr : ''}${teamStr ? ' &nbsp;·&nbsp; ' + teamStr : ''}</div>
+              <div class="mh-evc-days${evDays !== null && evDays <= 7 && evDays >= 0 ? ' mh-evc-soon' : ''}">${daysLbl}</div>
+              ${rsvpNote}
+            </div>
+          </div>
+          <div class="mh-evc-right">
+            <div class="mh-evc-counts">${inCnt} IN · ${maybeCnt} MAYBE · ${outCnt} OUT</div>
+            <div class="mh-evc-avail">
+              <button class="mh-av-btn mh-av-in${myStatus==='yes'?' mh-av-sel':''}"
+                      data-status="yes"
+                      onclick="saveMyAvailability('${ev.id}','${player.id}','yes')">✓ I'M IN</button>
+              <button class="mh-av-btn mh-av-maybe${myStatus==='maybe'?' mh-av-sel':''}"
+                      data-status="maybe"
+                      onclick="saveMyAvailability('${ev.id}','${player.id}','maybe')">? MAYBE</button>
+              <button class="mh-av-btn mh-av-out${myStatus==='no'?' mh-av-sel':''}"
+                      data-status="no"
+                      onclick="saveMyAvailability('${ev.id}','${player.id}','no')">✗ CAN'T GO</button>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+    App.render(`
+      <div class="mh-wrap">
+
+        <!-- HERO BANNER -->
+        <div class="mh-hero">
+          <div class="mh-hero-in">
+            <div class="mh-hero-left">
+
+              <!-- Player identity -->
+              <div class="mh-player-id">
+                <button class="mh-av-wrap" onclick="myOpenPhotoPicker()" title="Change photo" aria-label="Change player photo">
+                  <div id="mh-avatar-inner" class="mh-avatar" style="background:${teamColor}">
+                    ${player.photo
+                      ? `<img src="${player.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block"
+                              onerror="this.parentElement.innerHTML='<span class=mh-av-initials>${initials}</span>'">`
+                      : `<span class="mh-av-initials">${initials}</span>`}
+                  </div>
+                  <div class="mh-av-cam" aria-hidden="true">📷</div>
+                </button>
+                <div class="mh-player-meta">
+                  <div class="mh-breadcrumb">MY HEROES · PLAYER PORTAL</div>
+                  <div class="mh-player-name">${fullName || 'Player'}</div>
+                  ${teamNamesStr ? `<div class="mh-player-teams">${teamNamesStr}</div>` : ''}
+                </div>
+              </div>
+
+              <h1 class="mh-ev-name">UPCOMING EVENTS</h1>
+              <div class="mh-ev-meta">${upcomingAll.length} event${upcomingAll.length !== 1 ? 's' : ''} scheduled · Next: ${nextEv.name}</div>
+              <div class="mh-hero-actions">
+                <button onclick="myOpenPhotoPicker()" class="mh-chpw-btn">📷 Change Photo</button>
+                <button onclick="showPasswordChangeModal()" class="mh-chpw-btn">🔒 Change Password</button>
+              </div>
+            </div>
+            ${nextDays !== null && nextDays >= 0 ? `
+            <div class="mh-cdown">
+              <div class="mh-cdown-n">${nextDays}</div>
+              <div class="mh-cdown-l">DAYS TO<br>NEXT EVENT</div>
+            </div>` : ''}
+          </div>
+        </div>
+
+        <!-- TAB BAR -->
+        <div class="mh-tabs">
+          <div class="mh-tabs-in">
+            <button class="mh-tab mh-tab-on">AVAILABILITY</button>
+            <button class="mh-tab" data-route="/events">EVENTS</button>
+            ${isStaff ? '<a href="admin.html" class="mh-adm-lnk">⚙ Admin Panel</a>' : ''}
+          </div>
+        </div>
+
+        <!-- EVENT CARDS -->
+        <div class="mh-ev-cards">
+          <p class="mh-ev-hint">Tap your availability for each event — saves instantly.</p>
+          ${evCards}
+        </div>
+
+      </div>${MH_CSS}`);
+  }
+
+  // ── All CSS for the /my portal ──────────────────────────────
+  const MH_CSS = `<style>
+    .mh-wrap { min-height:100vh; background:var(--hs-bg,#F5F2EB); }
+
+    /* Locked / wall states */
+    .mh-locked { display:flex; align-items:center; justify-content:center; min-height:60vh; padding:40px 20px; }
+    .mh-locked-inner { text-align:center; max-width:480px; }
+    .mh-locked-eye { font-size:11px; font-weight:800; letter-spacing:1.2px; color:#aaa; margin-bottom:12px; }
+    .mh-locked-title { font-size:clamp(26px,4vw,38px); font-weight:900; color:#111; margin:0 0 12px; line-height:1.1; }
+    .mh-locked-sub { font-size:14px; color:#666; line-height:1.6; margin:0 0 24px; }
+    .mh-locked-btns { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+    .mh-btn-red { padding:12px 28px; background:#C8102E; color:#fff; border:none; border-radius:6px; font-size:13px; font-weight:800; letter-spacing:0.5px; cursor:pointer; font-family:inherit; text-decoration:none; display:inline-block; }
+    .mh-btn-ghost { padding:12px 28px; background:transparent; color:#555; border:1.5px solid #ccc; border-radius:6px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; text-decoration:none; display:inline-block; }
+
+    /* Hero Banner */
+    .mh-hero { background:#0d1533; padding:36px 40px 32px; }
+    .mh-hero-in { max-width:1020px; margin:0 auto; display:flex; align-items:flex-start; justify-content:space-between; gap:20px; }
+    .mh-hero-left { flex:1; min-width:0; }
+    .mh-breadcrumb { font-size:11px; font-weight:700; letter-spacing:1px; color:rgba(255,255,255,0.35); margin-bottom:4px; }
+    .mh-teamtag { font-size:12px; font-weight:800; letter-spacing:0.5px; color:#C8102E; margin-bottom:8px; }
+    .mh-ev-name { font-size:clamp(24px,4vw,46px); font-weight:900; color:#fff; margin:0 0 10px; line-height:1.0; letter-spacing:-0.5px; }
+    .mh-ev-meta { font-size:13px; font-weight:600; color:rgba(255,255,255,0.5); letter-spacing:0.3px; }
+    .mh-cdown { text-align:right; flex-shrink:0; }
+    .mh-cdown-n { font-size:clamp(56px,9vw,88px); font-weight:900; color:#C8102E; line-height:1; }
+    .mh-cdown-l { font-size:11px; font-weight:700; letter-spacing:1px; color:rgba(255,255,255,0.35); margin-top:4px; }
+    .mh-adm-pill { display:inline-flex; align-items:center; padding:8px 16px; background:rgba(255,255,255,0.1); color:rgba(255,255,255,0.7); border-radius:20px; font-size:12px; font-weight:700; text-decoration:none; white-space:nowrap; align-self:flex-start; margin-top:8px; }
+    .mh-adm-pill:hover { background:rgba(255,255,255,0.2); color:#fff; }
+    .mh-hero-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+    .mh-chpw-btn { padding:7px 14px; background:rgba(255,255,255,0.08); color:rgba(255,255,255,0.5); border:1px solid rgba(255,255,255,0.15); border-radius:20px; font-size:11px; font-weight:700; letter-spacing:0.3px; cursor:pointer; font-family:inherit; transition:all 0.15s; }
+    .mh-chpw-btn:hover { background:rgba(255,255,255,0.15); color:rgba(255,255,255,0.85); }
+
+    /* Player identity in hero */
+    .mh-player-id { display:flex; align-items:center; gap:14px; margin-bottom:18px; }
+    .mh-av-wrap { position:relative; cursor:pointer; border:none; background:none; padding:0; border-radius:50%; flex-shrink:0; }
+    .mh-avatar { width:68px; height:68px; border-radius:50%; overflow:hidden; border:3px solid rgba(255,255,255,0.18); display:flex; align-items:center; justify-content:center; transition:border-color 0.15s; }
+    .mh-av-wrap:hover .mh-avatar { border-color:rgba(255,255,255,0.55); }
+    .mh-av-initials { font-size:22px; font-weight:900; color:#fff; user-select:none; }
+    .mh-av-cam { position:absolute; bottom:-1px; right:-1px; width:22px; height:22px; background:#C8102E; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; border:2px solid #0d1533; pointer-events:none; }
+    .mh-player-meta { min-width:0; }
+    .mh-player-name { font-size:clamp(18px,3vw,26px); font-weight:900; color:#fff; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .mh-player-teams { font-size:11px; font-weight:700; letter-spacing:0.5px; color:rgba(255,255,255,0.38); margin-top:3px; }
+
+    /* Event selector dropdown */
+    .mh-selector { background:#0a1128; border-bottom:1px solid rgba(255,255,255,0.08); padding:0 40px; }
+    .mh-sel-input { max-width:1020px; display:block; margin:0 auto; width:100%; padding:10px 0; background:transparent; border:none; color:rgba(255,255,255,0.65); font-size:13px; font-weight:700; font-family:inherit; cursor:pointer; outline:none; }
+
+    /* Tab bar */
+    .mh-tabs { background:#fff; border-bottom:1px solid #e5e7eb; }
+    .mh-tabs-in { max-width:1020px; margin:0 auto; padding:0 40px; display:flex; align-items:center; }
+    .mh-tab { padding:14px 18px; font-size:12px; font-weight:800; letter-spacing:0.5px; color:#aaa; background:transparent; border:none; cursor:pointer; font-family:inherit; border-bottom:3px solid transparent; margin-bottom:-1px; transition:color 0.15s; white-space:nowrap; }
+    .mh-tab:hover { color:#333; }
+    .mh-tab-on { color:#C8102E !important; border-bottom-color:#C8102E !important; }
+    .mh-adm-lnk { margin-left:auto; font-size:12px; font-weight:700; color:#C8102E; text-decoration:none; padding:14px 0; white-space:nowrap; }
+    .mh-adm-lnk:hover { text-decoration:underline; }
+
+    /* Content grid */
+    .mh-grid { max-width:1020px; margin:0 auto; padding:28px 40px 60px; display:grid; grid-template-columns:1fr 300px; gap:24px; align-items:start; }
+
+    /* Roster table */
+    .mh-roster { background:#fff; border:1px solid #e5e7eb; border-radius:8px; overflow:hidden; }
+    .mh-rh { background:#111; color:#fff; padding:12px 20px; display:flex; align-items:center; justify-content:space-between; }
+    .mh-rh-title { font-size:12px; font-weight:800; letter-spacing:0.5px; }
+    .mh-rh-counts { font-size:11px; color:rgba(255,255,255,0.5); font-weight:600; }
+    .mh-tbl { width:100%; border-collapse:collapse; }
+    .mh-tbl thead tr { background:#f9fafb; border-bottom:1px solid #e5e7eb; }
+    .mh-tbl th { padding:8px 16px; font-size:10px; font-weight:800; letter-spacing:0.5px; color:#aaa; text-align:left; }
+    .mh-tbl td { padding:11px 16px; border-bottom:1px solid #f3f4f6; font-size:14px; }
+    .mh-tbl tbody tr:last-child td { border-bottom:none; }
+    .mh-me-row { background:#fffbeb; }
+    .mh-c-num { font-weight:700; color:#333; width:44px; }
+    .mh-c-name { font-weight:600; }
+    .mh-c-pos { color:#aaa; font-size:12px; width:56px; }
+    .mh-c-st { width:86px; }
+    .mh-you { font-size:9px; font-weight:800; letter-spacing:0.5px; background:#fef3c7; color:#92400e; padding:1px 5px; border-radius:3px; vertical-align:middle; margin-left:4px; }
+    .mh-bdg { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:800; }
+    .mh-in    { background:#dcfce7; color:#15803d; }
+    .mh-maybe { background:#fef3c7; color:#92400e; }
+    .mh-out   { background:#fee2e2; color:#991b1b; }
+    .mh-tbd   { background:#f3f4f6; color:#9ca3af; }
+
+    /* Response widget */
+    .mh-resp { border-radius:8px; overflow:hidden; border:1px solid #e5e7eb; }
+    .mh-resp-hd { background:#A50E2D; color:#fff; padding:12px 20px; font-size:11px; font-weight:800; letter-spacing:1.2px; }
+    .mh-resp-body { background:#fff; padding:20px; }
+    .mh-resp-title { font-size:22px; font-weight:900; color:#111; margin:0 0 6px; letter-spacing:-0.3px; }
+    .mh-resp-sub { font-size:13px; color:#888; margin:0 0 18px; line-height:1.5; }
+    .mh-opts { display:flex; flex-direction:column; gap:8px; margin-bottom:12px; }
+    .mh-opt { display:flex; align-items:center; gap:12px; padding:13px 16px; border:1.5px solid #e5e7eb; border-radius:6px; cursor:pointer; font-size:13px; font-weight:800; letter-spacing:0.4px; color:#333; transition:all 0.15s; user-select:none; }
+    .mh-opt input[type="radio"] { width:18px; height:18px; cursor:pointer; accent-color:#22c55e; flex-shrink:0; }
+    .mh-opt:hover { border-color:#ccc; background:#fafafa; }
+    .mh-sel-in    { background:#22c55e !important; border-color:#22c55e !important; color:#fff !important; }
+    .mh-sel-maybe { background:#f59e0b !important; border-color:#f59e0b !important; color:#fff !important; }
+    .mh-sel-out   { background:#e5e7eb !important; border-color:#ccc !important; color:#333 !important; }
+    .mh-save { display:block; width:100%; padding:14px; background:#111; color:#fff; border:none; border-radius:6px; font-size:13px; font-weight:800; letter-spacing:0.5px; cursor:pointer; font-family:inherit; transition:opacity 0.15s; }
+    .mh-save:hover { opacity:0.85; }
+    .mh-save:disabled { opacity:0.5; cursor:not-allowed; }
+    .mh-note { margin-top:20px; padding-top:16px; border-top:1px solid #f3f4f6; }
+    .mh-note-lbl { font-size:10px; font-weight:800; letter-spacing:1px; color:#aaa; margin-bottom:8px; }
+    .mh-note-txt { font-size:13px; color:#555; line-height:1.6; font-style:italic; }
+
+    /* ── Availability event cards ───────────────────────────── */
+    .mh-ev-cards { max-width:1020px; margin:0 auto; padding:28px 40px 60px; }
+    .mh-ev-hint { font-size:12px; color:#aaa; font-weight:600; letter-spacing:0.3px; margin:0 0 18px; }
+    .mh-evc {
+      background:#fff; border:1px solid #e5e7eb; border-radius:10px;
+      padding:20px 24px; margin-bottom:12px;
+      display:flex; align-items:center; gap:24px;
+      transition:box-shadow 0.15s;
+    }
+    .mh-evc:hover { box-shadow:0 4px 20px rgba(0,0,0,0.07); }
+    .mh-evc-left { display:flex; align-items:center; gap:16px; flex:1; min-width:0; }
+    .mh-evc-date {
+      background:#f9fafb; border-radius:8px; padding:10px 12px;
+      text-align:center; min-width:58px; flex-shrink:0; border:1px solid #f0f0f0;
+    }
+    .mh-evc-month { display:block; font-size:10px; font-weight:800; letter-spacing:1px; color:#C8102E; text-transform:uppercase; margin-bottom:2px; }
+    .mh-evc-day   { display:block; font-size:26px; font-weight:900; color:#111; line-height:1; }
+    .mh-evc-range { display:block; font-size:18px; font-weight:900; color:#111; line-height:1.1; }
+    .mh-evc-year  { display:block; font-size:10px; color:#bbb; font-weight:600; margin-top:2px; }
+    .mh-evc-info  { flex:1; min-width:0; }
+    .mh-evc-name  { font-size:17px; font-weight:800; color:#111; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .mh-evc-meta  { font-size:12px; color:#888; margin-bottom:4px; }
+    .mh-evc-days  { font-size:11px; font-weight:700; color:#aaa; }
+    .mh-evc-days.mh-evc-soon { color:#C8102E; }
+    .mh-evc-rsvp  { font-size:11px; font-weight:700; color:#92400e; background:#fffbeb; display:inline-block; padding:2px 7px; border-radius:4px; margin-top:4px; }
+    .mh-evc-right { display:flex; flex-direction:column; align-items:flex-end; gap:8px; flex-shrink:0; }
+    .mh-evc-counts { font-size:11px; color:#aaa; font-weight:600; white-space:nowrap; }
+    .mh-evc-avail { display:flex; gap:6px; }
+    .mh-av-btn {
+      padding:9px 14px; border:2px solid #e5e7eb; border-radius:6px;
+      background:#fff; font-size:11px; font-weight:800; letter-spacing:0.4px;
+      color:#888; cursor:pointer; font-family:inherit; transition:all 0.15s; white-space:nowrap;
+    }
+    .mh-av-btn:hover { border-color:#ccc; background:#f9fafb; color:#333; }
+    .mh-av-in.mh-av-sel    { background:#22c55e; border-color:#22c55e; color:#fff; }
+    .mh-av-maybe.mh-av-sel { background:#f59e0b; border-color:#f59e0b; color:#fff; }
+    .mh-av-out.mh-av-sel   { background:#6b7280; border-color:#6b7280; color:#fff; }
+
+    /* Responsive */
+    @media (max-width:768px) {
+      .mh-hero { padding:24px 20px; }
+      .mh-cdown-n { font-size:40px; }
+      .mh-tabs-in { padding:0 16px; overflow-x:auto; }
+      .mh-ev-cards { padding:20px; }
+      .mh-evc { flex-direction:column; align-items:flex-start; gap:14px; }
+      .mh-evc-right { align-items:flex-start; width:100%; }
+      .mh-evc-avail { width:100%; }
+      .mh-av-btn { flex:1; text-align:center; }
+      .mh-evc-name { white-space:normal; }
+      .mh-avatar { width:56px; height:56px; }
+      .mh-av-initials { font-size:18px; }
+    }
+  </style>`;
+
+  Router.register('/my', renderMyHeroes);
+
+  // Update team-strip meta on every route change too
+  const origDispatch = Router.dispatch.bind(Router);
+  Router.dispatch = function dispatchPatched() {
+    origDispatch();
+    setTimeout(updateTeamStripMeta, 0);
+  };
+
+  console.info('[scoreboard] IA overlay active — 5 primary items + team strip + /my portal');
+})();

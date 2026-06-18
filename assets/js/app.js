@@ -75,6 +75,9 @@ const App = {
     authSlot.id = 'auth-nav-slot';
     navEl.parentElement.insertBefore(authSlot, navEl.nextSibling);
 
+    // Slot now exists — populate it immediately with current auth state
+    if (typeof HeroesAuth !== 'undefined') HeroesAuth.refreshNavAuth();
+
     const mobileLinks = document.getElementById('mobile-nav');
     mobileLinks.innerHTML = `
       <a class="mobile-nav-link" data-route="/">Home</a>
@@ -166,6 +169,108 @@ const App = {
   }
 };
 
+// ─── HOME: SEASON LEADERS HELPERS ─────────────────────────────
+// Globally exposed so the inline <select onchange> handler can call it.
+window.buildHomeLeadersHtml = function(year, teamId) {
+  try {
+    const data = loadData();
+    const cats = { avg: 'Batting AVG', hr: 'Home Runs', rbi: 'RBIs' };
+    const yearLabel = year === 'all' ? 'Career (All Years)' : `${year} Season`;
+    const teamObj = (teamId && teamId !== 'all') ? data.teams.find(t => t.id === teamId) : null;
+    const label = teamObj ? `${yearLabel} · ${teamObj.shortName}` : yearLabel;
+    return Object.keys(cats).map(stat => {
+      const top = getSeasonLeaders(stat, year, teamId || 'all', 5);
+      const items = top.map((x, i) => {
+        const p = x.player;
+        const team = data.teams.find(t => t.id === (p.teams || [])[0]);
+        let value = x.stats[stat];
+        if (stat === 'avg' && typeof value === 'string') value = value.replace(/^0\./, '.');
+        return `<div class="leaderboard-item">
+          <div class="lb-rank ${i===0?'top':''}">${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</div>
+          <div class="lb-info">
+            <div class="lb-player">${p.firstName} ${p.lastName}</div>
+            <div class="lb-team">${team?.shortName || ''}</div>
+          </div>
+          <div class="lb-value">${value}</div>
+        </div>`;
+      }).join('') || '<div style="padding:20px;color:rgba(255,255,255,0.5);text-align:center;font-size:13px">No stats yet</div>';
+      return `<div class="leaderboard-card fade-in">
+        <div class="leaderboard-card-header"><h3>${cats[stat]}</h3><span>${label}</span></div>
+        ${items}
+      </div>`;
+    }).join('');
+  } catch (err) {
+    console.error('[Season Leaders] build failed:', err);
+    return `<div style="padding:24px;color:#ff8888;text-align:center;grid-column:1/-1">Could not render leaders: ${err.message}</div>`;
+  }
+};
+
+window.renderHomeLeaders = function() {
+  const el = document.getElementById('leaders-content');
+  if (!el) return;
+  const year   = document.getElementById('leaders-year')?.value || 'all';
+  const teamId = document.getElementById('leaders-team')?.value || 'all';
+  el.innerHTML = window.buildHomeLeadersHtml(year, teamId);
+  // .fade-in starts at opacity:0 and is normally revealed by IntersectionObserver
+  // in App.initAnimations(). The observer is set up once on full-page render and
+  // does NOT pick up nodes added later via innerHTML — so the new cards would
+  // stay invisible. Reveal them directly.
+  el.querySelectorAll('.fade-in').forEach(e => e.classList.add('visible'));
+};
+
+// ─── TEAM PAGE: ROSTER ROW HELPERS ─────────────────────────────
+// Roster stats come from p.seasonStats[year] (or p.careerStats when year='all').
+// data.games[].playerStats is intentionally not used here — the Excel import only
+// brought season/career totals, not per-game breakdowns.
+window.buildTeamRosterRows = function(teamId, year) {
+  const data = loadData();
+  const stripZero = v => (typeof v === 'string') ? v.replace(/^0\./, '.') : (v ?? '–');
+  const players = data.players.filter(p => p.teams.includes(teamId) && p.active);
+  return players.map(p => {
+    const s = (year === 'all') ? p.careerStats : (p.seasonStats && p.seasonStats[year]);
+    let g = '–', ab = '–', avg = '–', h = '–', hr = '–', rbi = '–', obp = '–', slg = '–';
+    if (s) {
+      g   = s.gp ?? s.g ?? 0;
+      ab  = s.ab ?? 0;
+      avg = stripZero(s.avg ?? '.000');
+      h   = s.h ?? 0;
+      hr  = s.hr ?? 0;
+      rbi = s.rbi ?? 0;
+      obp = stripZero(s.obp ?? '.000');
+      const slgVal = s.slg != null ? s.slg
+                   : StatCalc.slg(s.s||0, s.d||0, s.t||0, s.hr||0, s.ab||0);
+      slg = stripZero(slgVal);
+    }
+    return `<tr>
+      <td><span style="color:var(--red);font-weight:800">#${p.number}</span></td>
+      <td><div class="player-cell">
+        <div style="width:28px;height:28px;border-radius:50%;background:var(--dark);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.5);font-size:10px;font-weight:900;flex-shrink:0">${(p.firstName||'?')[0]}${(p.lastName||'?')[0]}</div>
+        <span class="player-name" data-route="/player/${p.id}">${p.firstName} ${p.lastName}</span>
+      </div></td>
+      <td>${p.position || ''}</td>
+      <td>${p.bats}/${p.throws}</td>
+      <td>${g}</td>
+      <td>${ab}</td>
+      <td class="stat-highlight">${avg}</td>
+      <td>${h}</td>
+      <td>${hr}</td>
+      <td>${rbi}</td>
+      <td>${obp}</td>
+      <td>${slg}</td>
+    </tr>`;
+  }).join('');
+};
+
+window.renderTeamRoster = function() {
+  const sel = document.getElementById('team-roster-year');
+  const tbody = document.getElementById('team-roster-tbody');
+  if (!sel || !tbody) return;
+  const teamId = sel.dataset.teamId;
+  const year = sel.value;
+  const rows = window.buildTeamRosterRows(teamId, year);
+  tbody.innerHTML = rows || '<tr><td colspan="12" style="text-align:center;color:var(--gray);padding:30px">No players on roster</td></tr>';
+};
+
 // ─── PAGE: HOME ─────────────────────────────────────────────
 function renderHome() {
   const data = loadData();
@@ -223,26 +328,19 @@ function renderHome() {
       </div>`;
   }).join('');
 
-  // Stat leaders
-  const leaders = ['avg','hr','rbi'].map(stat => {
-    const cats = { avg: 'Batting AVG', hr: 'Home Runs', rbi: 'RBIs', h: 'Hits', bb: 'Walks', slg: 'Slugging' };
-    const top = getLeaders(stat, 5);
-    const items = top.map((x, i) => {
-      const p = x.player;
-      return `<div class="leaderboard-item">
-        <div class="lb-rank ${i===0?'top':''}">${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</div>
-        <div>
-          <div class="lb-player">${p.firstName} ${p.lastName}</div>
-          <div class="lb-team">${data.teams.find(t=>t.id===p.teams[0])?.shortName || ''}</div>
-        </div>
-        <div class="lb-value">${x.stats[stat]}</div>
-      </div>`;
-    }).join('') || '<div style="padding:16px;color:var(--gray);text-align:center;font-size:13px">No stats yet</div>';
-    return `<div class="leaderboard-card fade-in">
-      <div class="leaderboard-card-header"><h3>${cats[stat]}</h3><span>2025 Season</span></div>
-      ${items}
-    </div>`;
-  }).join('');
+  // Stat leaders — initial render uses most-recent available season + all teams
+  const seasons = getAvailableSeasons();
+  const initialYear = seasons[0] || 'all';
+  const initialTeam = 'all';
+  const leaders = window.buildHomeLeadersHtml(initialYear, initialTeam);
+  const yearOptions = [
+    ...seasons.map(y => `<option value="${y}"${y===initialYear?' selected':''}>${y} Season</option>`),
+    `<option value="all"${initialYear==='all'?' selected':''}>All Years (Career)</option>`,
+  ].join('');
+  const teamOptions = [
+    `<option value="all" selected>All Teams</option>`,
+    ...data.teams.map(t => `<option value="${t.id}">${t.shortName || t.name}</option>`),
+  ].join('');
 
   // News
   const newsItems = data.news.slice(0, 3).map(n => {
@@ -304,6 +402,7 @@ function renderHome() {
     <!-- HERO -->
     <section id="hero">
       <div class="hero-bg-text">HEROES</div>
+      <div class="hero-accent" aria-hidden="true"><img src="assets/img/hero_bg.png" alt=""></div>
       <div class="hero-inner">
         <div class="hero-content">
           <div class="hero-tag">⚾ Omaha, NE · Est. ${data.config.foundedYear}</div>
@@ -373,12 +472,24 @@ function renderHome() {
     <!-- STAT LEADERS -->
     <section class="section section-dark">
       <div class="container">
-        <div class="section-header">
-          <div class="section-label">Performance</div>
-          <h2>2025 Season <span>Leaders</span></h2>
-          <p>Top performers across all Heroes teams</p>
+        <div class="section-header" style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap">
+          <div>
+            <div class="section-label">Performance</div>
+            <h2>Season <span>Leaders</span></h2>
+            <p>Top performers across all Heroes teams</p>
+          </div>
+          <div class="leaders-controls">
+            <label for="leaders-team">Team</label>
+            <select id="leaders-team" class="leaders-select" onchange="window.renderHomeLeaders()">
+              ${teamOptions}
+            </select>
+            <label for="leaders-year" style="margin-left:8px">Season</label>
+            <select id="leaders-year" class="leaders-select" onchange="window.renderHomeLeaders()">
+              ${yearOptions}
+            </select>
+          </div>
         </div>
-        <div class="leaderboard-section">${leaders}</div>
+        <div id="leaders-content" class="leaderboard-section">${leaders}</div>
         <div style="margin-top:24px;text-align:center"><a class="btn btn-gold" data-route="/stats">Full Stats & Leaderboards →</a></div>
       </div>
     </section>
@@ -426,31 +537,18 @@ function renderTeam(teamId) {
   const data = loadData();
   const team = data.teams.find(t => t.id === teamId);
   if (!team) return renderNotFound();
-  
+
   const record = getTeamRecord(team.id);
   const players = data.players.filter(p => p.teams.includes(teamId) && p.active);
   const games = [...data.games.filter(g => g.teamId === teamId)].sort((a,b) => b.date.localeCompare(a.date));
 
-  const rosterRows = players.map(p => {
-    const stats = getPlayerStats(p.id, { teamId, season: '2025' });
-    return `<tr>
-      <td><span style="color:var(--red);font-weight:800">#${p.number}</span></td>
-      <td><div class="player-cell">
-        <div style="width:28px;height:28px;border-radius:50%;background:var(--dark);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.5);font-size:10px;font-weight:900;flex-shrink:0">${p.firstName[0]}${p.lastName[0]}</div>
-        <span class="player-name" data-route="/player/${p.id}">${p.firstName} ${p.lastName}</span>
-      </div></td>
-      <td>${p.position}</td>
-      <td>${p.bats}/${p.throws}</td>
-      <td>${stats.g}</td>
-      <td>${stats.ab}</td>
-      <td class="stat-highlight">${stats.avg}</td>
-      <td>${stats.h}</td>
-      <td>${stats.hr}</td>
-      <td>${stats.rbi}</td>
-      <td>${stats.obp}</td>
-      <td>${stats.slg}</td>
-    </tr>`;
-  }).join('');
+  const rosterSeasons = getAvailableSeasons();
+  const initialRosterYear = rosterSeasons[0] || 'all';
+  const rosterRows = window.buildTeamRosterRows(teamId, initialRosterYear);
+  const rosterYearOptions = [
+    ...rosterSeasons.map(y => `<option value="${y}"${y===initialRosterYear?' selected':''}>${y} Season</option>`),
+    `<option value="all"${initialRosterYear==='all'?' selected':''}>Career (All Years)</option>`,
+  ].join('');
 
   const gameRows = games.map(g => {
     const d = new Date(g.date + 'T12:00:00');
@@ -495,6 +593,12 @@ function renderTeam(teamId) {
           <button class="tab-btn" onclick="switchTab(event,'tab-schedule')">Schedule & Results</button>
         </div>
         <div id="tab-roster" class="tab-content active">
+          <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:12px">
+            <label for="team-roster-year" style="font-size:12px;color:var(--gray);text-transform:uppercase;letter-spacing:0.5px;font-weight:700">Season</label>
+            <select id="team-roster-year" class="leaders-select" data-team-id="${team.id}" onchange="window.renderTeamRoster()">
+              ${rosterYearOptions}
+            </select>
+          </div>
           <div class="stats-table-wrap">
             <table class="stats-table">
               <thead><tr>
@@ -502,7 +606,7 @@ function renderTeam(teamId) {
                 <th>G</th><th>AB</th><th class="stat-highlight">AVG</th>
                 <th>H</th><th>HR</th><th>RBI</th><th>OBP</th><th>SLG</th>
               </tr></thead>
-              <tbody>${rosterRows || '<tr><td colspan="12" style="text-align:center;color:var(--gray);padding:30px">No players on roster</td></tr>'}</tbody>
+              <tbody id="team-roster-tbody">${rosterRows || '<tr><td colspan="12" style="text-align:center;color:var(--gray);padding:30px">No players on roster</td></tr>'}</tbody>
             </table>
           </div>
         </div>
@@ -547,21 +651,48 @@ function renderPlayers() {
 
 function renderPlayerCards(players, data) {
   return players.map(p => {
-    const stats = getPlayerStats(p.id, { season: '2025' });
+    const stats = getPlayerStats(p.id);
     const yrs = new Date().getFullYear() - p.joinYear + 1;
-    return `<div class="player-card" data-route="/player/${p.id}">
-      <div class="player-card-photo">
-        ${p.photo ? `<img src="${p.photo}" alt="${p.firstName}" onerror="this.style.display='none'">` : ''}
-        <div class="initials">${p.firstName[0]}${p.lastName[0]}</div>
-        <div class="player-card-number">${p.number}</div>
-      </div>
-      <div class="player-card-info">
-        <div class="player-card-name">${p.firstName} ${p.lastName}</div>
-        <div class="player-card-pos">${p.position} · ${yrs > 1 ? `${yrs} yrs` : '1st yr'}</div>
-        <div class="player-card-stats">
-          <div class="player-mini-stat"><div class="val">${stats.avg}</div><div class="lbl">AVG</div></div>
-          <div class="player-mini-stat"><div class="val">${stats.hr}</div><div class="lbl">HR</div></div>
-          <div class="player-mini-stat"><div class="val">${stats.rbi}</div><div class="lbl">RBI</div></div>
+    const playerTeams = (p.teams || []).map(tid => data.teams.find(t => t.id === tid)).filter(Boolean);
+    const teamColor = playerTeams[0]?.color || '#C8102E';
+    const teamNames = playerTeams.map(t => t.shortName || t.name).join(' · ') || 'Heroes';
+    const initials = `${p.firstName?.[0] || ''}${p.lastName?.[0] || ''}` || '?';
+    const fullName = `${p.firstName || ''} ${p.lastName || ''}`.trim();
+
+    return `<div class="bc-scene" data-route="/player/${p.id}">
+      <div class="bc-card">
+        <div class="bc-front">
+          <div class="bc-brand" style="background:${teamColor}">
+            <span>HEROES SSB</span>
+            <span>#${p.number || '—'}</span>
+          </div>
+          <div class="bc-photo">
+            ${p.photo ? `<img src="${p.photo}" alt="${p.firstName || ''}" onerror="this.style.display='none'">` : ''}
+            <div class="bc-initials" style="background:linear-gradient(150deg,${teamColor}cc 0%,${teamColor}44 100%)">${initials}</div>
+          </div>
+          <div class="bc-nameplate">
+            <div class="bc-name">${fullName}</div>
+            <div class="bc-subname">${p.position || 'Player'}</div>
+          </div>
+        </div>
+        <div class="bc-back">
+          <div class="bc-back-hdr" style="background:${teamColor}">
+            <div class="bc-back-hdr-name">${fullName}</div>
+            <div class="bc-back-hdr-num">#${p.number || '—'}</div>
+          </div>
+          <div class="bc-back-body">
+            <div class="bc-row"><span>Position</span><strong>${p.position || '—'}</strong></div>
+            <div class="bc-row"><span>Bat / Throw</span><strong>${p.bats || 'R'}/${p.throws || 'R'}</strong></div>
+            <div class="bc-row"><span>Teams</span><strong>${teamNames}</strong></div>
+            <div class="bc-row"><span>Since</span><strong>${p.joinYear} · ${yrs} ${yrs === 1 ? 'yr' : 'yrs'}</strong></div>
+          </div>
+          <div class="bc-back-stats">
+            <div class="bc-bs"><div class="bc-bs-val">${stats.avg}</div><div class="bc-bs-lbl">AVG</div></div>
+            <div class="bc-bs"><div class="bc-bs-val">${stats.hr}</div><div class="bc-bs-lbl">HR</div></div>
+            <div class="bc-bs"><div class="bc-bs-val">${stats.rbi}</div><div class="bc-bs-lbl">RBI</div></div>
+            <div class="bc-bs"><div class="bc-bs-val">${stats.ops}</div><div class="bc-bs-lbl">OPS</div></div>
+          </div>
+          <div class="bc-back-footer">${stats.g} G · ${stats.ab} AB · Career</div>
         </div>
       </div>
     </div>`;
@@ -789,7 +920,7 @@ function buildSimpleLeaderboard(stat, season, data, filters = {}, search = '') {
   return top.map((x, i) => `
     <div class="leaderboard-item">
       <div class="lb-rank ${i<3?'top':''}">${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</div>
-      <div><div class="lb-player">${x.player.firstName} ${x.player.lastName}</div>
+      <div class="lb-info"><div class="lb-player">${x.player.firstName} ${x.player.lastName}</div>
       <div class="lb-team">${data.teams.find(t=>t.id===x.player.teams[0])?.shortName||''}</div></div>
       <div class="lb-value">${x.stats[stat]}</div>
     </div>`).join('');
@@ -1155,12 +1286,23 @@ function renderTournaments() {
 
   const data = loadData();
 
-  // Filter
-  let tournaments = data.events.filter(e => e.type === 'tournament' || e.type === 'social');
-  if (_tevFilter === 'upcoming')        tournaments = tournaments.filter(e => e.status === 'upcoming');
-  else if (_tevFilter === 'completed')  tournaments = tournaments.filter(e => e.status === 'completed');
-  else if (_tevFilter === 'tournament') tournaments = data.events.filter(e => e.type === 'tournament');
-  else if (_tevFilter === 'social')     tournaments = data.events.filter(e => e.type === 'social');
+  // Friendly labels for known event types (new types auto-appear with title-cased fallback)
+  const TYPE_LABELS = {
+    tournament: 'Tournaments',
+    social:     'Team Events',
+    practice:   'Practices',
+    game:       'Games',
+    meeting:    'Meetings',
+  };
+
+  // All unique types present in data
+  const allTypes = [...new Set((data.events || []).map(e => e.type).filter(Boolean))];
+
+  // Filter — "all" shows everything; status filters cut across types; type filters show one type
+  let tournaments = [...(data.events || [])];
+  if (_tevFilter === 'upcoming')       tournaments = tournaments.filter(e => e.status === 'upcoming' || e.status === 'active');
+  else if (_tevFilter === 'completed') tournaments = tournaments.filter(e => e.status === 'completed' || e.status === 'cancelled');
+  else if (_tevFilter !== 'all')       tournaments = tournaments.filter(e => e.type === _tevFilter);
 
   // Sort
   const statusOrder = { upcoming:0, active:1, completed:2, cancelled:3 };
@@ -1327,11 +1469,13 @@ function renderTournaments() {
       <div class="container" style="max-width:900px">
         <div class="ev-controls-row">
           <div class="filter-row">
-            <button class="filter-btn ${_tevFilter==='all'?'active':''}"        onclick="filterTourneys(this,'all')">All Events</button>
-            <button class="filter-btn ${_tevFilter==='upcoming'?'active':''}"   onclick="filterTourneys(this,'upcoming')">Upcoming</button>
-            <button class="filter-btn ${_tevFilter==='completed'?'active':''}"  onclick="filterTourneys(this,'completed')">Completed</button>
-            <button class="filter-btn ${_tevFilter==='tournament'?'active':''}" onclick="filterTourneys(this,'tournament')">Tournaments</button>
-            <button class="filter-btn ${_tevFilter==='social'?'active':''}"     onclick="filterTourneys(this,'social')">Team Events</button>
+            <button class="filter-btn ${_tevFilter==='all'?'active':''}"       onclick="filterTourneys(this,'all')">All</button>
+            <button class="filter-btn ${_tevFilter==='upcoming'?'active':''}"  onclick="filterTourneys(this,'upcoming')">Upcoming</button>
+            <button class="filter-btn ${_tevFilter==='completed'?'active':''}" onclick="filterTourneys(this,'completed')">Completed</button>
+            ${allTypes.map(t => {
+              const lbl = TYPE_LABELS[t] || (t.charAt(0).toUpperCase() + t.slice(1) + 's');
+              return `<button class="filter-btn ${_tevFilter===t?'active':''}" onclick="filterTourneys(this,'${t}')">${lbl}</button>`;
+            }).join('')}
           </div>
           <div class="ev-sort-wrap">
             <label class="ev-sort-label">Sort:</label>
@@ -1662,7 +1806,7 @@ Router.register('/player', (playerId) => renderPlayer(playerId));
 Router.register('/stats', renderStats);
 Router.register('/schedule', renderSchedule);
 Router.register('/news', (...args) => { if (args[0] === 'article') renderNewsArticle(args[1]); else renderNews(); });
-Router.register('/events', () => { window._heroesEventFilter = 'all'; window._heroesEventSort = 'newest'; renderTournaments(); });
+Router.register('/events', () => { _tevFilter = 'all'; _tevSort = 'date-asc'; renderTournaments(); });
 Router.register('/about', renderAbout);
 Router.register('/contact', renderContact);
 Router.register('/sponsors', renderSponsors);
@@ -1675,6 +1819,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Show subtle loading state while syncing from Supabase
   const main = document.getElementById('main-content');
   if (main) main.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:400px"><div class="spinner"></div></div>';
-  await initData();   // pull latest data from Supabase into localStorage cache
-  App.init();         // then render normally from cache
+  // Race initData against a 4s timeout so a slow/hung Supabase query never
+  // blocks App.init() — the app falls back to localStorage cache gracefully.
+  await Promise.race([
+    initData(),
+    new Promise(resolve => setTimeout(resolve, 4000))
+  ]);
+  App.init();         // render normally from cache (Supabase or localStorage)
 });

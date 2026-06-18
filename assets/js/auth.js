@@ -30,6 +30,11 @@ const HeroesAuth = {
   // Cached profile row from the profiles table
   _profile: null,
 
+  // True once init() has finished the initial getSession() + loadProfile() pass.
+  // Other modules (e.g. heroes-scoreboard.js) can check this to know whether
+  // the auth state is ready to read.
+  _initialized: false,
+
 
   // ── Initialisation ────────────────────────────────────────
 
@@ -61,6 +66,10 @@ const HeroesAuth = {
       console.warn('HeroesAuth.init: could not get session:', err.message);
     }
 
+    // Mark init complete — other modules poll this to know auth is ready
+    this._initialized = true;
+    this.refreshNavAuth();
+
     // Keep state in sync across tabs / token refreshes
     sb.auth.onAuthStateChange(async (event, session) => {
       this._session = session;
@@ -75,9 +84,16 @@ const HeroesAuth = {
         this._profile = null;
       }
       this.refreshNavAuth();
-    });
 
-    this.refreshNavAuth();
+      // If the /my page is currently showing (it renders synchronously before
+      // the async getSession resolves, or shows the sign-in wall before login),
+      // re-dispatch the router so it re-renders with the current auth state.
+      const onMyPage = window.location.hash.replace(/^#\/?/, '') === 'my'
+                    || window.location.hash === '#/my';
+      if (onMyPage && typeof Router !== 'undefined') {
+        Router.dispatch();
+      }
+    });
   },
 
   /**
@@ -150,13 +166,37 @@ const HeroesAuth = {
   /**
    * signIn(email, password)
    * Calls sb.auth.signInWithPassword.
+   *
+   * Two defenses around a previously-seen "Signing in… never resolves" hang:
+   *   1. signOut() first to flush any stale refresh token in localStorage that
+   *      could deadlock the Supabase client mid-request.
+   *   2. 15s timeout — if the network call genuinely never resolves, surface
+   *      an error instead of leaving the button stuck.
+   *
    * Returns { data } on success, { error } on failure.
    */
   async signIn(email, password) {
     const sb = _getClient();
     if (!sb) return { error: { message: 'Authentication service unavailable.' } };
-    const { data, error } = await sb.auth.signInWithPassword({ email, password });
-    return error ? { error } : { data };
+
+    // Best-effort: wipe any stale session before attempting a new sign-in.
+    // Swallow errors — a missing session is fine, and we don't want this to
+    // block the actual sign-in attempt.
+    try { await sb.auth.signOut({ scope: 'local' }); } catch (_) { /* ignore */ }
+
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Sign-in timed out. Check your connection and try again.')), 15000)
+    );
+
+    try {
+      const result = await Promise.race([
+        sb.auth.signInWithPassword({ email, password }),
+        timeout,
+      ]);
+      return result.error ? { error: result.error } : { data: result.data };
+    } catch (err) {
+      return { error: { message: err?.message || 'Sign-in failed.' } };
+    }
   },
 
   /**
@@ -189,25 +229,35 @@ const HeroesAuth = {
    * Signs the user out of Supabase, clears local cache, refreshes nav.
    */
   async signOut() {
+    console.log('[HeroesAuth] signOut clicked');
+    // Close the dropdown immediately so the click feels responsive even if
+    // Supabase is slow.
+    document.getElementById('auth-dropdown')?.classList.remove('open');
     const sb = _getClient();
     if (sb) {
-      try { await sb.auth.signOut(); } catch (e) { /* ignore */ }
+      try { await sb.auth.signOut(); } catch (e) {
+        console.warn('[HeroesAuth] supabase signOut error (continuing):', e?.message || e);
+      }
     }
     this._session = null;
     this._profile = null;
-    this.refreshNavAuth();
+    this._initialized = false;
+    // Hard reload to flush every module's cached state (player-auth, scoreboard,
+    // app router, etc.) — refreshing only the nav left stale state elsewhere.
+    window.location.reload();
   },
 
   /**
-   * register(email, password, displayName)
+   * register(email, password, displayName, requestedRole)
    * Creates a new Supabase auth account.
    * The handle_new_user() database trigger automatically inserts a
-   * profiles row with role='player' and approved=false.
+   * profiles row with role='player', approved=false, and pending_role
+   * set to requestedRole if it's coach/manager/admin.
    *
    * Returns { data, needsApproval: true } on success,
    *         { error } on failure.
    */
-  async register(email, password, displayName) {
+  async register(email, password, displayName, requestedRole = 'player') {
     const sb = _getClient();
     if (!sb) return { error: { message: 'Authentication service unavailable.' } };
     const { data, error } = await sb.auth.signUp({
@@ -215,12 +265,48 @@ const HeroesAuth = {
       password,
       options: {
         data: {
-          display_name: displayName || email.split('@')[0]
+          display_name: displayName || email.split('@')[0],
+          requested_role: requestedRole,
         }
       }
     });
     if (error) return { error };
     return { data, needsApproval: true };
+  },
+
+  /**
+   * requestRoleUpgrade(newRole)
+   * Sets pending_role on the current user's profile.
+   * The admin panel will show this as a role upgrade request.
+   */
+  async requestRoleUpgrade(newRole) {
+    const sb = _getClient();
+    if (!sb || !this._profile) return { error: { message: 'Not logged in.' } };
+    const validRoles = ['coach', 'manager', 'admin'];
+    if (!validRoles.includes(newRole)) return { error: { message: 'Invalid role.' } };
+    if (this._profile.role === newRole) return { error: { message: `You are already a ${newRole}.` } };
+
+    const { error } = await sb
+      .from('profiles')
+      .update({ pending_role: newRole, rejection_reason: null })
+      .eq('id', this._profile.id);
+
+    if (error) return { error };
+    this._profile.pending_role = newRole;
+    this.refreshNavAuth();
+    return { success: true };
+  },
+
+  /**
+   * cancelRoleRequest()
+   * Clears pending_role for the current user.
+   */
+  async cancelRoleRequest() {
+    const sb = _getClient();
+    if (!sb || !this._profile) return;
+    await sb.from('profiles').update({ pending_role: null }).eq('id', this._profile.id);
+    this._profile.pending_role = null;
+    this.refreshNavAuth();
   },
 
 
@@ -257,25 +343,129 @@ const HeroesAuth = {
       .join('');
     const roleLabel   = profile?.role ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1) : 'Player';
 
-    const adminLink = this.hasAdminAccess()
+    const adminLink = this.hasAdminAccess() && this.isApproved()
       ? `<a class="auth-dropdown-item" href="admin.html">⚙ Admin Panel</a>`
       : '';
+
+    // Role status indicator
+    const pendingRole  = profile?.pending_role;
+    const approved     = this.isApproved();
+    let roleStatusHtml = '';
+    if (!approved) {
+      roleStatusHtml = `<div class="auth-dropdown-status auth-dropdown-status-pending">⏳ Awaiting Approval</div>`;
+    } else if (pendingRole) {
+      const cap = pendingRole.charAt(0).toUpperCase() + pendingRole.slice(1);
+      roleStatusHtml = `
+        <div class="auth-dropdown-status auth-dropdown-status-pending">⏳ ${cap} Request Pending</div>
+        <button class="auth-dropdown-item" style="font-size:12px;color:#888" onclick="HeroesAuth.cancelRoleRequest()">✕ Cancel Request</button>`;
+    }
+
+    // Role upgrade option for approved players (not already highest role or pending)
+    let upgradeLink = '';
+    if (approved && !pendingRole && !this.hasAdminAccess()) {
+      upgradeLink = `<button class="auth-dropdown-item" onclick="HeroesAuth.showRoleRequestModal()">↑ Request Role Upgrade</button>`;
+    }
 
     slot.innerHTML = `
       <div class="auth-user-menu">
         <button class="auth-avatar-btn" onclick="HeroesAuth.toggleUserMenu()" aria-haspopup="true" aria-expanded="false">
-          <div class="auth-avatar">${initials}</div>
+          <div class="auth-avatar"${!approved ? ' style="background:#9ca3af"' : ''}>${initials}</div>
           <div class="auth-user-info">
             <span class="auth-user-name">${displayName}</span>
-            <span class="auth-user-role">${roleLabel}</span>
+            <span class="auth-user-role">${roleLabel}${!approved ? ' · Pending' : ''}${pendingRole ? ' · '+pendingRole+' req.' : ''}</span>
           </div>
           <span class="auth-caret">▾</span>
         </button>
         <div class="auth-dropdown" id="auth-dropdown" role="menu">
+          ${roleStatusHtml}
           ${adminLink}
+          ${upgradeLink}
           <button class="auth-dropdown-item auth-dropdown-signout" onclick="HeroesAuth.signOut()">🚪 Sign Out</button>
         </div>
       </div>`;
+  },
+
+  /**
+   * showRoleRequestModal()
+   * Shows a small modal letting an approved player request a role upgrade.
+   */
+  showRoleRequestModal() {
+    // Close the nav dropdown
+    document.getElementById('auth-dropdown')?.classList.remove('open');
+
+    const currentRole = this.getRole() || 'player';
+    const options = [];
+    if (currentRole === 'player') {
+      options.push({ value: 'coach',   label: 'Coach',   note: 'Requires Manager or Admin approval' });
+      options.push({ value: 'manager', label: 'Manager', note: 'Requires Admin approval' });
+      options.push({ value: 'admin',   label: 'Admin',   note: 'Requires Admin approval' });
+    } else if (currentRole === 'coach') {
+      options.push({ value: 'manager', label: 'Manager', note: 'Requires Admin approval' });
+      options.push({ value: 'admin',   label: 'Admin',   note: 'Requires Admin approval' });
+    } else if (currentRole === 'manager') {
+      options.push({ value: 'admin', label: 'Admin', note: 'Requires Admin approval' });
+    }
+
+    if (!options.length) return;
+
+    this.showLoginModal();
+    const inner = document.getElementById('auth-modal-inner');
+    if (!inner) return;
+    inner.innerHTML = `
+      <div class="auth-modal-header">
+        <img src="assets/img/heroes-logo.jpg" alt="Heroes Logo"
+             onerror="this.style.background='#C8102E';this.style.borderRadius='50%'">
+        <div>
+          <div class="auth-modal-title">Request Role Upgrade</div>
+          <div class="auth-modal-subtitle">Current role: ${currentRole.charAt(0).toUpperCase()+currentRole.slice(1)}</div>
+        </div>
+      </div>
+      <p style="font-size:13px;color:#666;margin-bottom:16px;line-height:1.6">
+        Select the role you'd like to request. A team admin will review your request.
+      </p>
+      <div class="auth-form-group">
+        <label class="auth-form-label">Requested Role</label>
+        <select id="ha-upgrade-role" class="auth-form-input" style="cursor:pointer">
+          ${options.map(o => `<option value="${o.value}">${o.label} — ${o.note}</option>`).join('')}
+        </select>
+      </div>
+      <div id="ha-error" class="auth-form-error" aria-live="polite"></div>
+      <button class="auth-submit-btn" onclick="HeroesAuth.submitRoleRequest()">Submit Request</button>
+      <button class="auth-secondary-btn" onclick="HeroesAuth.hideLoginModal()">Cancel</button>`;
+  },
+
+  async submitRoleRequest() {
+    const sel   = document.getElementById('ha-upgrade-role');
+    const errEl = document.getElementById('ha-error');
+    if (!sel) return;
+
+    const btn = document.querySelector('#auth-modal-inner .auth-submit-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
+    if (errEl) errEl.textContent = '';
+
+    const { error } = await this.requestRoleUpgrade(sel.value);
+
+    if (btn) { btn.disabled = false; btn.textContent = 'Submit Request'; }
+
+    if (error) {
+      if (errEl) errEl.textContent = error.message;
+      return;
+    }
+
+    const inner = document.getElementById('auth-modal-inner');
+    const capRole = sel.value.charAt(0).toUpperCase() + sel.value.slice(1);
+    if (inner) {
+      inner.innerHTML = `
+        <div class="auth-approval-state">
+          <div class="auth-approval-icon">✅</div>
+          <h2 class="auth-approval-title">Request Submitted!</h2>
+          <p class="auth-approval-msg">
+            Your request to become a <strong>${capRole}</strong> has been submitted.
+            A team admin will review it shortly.
+          </p>
+          <button class="auth-submit-btn" onclick="HeroesAuth.hideLoginModal()">Got it</button>
+        </div>`;
+    }
   },
 
   /**
@@ -378,7 +568,7 @@ const HeroesAuth = {
              onerror="this.style.background='#C8102E';this.style.borderRadius='50%'">
         <div>
           <div class="auth-modal-title">Create Account</div>
-          <div class="auth-modal-subtitle">Request player access</div>
+          <div class="auth-modal-subtitle">Request access to Heroes SSB</div>
         </div>
       </div>
 
@@ -407,7 +597,18 @@ const HeroesAuth = {
         <label class="auth-form-label" for="ha-reg-pw2">Confirm Password</label>
         <input  type="password" id="ha-reg-pw2"   class="auth-form-input"
                 placeholder="Repeat password" autocomplete="new-password"
+                onkeydown="if(event.key==='Enter')document.getElementById('ha-reg-role').focus()">
+      </div>
+
+      <div class="auth-form-group">
+        <label class="auth-form-label" for="ha-reg-role">Requesting Access As</label>
+        <select id="ha-reg-role" class="auth-form-input" style="cursor:pointer"
                 onkeydown="if(event.key==='Enter')HeroesAuth.submitRegister()">
+          <option value="player">Player / Member</option>
+          <option value="coach">Coach (requires Manager or Admin approval)</option>
+          <option value="manager">Manager (requires Admin approval)</option>
+          <option value="admin">Admin (requires Admin approval)</option>
+        </select>
       </div>
 
       <div id="ha-error" class="auth-form-error" aria-live="polite"></div>
@@ -452,16 +653,24 @@ const HeroesAuth = {
     setTimeout(() => document.getElementById('ha-forgot-email')?.focus(), 80);
   },
 
-  _renderSetPasswordForm() {
+  _renderSetPasswordForm(opts = {}) {
     const inner = document.getElementById('auth-modal-inner');
     if (!inner) return;
+    this._firstLogin = !!opts.firstLogin;
+    const title    = opts.firstLogin ? 'Choose Your Password' : 'Set New Password';
+    const subtitle = opts.firstLogin
+      ? 'Your admin set a temporary password. Pick a new one to finish signing in.'
+      : 'Choose a new password for your account';
+    // Make sure the modal overlay is visible, but don't re-render the login
+    // form — that would clobber the password fields below.
+    document.getElementById('heroes-login-modal')?.classList.add('open');
     inner.innerHTML = `
       <div class="auth-modal-header">
         <img src="assets/img/heroes-logo.jpg" alt="Heroes Logo"
              onerror="this.style.background='#C8102E';this.style.borderRadius='50%'">
         <div>
-          <div class="auth-modal-title">Set New Password</div>
-          <div class="auth-modal-subtitle">Choose a new password for your account</div>
+          <div class="auth-modal-title">${title}</div>
+          <div class="auth-modal-subtitle">${subtitle}</div>
         </div>
       </div>
 
@@ -524,6 +733,25 @@ const HeroesAuth = {
       return;
     }
 
+    // Cache the session immediately so isLoggedIn()/getSession() are correct
+    // without waiting for the onAuthStateChange callback to fire.
+    this._session = data?.session || this._session;
+
+    // Load profile synchronously here (don't rely on the onAuthStateChange
+    // callback to win the race — submitLogin reads _profile right below).
+    const userId = data?.user?.id || data?.session?.user?.id;
+    if (userId) {
+      try { await this._loadProfile(userId); } catch (_) { /* handled by _loadProfile */ }
+    }
+
+    // First-login forced password change: an admin created this account with
+    // a temp password. Don't proceed to the welcome / approval flow until
+    // the user picks a new one.
+    if (this._profile?.must_change_password) {
+      this._renderSetPasswordForm({ firstLogin: true });
+      return;
+    }
+
     // Auth succeeded — check approval status
     if (!this.isApproved()) {
       // Show a friendly "waiting for approval" state inside the modal
@@ -549,6 +777,13 @@ const HeroesAuth = {
       App.toast('Welcome back, ' + (this._profile?.display_name || email.split('@')[0]) + '! ✓', 'success');
     }
     this.refreshNavAuth();
+
+    // Re-render the page if we're on /my (was showing a sign-in wall)
+    const onMyPage = window.location.hash.replace(/^#\/?/, '') === 'my'
+                  || window.location.hash === '#/my';
+    if (onMyPage && typeof Router !== 'undefined') {
+      Router.dispatch();
+    }
   },
 
   /**
@@ -583,11 +818,15 @@ const HeroesAuth = {
     }
 
     // Disable button while in flight
+    const roleEl      = document.getElementById('ha-reg-role');
+    const requestedRole = roleEl?.value || 'player';
+
+    // Disable button while in flight
     const btn = document.querySelector('#auth-modal-inner .auth-submit-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Creating account…'; }
     errEl.textContent = '';
 
-    const { error } = await this.register(email, password, displayName);
+    const { error } = await this.register(email, password, displayName, requestedRole);
 
     if (btn) { btn.disabled = false; btn.textContent = 'Create Account'; }
 
@@ -599,14 +838,23 @@ const HeroesAuth = {
     // Success — show confirmation state
     const inner = document.getElementById('auth-modal-inner');
     if (inner) {
+      const roleLabels = {
+        player:  'Player / Member',
+        coach:   'Coach',
+        manager: 'Manager',
+        admin:   'Admin',
+      };
+      const roleDisplay = roleLabels[requestedRole] || requestedRole;
+      const approverNote = requestedRole === 'player'
+        ? 'A team admin will review your account before you can log in.'
+        : `You requested the <strong>${roleDisplay}</strong> role. A qualified admin will review your request.`;
       inner.innerHTML = `
         <div class="auth-approval-state">
           <div class="auth-approval-icon">✅</div>
           <h2 class="auth-approval-title">Account Request Submitted!</h2>
           <p class="auth-approval-msg">
             Welcome, ${displayName}! Your account has been created and is
-            pending admin approval. You'll be able to log in once a team
-            admin reviews your request.
+            pending approval. ${approverNote}
           </p>
           <button class="auth-submit-btn" onclick="HeroesAuth.hideLoginModal()">Got it</button>
         </div>`;
@@ -683,19 +931,50 @@ const HeroesAuth = {
       return;
     }
 
+    // First-login flow: clear must_change_password and refresh profile so the
+    // user isn't asked again on next sign-in.
+    if (this._firstLogin && this._profile?.id) {
+      const sb = _getClient();
+      try {
+        await sb.from('profiles')
+          .update({ must_change_password: false })
+          .eq('id', this._profile.id);
+        this._profile.must_change_password = false;
+      } catch (e) {
+        console.warn('[HeroesAuth] could not clear must_change_password:', e?.message || e);
+      }
+    }
+
+    const wasFirstLogin = this._firstLogin;
+    this._firstLogin = false;
+
     const inner = document.getElementById('auth-modal-inner');
     if (inner) {
       inner.innerHTML = `
         <div class="auth-approval-state">
           <div class="auth-approval-icon">✅</div>
           <h2 class="auth-approval-title">Password Updated!</h2>
-          <p class="auth-approval-msg">Your password has been changed successfully.</p>
+          <p class="auth-approval-msg">${
+            wasFirstLogin
+              ? 'You\'re all set. You can now use the site.'
+              : 'Your password has been changed successfully.'
+          }</p>
           <button class="auth-submit-btn" onclick="HeroesAuth.hideLoginModal()">Done</button>
         </div>`;
     }
+
+    // Refresh the nav so the avatar/menu appears now that the first-login
+    // gate is cleared.
+    this.refreshNavAuth();
   },
 
 };  // end HeroesAuth
+
+// Expose on window so inline onclick="HeroesAuth.signOut()" handlers in
+// dynamically-injected HTML (set via innerHTML) can resolve the name even in
+// browsers/contexts where script-scope `const` bindings aren't surfaced to
+// event-handler attribute compilation.
+window.HeroesAuth = HeroesAuth;
 
 
 // ============================================================
@@ -847,6 +1126,22 @@ document.addEventListener('DOMContentLoaded', () => {
     .auth-dropdown-signout:hover {
       color: var(--red, #C8102E);
       background: #fff5f5;
+    }
+
+    /* ── Dropdown status badge (pending approval / role req.) ─ */
+    .auth-dropdown-status {
+      padding: 8px 16px 6px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: #555;
+      border-bottom: 1px solid #eee;
+      margin-bottom: 4px;
+    }
+    .auth-dropdown-status-pending {
+      color: #b45309;
+      background: #fffbeb;
     }
 
     /* ── Modal overlay ─────────────────────────────────────── */
@@ -1054,6 +1349,15 @@ document.addEventListener('DOMContentLoaded', () => {
       const btn = dd.previousElementSibling;
       if (btn) btn.setAttribute('aria-expanded', 'false');
     }
+  });
+
+  // ── 3b. Delegated fallback for the Sign Out button. Inline onclick
+  //        handlers on innerHTML-injected nodes can fail to invoke in some
+  //        contexts (CSP, certain extensions, scope quirks); this guarantees
+  //        the button still works.
+  document.addEventListener('click', e => {
+    const btn = e.target.closest?.('.auth-dropdown-signout');
+    if (btn) HeroesAuth.signOut();
   });
 
 

@@ -4,11 +4,22 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Heroes Senior Softball — Competitive senior men's softball organization featuring 55's AAA, 50's AAA, and 50's AA teams in Omaha, NE.">
-  <meta name="theme-color" content="#C8102E">
+  <meta name="theme-color" content="#0E0E0E">
   <title>Heroes Senior Softball</title>
   <link rel="icon" href="assets/img/favicon.ico">
+
+  <!-- ▼▼▼ ADDED: Google Fonts for Scoreboard Light theme ▼▼▼ -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800;900&family=Archivo+Narrow:wght@400;500;600;700&family=Geist:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- ▲▲▲ END Google Fonts ▲▲▲ -->
+
   <link rel="stylesheet" href="assets/css/style.css">
-  <!-- Preload key assets -->
+
+  <!-- ▼▼▼ ADDED: Scoreboard Light overlay (load AFTER style.css) ▼▼▼ -->
+  <link rel="stylesheet" href="assets/css/heroes-scoreboard.css">
+  <!-- ▲▲▲ END overlay CSS ▲▲▲ -->
+
   <link rel="preload" href="assets/img/heroes-logo.jpg" as="image">
 </head>
 <body>
@@ -19,23 +30,22 @@
     <a class="site-logo" data-route="/" href="#">
       <img src="assets/img/heroes-logo.jpg" alt="Heroes Logo" onerror="this.style.display='none'">
       <div class="site-logo-text">
-        <span class="org">Senior Softball</span>
+        <span class="org">Senior Softball · Omaha</span>
         <span class="name">Heroes <span>SSB</span></span>
       </div>
     </a>
     <nav id="main-nav" role="navigation" aria-label="Main navigation">
-      <!-- Built dynamically by app.js -->
+      <!-- Built dynamically by app.js / overlay -->
     </nav>
     <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Toggle menu">☰</button>
   </div>
   <div id="mobile-nav" aria-label="Mobile navigation">
-    <!-- Built dynamically by app.js -->
+    <!-- Built dynamically by app.js / overlay -->
   </div>
 </header>
 
 <!-- ════ MAIN CONTENT ═══════════════════════════════════════ -->
 <main id="main-content" role="main">
-  <!-- Pages rendered here by router -->
   <div style="display:flex;align-items:center;justify-content:center;min-height:400px">
     <div class="spinner"></div>
   </div>
@@ -43,14 +53,19 @@
 
 <!-- ════ SITE FOOTER ════════════════════════════════════════ -->
 <footer id="site-footer" role="contentinfo">
-  <!-- Built dynamically by app.js -->
+  <!-- Built dynamically by app.js / overlay -->
 </footer>
 
 <!-- ════ SCRIPTS ════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="assets/js/data.js"></script>
+<script src="assets/js/photo-picker.js"></script>
 <script src="assets/js/auth.js"></script>
 <script src="assets/js/app.js"></script>
+
+<!-- ▼▼▼ ADDED: IA overlay — must load AFTER app.js ▼▼▼ -->
+<script src="assets/js/heroes-scoreboard.js"></script>
+<!-- ▲▲▲ END overlay JS ▲▲▲ -->
 
 </body>
 </html>

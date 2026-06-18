@@ -143,11 +143,15 @@
 <!-- SCRIPTS -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="assets/js/data.js"></script>
+<script src="assets/js/photo-picker.js"></script>
 <script>
 'use strict';
 
 // ─── AUTH ─────────────────────────────────────────────────
 const ADMIN_ROLES = ['admin', 'manager', 'coach'];
+
+// Cached profile of the currently signed-in admin (set in showAdminLayout)
+let _adminProfile = null;
 
 function showForgotPassword() {
   document.getElementById('admin-login').innerHTML = `
@@ -333,6 +337,7 @@ async function doLogin() {
 }());
 
 function showAdminLayout(profile) {
+  _adminProfile = profile;
   document.getElementById('admin-login').style.display = 'none';
   document.getElementById('admin-layout').style.display = 'flex';
   // Show current user in sidebar footer if element exists
@@ -496,7 +501,7 @@ function renderDashboard() {
           <button class="btn btn-primary" onclick="showPage('stats-entry')">📝 Enter Game Stats</button>
           <button class="btn btn-secondary" onclick="showPage('games')">➕ Add New Game</button>
           <button class="btn btn-secondary" onclick="showPage('players')">👤 Add Player</button>
-          ${(function(){ const p=(loadData().accountRequests||[]).filter(r=>r.status==='pending').length; return p>0?`<button class="btn btn-danger" onclick="showPage('account-requests')">🆕 ${p} Pending Account Request${p>1?'s':''}</button>`:''; })()}
+          <button class="btn btn-secondary" onclick="showPage('account-requests')">🆕 Account Requests</button>
           <button class="btn btn-secondary" onclick="showPage('events')">📅 Add Event</button>
           <button class="btn btn-secondary" onclick="showPage('news')">📰 Add Announcement</button>
           <button class="btn btn-gold btn-sm" onclick="exportData()">⬇ Export All Data</button>
@@ -526,45 +531,313 @@ function renderDashboard() {
   `);
 }
 
-// ─── PLAYERS ──────────────────────────────────────────────
+// ─── PLAYERS / ROSTER MANAGEMENT ─────────────────────────
+let _rosterTeamFilter = 'all';
+
 function renderPlayers() {
   const data = loadData();
+  const activeCount = data.players.filter(p => p.active).length;
+
+  // Players shown in current view
+  const viewPlayers = _rosterTeamFilter === 'all'
+    ? data.players
+    : data.players.filter(p => p.teams.includes(_rosterTeamFilter));
+
+  // Players NOT on the selected team (for quick-assign dropdown)
+  const unassigned = _rosterTeamFilter === 'all' ? [] :
+    data.players.filter(p => p.active && !p.teams.includes(_rosterTeamFilter));
+
+  const teamTabStyle = (t) =>
+    `display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:none;background:none;` +
+    `font-size:12px;font-weight:700;letter-spacing:0.3px;cursor:pointer;border-bottom:3px solid ` +
+    `${_rosterTeamFilter===t.id?t.color:'transparent'};color:${_rosterTeamFilter===t.id?t.color:'var(--gray)'};` +
+    `transition:all 0.15s`;
+
   setContent(`
     <div class="admin-table-wrap">
       <div class="admin-table-header">
-        <h3>Player Roster (${data.players.filter(p=>p.active).length} active)</h3>
+        <h3>Roster Management <span style="font-size:12px;font-weight:600;color:var(--gray);margin-left:6px">${activeCount} active players</span></h3>
         <div style="display:flex;gap:8px">
-          <input type="text" placeholder="Search..." style="padding:7px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;outline:none" oninput="searchPlayers(this.value)">
-          <button class="btn btn-primary btn-sm" onclick="addPlayer()">+ Add Player</button>
+          <input type="text" placeholder="Search players…" id="player-search-input"
+            style="padding:7px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;outline:none"
+            oninput="searchPlayers(this.value)">
+          <button class="btn btn-primary btn-sm" onclick="addPlayer()">+ New Player</button>
         </div>
       </div>
+
+      <!-- Team tabs -->
+      <div style="display:flex;align-items:center;padding:0 8px;border-bottom:1px solid var(--border);background:#fafafa;overflow-x:auto">
+        <button style="display:inline-flex;align-items:center;padding:8px 14px;border:none;background:none;font-size:12px;font-weight:700;letter-spacing:0.3px;cursor:pointer;border-bottom:3px solid ${_rosterTeamFilter==='all'?'var(--red)':'transparent'};color:${_rosterTeamFilter==='all'?'var(--red)':'var(--gray)'}"
+          onclick="switchRosterTeam('all')">
+          ALL (${activeCount})
+        </button>
+        ${data.teams.map(t => {
+          const cnt = data.players.filter(p=>p.active&&p.teams.includes(t.id)).length;
+          return `<button style="${teamTabStyle(t)}" onclick="switchRosterTeam('${t.id}')">
+            <span style="width:8px;height:8px;border-radius:50%;background:${t.color};flex-shrink:0"></span>
+            ${t.shortName} (${cnt})
+          </button>`;
+        }).join('')}
+      </div>
+
+      <!-- Quick-assign bar (team view only) -->
+      ${_rosterTeamFilter !== 'all' ? `
+      <div style="padding:12px 20px;background:#f0fdf4;border-bottom:1px solid #bbf7d0;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-size:12px;font-weight:700;color:#15803d">ASSIGN PLAYER TO ROSTER:</span>
+        <select id="assign-player-sel" class="form-select" style="max-width:260px;padding:5px 10px;font-size:13px">
+          <option value="">Select existing player…</option>
+          ${unassigned.map(p=>`<option value="${p.id}">#${p.number||'?'} ${p.firstName} ${p.lastName}</option>`).join('')}
+        </select>
+        <button class="btn btn-sm" style="background:#15803d;color:#fff;border:none;padding:6px 14px;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer"
+          onclick="assignPlayerToTeam('${_rosterTeamFilter}')">Add to Roster</button>
+        <span style="font-size:11px;color:#6b7280;margin-left:4px">— or —</span>
+        <button class="btn btn-sm btn-secondary" onclick="addPlayer()">+ Create New Player</button>
+      </div>` : ''}
+
+      <!-- Player table -->
       <table class="admin-table" id="players-table">
-        <thead><tr><th>#</th><th>Name</th><th>Position</th><th>Teams</th><th>Bats/Throws</th><th>Since</th><th>Status</th><th>Actions</th></tr></thead>
-        <tbody>${data.players.map(p=>`
+        <thead><tr>
+          <th>#</th><th>Name</th><th>Position</th><th>Team(s)</th>
+          <th>B/T</th><th>Since</th><th>Status</th>
+          ${_adminProfile?.role==='admin'?'<th>Role</th>':''}
+          <th>Actions</th>
+        </tr></thead>
+        <tbody>${viewPlayers.map(p=>`
           <tr id="player-row-${p.id}">
-            <td><strong style="color:var(--red)">#${p.number}</strong></td>
-            <td><strong>${p.firstName} ${p.lastName}</strong></td>
-            <td>${p.position}</td>
-            <td>${p.teams.map(tid=>data.teams.find(t=>t.id===tid)?.shortName||tid).join(', ')}</td>
-            <td>${p.bats}/${p.throws}</td>
-            <td>${p.joinYear}</td>
+            <td><strong style="color:var(--red)">#${p.number||'—'}</strong></td>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="width:32px;height:32px;border-radius:50%;overflow:hidden;background:#f3f4f6;border:1px solid #e5e7eb;flex-shrink:0;display:flex;align-items:center;justify-content:center">
+                  ${p.photo
+                    ? `<img src="${p.photo}" style="width:100%;height:100%;object-fit:cover" onerror="this.parentElement.innerHTML='<span style=font-size:13px>👤</span>'">`
+                    : `<span style="font-size:13px">👤</span>`}
+                </div>
+                <strong>${p.firstName} ${p.lastName}</strong>
+              </div>
+            </td>
+            <td>${p.position||'—'}</td>
+            <td>${p.teams.map(tid=>{
+              const t=data.teams.find(x=>x.id===tid);
+              return t?`<span style="display:inline-block;padding:2px 7px;border-radius:3px;font-size:11px;font-weight:700;background:${t.color}22;color:${t.color};border:1px solid ${t.color}44">${t.shortName}</span>`:'';
+            }).join(' ')}</td>
+            <td>${p.bats||''}/${p.throws||''}</td>
+            <td>${p.joinYear||''}</td>
             <td><span style="padding:3px 8px;border-radius:20px;font-size:11px;font-weight:700;background:${p.active?'#dcfce7':'#f3f4f6'};color:${p.active?'#15803d':'#6b7280'}">${p.active?'Active':'Inactive'}</span></td>
-            <td style="display:flex;gap:6px">
+            ${_adminProfile?.role==='admin'?`<td id="player-role-${p.id}" style="min-width:80px"><span style="font-size:11px;color:#ccc">⋯</span></td>`:''}
+            <td style="display:flex;gap:6px;flex-wrap:wrap">
               <button class="action-btn action-edit" onclick="editPlayer('${p.id}')">Edit</button>
-              <button class="action-btn action-delete" onclick="deletePlayer('${p.id}')">Remove</button>
+              ${_adminProfile?.role==='admin'?`<button class="action-btn" style="background:#ede9fe;color:#5b21b6;border:none" onclick="setPlayerRole('${p.id}')">Role</button>`:''}
+              ${_rosterTeamFilter!=='all'?`<button class="action-btn action-delete" onclick="removeFromTeam('${p.id}','${_rosterTeamFilter}')">Remove</button>`:(p.active?`<button class="action-btn action-delete" onclick="deletePlayer('${p.id}')">Deactivate</button>`:`<button class="action-btn" style="background:#dcfce7;color:#15803d;border:none" onclick="reactivatePlayer('${p.id}')">ReActivate</button>`)}
             </td>
           </tr>`).join('')}
         </tbody>
       </table>
     </div>
   `);
+  // Async-load Supabase roles into the Role column (admin only)
+  if (_adminProfile?.role === 'admin') loadPlayerRoles();
 }
+
+window.switchRosterTeam = function(teamId) {
+  _rosterTeamFilter = teamId;
+  renderPlayers();
+};
 
 window.searchPlayers = function(q) {
   document.querySelectorAll('#players-table tbody tr').forEach(row => {
     row.style.display = q && !row.textContent.toLowerCase().includes(q.toLowerCase()) ? 'none' : '';
   });
 };
+
+window.assignPlayerToTeam = function(teamId) {
+  const sel = document.getElementById('assign-player-sel');
+  const playerId = sel?.value;
+  if (!playerId) { toast('Select a player first', 'warning'); return; }
+  const d = loadData();
+  const idx = d.players.findIndex(p => p.id === playerId);
+  if (idx < 0) return;
+  if (!d.players[idx].teams.includes(teamId)) d.players[idx].teams.push(teamId);
+  saveData(d); renderPlayers(); toast('Player added to roster!');
+};
+
+window.removeFromTeam = function(playerId, teamId) {
+  const d = loadData();
+  const p = d.players.find(x => x.id === playerId);
+  if (!p || !confirm(`Remove ${p.firstName} ${p.lastName} from this team roster?`)) return;
+  const idx = d.players.findIndex(x => x.id === playerId);
+  d.players[idx].teams = d.players[idx].teams.filter(t => t !== teamId);
+  saveData(d); renderPlayers(); toast('Player removed from roster');
+};
+
+// ─── ROLE MANAGEMENT (admin only) ────────────────────────
+
+const ROLE_PILL = {
+  admin:   'background:#fef3c7;color:#92400e',
+  manager: 'background:#ede9fe;color:#5b21b6',
+  coach:   'background:#dbeafe;color:#1e40af',
+  player:  'background:#f3f4f6;color:#374151',
+};
+
+// Fetch all profiles from Supabase and inject role badges into the table.
+async function loadPlayerRoles() {
+  try {
+    const sb = _getClient();
+    const { data: profiles } = await sb.from('profiles').select('email, role, approved');
+    if (!profiles) return;
+    const players = loadData().players;
+    players.forEach(p => {
+      const cell = document.getElementById('player-role-' + p.id);
+      if (!cell) return;
+      const profile = p.email
+        ? profiles.find(pr => pr.email?.toLowerCase() === p.email.toLowerCase())
+        : null;
+      if (profile) {
+        const r = profile.role || 'player';
+        const approved = profile.approved;
+        cell.innerHTML =
+          `<span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;${ROLE_PILL[r]||ROLE_PILL.player}">${r}</span>` +
+          (!approved ? `<br><span style="font-size:10px;color:#f59e0b;font-weight:600">pending</span>` : '');
+      } else {
+        cell.innerHTML = p.email
+          ? `<span style="font-size:11px;color:#ccc" title="No Supabase account for ${p.email}">no account</span>`
+          : `<span style="font-size:11px;color:#ddd">—</span>`;
+      }
+    });
+  } catch(e) {
+    console.warn('Could not load player roles:', e.message);
+  }
+}
+
+// Open a modal to directly set a player's Supabase role.
+window.setPlayerRole = async function(playerId) {
+  if (_adminProfile?.role !== 'admin') {
+    toast('Only admins can assign roles.', 'warning'); return;
+  }
+  const data   = loadData();
+  const player = data.players.find(p => p.id === playerId);
+  if (!player) return;
+
+  if (!player.email) {
+    toast('No email on file — add an email address to manage this player\'s role.', 'warning');
+    return;
+  }
+
+  const sb = _getClient();
+  const { data: profile } = await sb
+    .from('profiles')
+    .select('id, role, approved, display_name')
+    .eq('email', player.email.toLowerCase())
+    .maybeSingle();
+
+  if (!profile) {
+    openModal(
+      `No Account — ${player.firstName} ${player.lastName}`,
+      `<div style="text-align:center;padding:20px 0">
+        <div style="font-size:40px;margin-bottom:12px">👤</div>
+        <p style="font-size:14px;color:#555;line-height:1.7;margin:0">
+          No sign-in account found for <strong>${player.email}</strong>.<br>
+          The player must create an account via the public site before<br>
+          a role can be assigned.
+        </p>
+      </div>`,
+      null, null
+    );
+    return;
+  }
+
+  const roleOptions = [
+    { value: 'player',  label: 'Player',  desc: 'Standard member — availability & My Heroes only' },
+    { value: 'coach',   label: 'Coach',   desc: 'Team-level access to admin panel' },
+    { value: 'manager', label: 'Manager', desc: 'Roster & event management' },
+    { value: 'admin',   label: 'Admin',   desc: 'Full admin panel access' },
+  ];
+
+  openModal(
+    `Set Role — ${player.firstName} ${player.lastName}`,
+    `
+    <div style="margin-bottom:18px;padding:12px 16px;background:#f9fafb;border-radius:8px;display:flex;align-items:center;gap:14px">
+      <div style="width:40px;height:40px;border-radius:50%;background:#C8102E;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;flex-shrink:0">
+        ${player.firstName[0]}${player.lastName[0]||''}
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:700">${player.firstName} ${player.lastName}</div>
+        <div style="font-size:12px;color:#888">${player.email}</div>
+      </div>
+      <div style="margin-left:auto;text-align:right">
+        <div style="font-size:10px;font-weight:800;letter-spacing:0.5px;color:#aaa;margin-bottom:4px">CURRENT</div>
+        <span style="padding:3px 10px;border-radius:10px;font-size:12px;font-weight:700;${ROLE_PILL[profile.role]||ROLE_PILL.player}">${profile.role||'player'}</span>
+        ${!profile.approved ? '<div style="font-size:10px;color:#f59e0b;font-weight:600;margin-top:3px">⚠ Not yet approved</div>' : ''}
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Assign Role</label>
+      <select id="role-sel" class="form-select">
+        ${roleOptions.map(r =>
+          `<option value="${r.value}"${r.value === (profile.role||'player') ? ' selected' : ''}>
+            ${r.label} — ${r.desc}
+          </option>`
+        ).join('')}
+      </select>
+    </div>
+
+    ${!profile.approved ? `
+    <label class="form-check" style="margin-top:12px;display:flex;align-items:center;gap:8px;cursor:pointer">
+      <input type="checkbox" id="role-approve" checked>
+      <span style="font-size:13px">Also approve this account now</span>
+    </label>` : ''}
+    `,
+    'Save Role',
+    async () => {
+      const newRole = document.getElementById('role-sel').value;
+      const approveEl = document.getElementById('role-approve');
+      const updates = { role: newRole };
+      if (approveEl?.checked) updates.approved = true;
+
+      const { error } = await sb.from('profiles').update(updates).eq('id', profile.id);
+      if (error) { toast('Error saving role: ' + error.message, 'error'); return; }
+
+      closeModal();
+      toast(`${player.firstName} ${player.lastName} → ${newRole}`, 'success');
+      loadPlayerRoles(); // refresh badges in table
+    }
+  );
+};
+
+// ─── PLAYER PHOTO PICKER ──────────────────────────────────────
+
+function adminClearPhoto() {
+  document.getElementById('pf-photo').value          = '';
+  document.getElementById('pf-photo-url-label').textContent = 'No photo set';
+  document.getElementById('pf-photo-thumb').innerHTML = '<span style="font-size:22px">👤</span>';
+}
+
+function adminOpenPhotoPicker(playerId, teamsStr) {
+  const teams      = teamsStr ? String(teamsStr).split(',').filter(Boolean) : [];
+  const currentUrl = document.getElementById('pf-photo')?.value || '';
+  const teamId     = teams.length ? teams[0] : 'general';
+
+  if (typeof showPhotoPickerModal !== 'function') {
+    alert('Photo picker not available. Ensure photo-picker.js is loaded.');
+    return;
+  }
+
+  showPhotoPickerModal({
+    currentUrl,
+    teamId,
+    playerId: playerId || 'new-player',
+    onSave(url) {
+      document.getElementById('pf-photo').value             = url;
+      document.getElementById('pf-photo-url-label').textContent = url;
+      const thumb = document.getElementById('pf-photo-thumb');
+      if (thumb) {
+        thumb.innerHTML = `<img src="${url}"
+          style="width:100%;height:100%;object-fit:cover"
+          onerror="this.parentElement.innerHTML='<span style=font-size:22px>👤</span>'">`;
+      }
+    },
+  });
+}
 
 function addPlayer() {
   const data = loadData();
@@ -575,8 +848,8 @@ function addPlayer() {
       id, firstName: val('pf-first'), lastName: val('pf-last'), number: val('pf-num'),
       position: val('pf-pos'), teams: Array.from(document.querySelectorAll('.pf-team:checked')).map(c=>c.value),
       bats: val('pf-bats'), throws: val('pf-throws'), joinYear: parseInt(val('pf-year')||new Date().getFullYear()),
-      active: document.getElementById('pf-active').checked, photo: '', email: val('pf-email'),
-      credentials: { username: val('pf-username'), password: val('pf-password') }
+      active: document.getElementById('pf-active').checked, photo: val('pf-photo'), email: val('pf-email'),
+      credentials: { username: '', password: '' }
     });
     saveData(d); closeModal(); renderPlayers(); toast('Player added!');
   });
@@ -594,8 +867,8 @@ function editPlayer(id) {
       position: val('pf-pos'), teams: Array.from(document.querySelectorAll('.pf-team:checked')).map(c=>c.value),
       bats: val('pf-bats'), throws: val('pf-throws'), joinYear: parseInt(val('pf-year')),
       active: document.getElementById('pf-active').checked, email: val('pf-email'),
-      photo: val('pf-photo'),
-      credentials: { username: val('pf-username'), password: val('pf-password') }
+      photo: val('pf-photo')
+      // credentials intentionally not updated here — passwords managed via Supabase Auth
     };
     saveData(d); closeModal(); renderPlayers(); toast('Player updated!');
   });
@@ -606,6 +879,28 @@ function deletePlayer(id) {
   const d = loadData(); const idx = d.players.findIndex(p=>p.id===id);
   d.players[idx].active = false; saveData(d); renderPlayers(); toast('Player removed');
 }
+
+function reactivatePlayer(id) {
+  const d = loadData(); const idx = d.players.findIndex(p=>p.id===id);
+  if (idx < 0) return;
+  d.players[idx].active = true; saveData(d); renderPlayers(); toast('Player reactivated');
+}
+
+window.sendPlayerPasswordReset = async function(email, name) {
+  if (!email) { toast('No email address on file for this player.', 'warning'); return; }
+  try {
+    const sb = _getClient();
+    const origin = window.location.origin;
+    const base = window.location.pathname.replace(/admin\.html$/, '');
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: origin + base + 'index.html'
+    });
+    if (error) throw error;
+    toast(`Password reset email sent to ${email}`, 'success');
+  } catch(e) {
+    toast('Could not send reset email: ' + (e.message || 'Unknown error'), 'error');
+  }
+};
 
 function buildPlayerForm(p, data) {
   const pos = ['P','C','1B','2B','3B','SS','OF','LF','CF','RF','DH','UT'];
@@ -641,17 +936,42 @@ function buildPlayerForm(p, data) {
       <div class="form-group"><label class="form-label">Year Joined</label><input id="pf-year" type="number" class="form-input" value="${p?.joinYear||2024}"></div>
       <div class="form-group"><label class="form-label">Email</label><input id="pf-email" type="email" class="form-input" value="${p?.email||''}"></div>
     </div>
-    <div class="form-group"><label class="form-label">Photo URL</label><input id="pf-photo" class="form-input" placeholder="https://..." value="${p?.photo||''}">
-      <div class="form-hint">Link to player photo (optional)</div>
+    <div class="form-group">
+      <label class="form-label">Player Photo</label>
+      <div class="ph-widget">
+        <div class="ph-widget-thumb" id="pf-photo-thumb">
+          ${p?.photo
+            ? `<img src="${p.photo}" onerror="this.parentElement.innerHTML='<span style=font-size:22px>👤</span>'">`
+            : `<span style="font-size:22px">👤</span>`}
+        </div>
+        <div class="ph-widget-right">
+          <div class="ph-widget-url" id="pf-photo-url-label">${p?.photo ? p.photo : 'No photo set'}</div>
+          <input type="hidden" id="pf-photo" value="${p?.photo||''}">
+          <div class="ph-widget-btns">
+            <button type="button" class="btn btn-sm btn-primary"
+              onclick="adminOpenPhotoPicker('${p?.id||''}','${(p?.teams||[]).join(',')}')">
+              📤 Upload / Gallery
+            </button>
+            ${p?.photo ? `<button type="button" class="btn btn-sm" style="color:#dc2626;border-color:#fca5a5"
+              onclick="adminClearPhoto()">✕ Remove</button>` : ''}
+          </div>
+        </div>
+      </div>
+      <div class="form-hint" style="margin-top:8px">Upload a new photo or pick from this team's player gallery.</div>
     </div>
     <label class="form-check"><input type="checkbox" id="pf-active"${p?.active!==false?' checked':''}> Active player</label>
-    <hr style="margin:16px 0;border-color:var(--border)">
-    <div style="font-weight:600;font-size:13px;margin-bottom:8px;color:var(--dark)">🔑 Player Login Credentials</div>
-    <div class="form-hint" style="margin-bottom:12px">Players use these to log in on the public site and mark tournament attendance.</div>
-    <div class="form-row">
-      <div class="form-group"><label class="form-label">Username</label><input id="pf-username" class="form-input" placeholder="e.g. jsmith" value="${p?.credentials?.username||''}"></div>
-      <div class="form-group"><label class="form-label">Password</label><input id="pf-password" class="form-input" placeholder="Set login password" value="${p?.credentials?.password||''}"></div>
-    </div>
+    ${p?.email ? `
+    <div style="margin-top:16px;padding:12px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div>
+        <div style="font-size:12px;font-weight:800;color:#15803d;margin-bottom:2px">PASSWORD RESET</div>
+        <div style="font-size:12px;color:#555">Send a reset link to <strong>${p.email}</strong></div>
+      </div>
+      <button type="button" class="btn btn-sm" style="background:#15803d;color:#fff;border:none;white-space:nowrap"
+        onclick="sendPlayerPasswordReset('${p.email}','${p.firstName}')">📧 Send Reset Email</button>
+    </div>` : `
+    <div style="margin-top:16px;padding:10px 14px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;color:#6b7280">
+      💡 Add an email address above to enable password reset for this player.
+    </div>`}
   `;
 }
 
@@ -1557,178 +1877,389 @@ window.saveSettings = function() {
 };
 
 // ─── ACCOUNT REQUESTS ─────────────────────────────────────
-function updateReqBadge() {
-  const d = loadData();
-  const count = (d.accountRequests || []).filter(r => r.status === 'pending').length;
+
+/**
+ * canApproveRole(adminRole, targetRole)
+ * Returns true if an admin with adminRole can approve a user requesting targetRole.
+ *   admin   → can approve anything
+ *   manager → can approve coach or player
+ *   coach   → can approve player registrations only
+ */
+function canApproveRole(adminRole, targetRole) {
+  if (adminRole === 'admin')   return true;
+  if (adminRole === 'manager') return ['coach', 'player'].includes(targetRole);
+  if (adminRole === 'coach')   return targetRole === 'player';
+  return false;
+}
+
+async function updateReqBadge() {
   const badge = document.getElementById('req-badge');
-  if (badge) {
-    badge.textContent = count;
-    badge.style.display = count > 0 ? 'inline-block' : 'none';
+  if (!badge) return;
+  try {
+    const sb = _getClient();
+    const adminRole = _adminProfile?.role || 'coach';
+
+    // Count new registrations (unapproved accounts)
+    const { count: regCount } = await sb
+      .from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('approved', false);
+
+    // Count role upgrade requests this admin can act on
+    const { data: upgradeReqs } = await sb
+      .from('profiles')
+      .select('pending_role')
+      .eq('approved', true)
+      .not('pending_role', 'is', null);
+
+    const upgradeCount = (upgradeReqs || [])
+      .filter(r => canApproveRole(adminRole, r.pending_role)).length;
+
+    const total = (regCount || 0) + upgradeCount;
+    badge.textContent = total;
+    badge.style.display = total > 0 ? 'inline-block' : 'none';
+  } catch (err) {
+    console.warn('updateReqBadge error:', err.message);
+    badge.style.display = 'none';
   }
 }
 
-function renderAccountRequests() {
-  const d = loadData();
-  const requests = (d.accountRequests || []).sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
-  const pending = requests.filter(r => r.status === 'pending');
-  const reviewed = requests.filter(r => r.status !== 'pending');
+async function renderAccountRequests() {
+  setContent('<div style="padding:40px;text-align:center"><div class="spinner" style="margin:0 auto;width:36px;height:36px;border:3px solid #eee;border-top-color:#C8102E;border-radius:50%;animation:spin 0.7s linear infinite"></div><p style="margin-top:16px;color:#888">Loading requests…</p></div>');
+  try {
+    const sb = _getClient();
+    const adminRole = _adminProfile?.role || 'coach';
 
-  const pendingRows = pending.length ? pending.map(r => `
-    <tr>
-      <td>
-        <strong>${r.firstName} ${r.lastName}</strong><br>
-        <span style="font-size:11px;color:#888">${r.email || 'No email'}</span>
-      </td>
-      <td><code style="background:#f3f4f6;padding:2px 6px;border-radius:4px">${r.username}</code></td>
-      <td>${r.number ? '#' + r.number : '—'} · ${r.position || '—'}</td>
-      <td>${(r.teams || []).map(tid => {
-        const team = d.teams.find(t => t.id === tid);
-        return team ? `<span style="font-size:11px;background:#f3f4f6;padding:2px 6px;border-radius:10px">${team.shortName}</span>` : '';
-      }).join(' ')}</td>
-      <td style="font-size:12px;color:#888">${r.requestedAt}</td>
-      <td style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-        <button class="action-btn action-edit" onclick="approveAsNew('${r.id}')">✅ Approve (New Player)</button>
-        <button class="action-btn action-view" onclick="showLinkExisting('${r.id}')">🔗 Link Existing</button>
-        <button class="action-btn action-delete" onclick="denyRequest('${r.id}')">❌ Deny</button>
-      </td>
-    </tr>`).join('') :
-    '<tr><td colspan="6" style="text-align:center;padding:32px;color:#888">No pending requests</td></tr>';
+    // ── Section 1: New registrations (unapproved accounts) ──
+    const { data: newRegs, error: regErr } = await sb
+      .from('profiles')
+      .select('id, email, display_name, pending_role, created_at')
+      .eq('approved', false)
+      .order('created_at', { ascending: true });
+    if (regErr) throw regErr;
 
-  const reviewedRows = reviewed.length ? reviewed.map(r => `
-    <tr style="opacity:0.7">
-      <td><strong>${r.firstName} ${r.lastName}</strong></td>
-      <td><code style="background:#f3f4f6;padding:2px 6px;border-radius:4px">${r.username}</code></td>
-      <td><span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;
-        background:${r.status==='approved'?'#dcfce7':'#fee2e2'};
-        color:${r.status==='approved'?'#166534':'#991b1b'}">${r.status}</span></td>
-      <td style="font-size:12px;color:#888">${r.reviewedAt || '—'}</td>
-      <td style="font-size:12px;color:#888">${r.reviewNotes || ''}</td>
-      <td><button class="action-btn action-delete" onclick="deleteRequest('${r.id}')">Remove</button></td>
-    </tr>`).join('') :
-    '<tr><td colspan="6" style="text-align:center;padding:16px;color:#888;font-size:12px">No reviewed requests</td></tr>';
+    // ── Section 2: Role upgrade requests ────────────────────
+    const { data: upgradeReqs, error: upErr } = await sb
+      .from('profiles')
+      .select('id, email, display_name, role, pending_role, created_at')
+      .eq('approved', true)
+      .not('pending_role', 'is', null)
+      .order('created_at', { ascending: true });
+    if (upErr) throw upErr;
 
-  setContent(`
-    <div class="admin-table-wrap" style="margin-bottom:24px">
-      <div class="admin-table-header">
-        <h3>⏳ Pending Requests <span style="background:#C8102E;color:#fff;border-radius:10px;padding:2px 9px;font-size:12px;margin-left:8px">${pending.length}</span></h3>
+    // Filter upgrades to only those this admin can act on
+    const actionableUpgrades = (upgradeReqs || [])
+      .filter(r => canApproveRole(adminRole, r.pending_role));
+
+    const roleLabel = r => r ? r.charAt(0).toUpperCase() + r.slice(1) : '—';
+
+    const timeAgo = iso => {
+      if (!iso) return '—';
+      const diff = Math.floor((Date.now() - new Date(iso)) / 60000);
+      if (diff < 60)   return diff + 'm ago';
+      if (diff < 1440) return Math.floor(diff / 60) + 'h ago';
+      return Math.floor(diff / 1440) + 'd ago';
+    };
+
+    const rolePillStyle = role => {
+      const map = {
+        admin:   'background:#fef3c7;color:#92400e',
+        manager: 'background:#ede9fe;color:#5b21b6',
+        coach:   'background:#dbeafe;color:#1e40af',
+        player:  'background:#f3f4f6;color:#374151',
+      };
+      return map[role] || map.player;
+    };
+
+    // Build new registrations rows
+    const regRows = (newRegs || []).length
+      ? (newRegs || []).map(r => {
+          const requestedRole = r.pending_role || 'player';
+          const canAct = canApproveRole(adminRole, requestedRole);
+          const rolePill = `<span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;${rolePillStyle(requestedRole)}">${roleLabel(requestedRole)}</span>`;
+          const actions = canAct
+            ? `<button class="action-btn action-edit" onclick="approveProfile('${r.id}','${requestedRole}')">✅ Approve</button>
+               <button class="action-btn action-delete" onclick="denyProfile('${r.id}')">❌ Deny</button>`
+            : `<span style="font-size:12px;color:#aaa;font-style:italic">Higher approval required</span>`;
+          return `<tr>
+            <td><strong>${r.display_name || '—'}</strong><br><span style="font-size:11px;color:#888">${r.email}</span></td>
+            <td>${rolePill}</td>
+            <td style="font-size:12px;color:#888">${timeAgo(r.created_at)}</td>
+            <td style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${actions}</td>
+          </tr>`;
+        }).join('')
+      : '<tr><td colspan="4" style="text-align:center;padding:32px;color:#888">No pending registrations</td></tr>';
+
+    // Build role upgrade rows
+    const upgradeRows = actionableUpgrades.length
+      ? actionableUpgrades.map(r => {
+          const fromPill = `<span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;${rolePillStyle(r.role)}">${roleLabel(r.role)}</span>`;
+          const toPill   = `<span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;${rolePillStyle(r.pending_role)}">${roleLabel(r.pending_role)}</span>`;
+          return `<tr>
+            <td><strong>${r.display_name || '—'}</strong><br><span style="font-size:11px;color:#888">${r.email}</span></td>
+            <td>${fromPill} → ${toPill}</td>
+            <td style="font-size:12px;color:#888">${timeAgo(r.created_at)}</td>
+            <td style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+              <button class="action-btn action-edit" onclick="approveRoleUpgrade('${r.id}')">✅ Approve</button>
+              <button class="action-btn action-delete" onclick="denyRoleUpgrade('${r.id}')">❌ Deny</button>
+            </td>
+          </tr>`;
+        }).join('')
+      : '<tr><td colspan="4" style="text-align:center;padding:20px;color:#888;font-size:12px">No pending role upgrade requests</td></tr>';
+
+    setContent(`
+      ${_adminProfile?.role === 'admin' ? `
+      <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
+        <button class="btn btn-primary" onclick="showCreateUserModal()">
+          ➕ Create User
+        </button>
+      </div>` : ''}
+
+      <div class="admin-table-wrap" style="margin-bottom:24px">
+        <div class="admin-table-header">
+          <h3>⏳ New Registrations
+            <span style="background:#C8102E;color:#fff;border-radius:10px;padding:2px 9px;font-size:12px;margin-left:8px">${(newRegs || []).length}</span>
+          </h3>
+        </div>
+        <div style="padding:0 16px 16px;font-size:13px;color:#666">
+          New accounts awaiting approval. Approving sets the user's role and grants full access.
+        </div>
+        <table class="admin-table">
+          <thead><tr><th>Name / Email</th><th>Requested Role</th><th>Requested</th><th>Actions</th></tr></thead>
+          <tbody>${regRows}</tbody>
+        </table>
       </div>
-      <div style="padding:0 16px 16px;font-size:13px;color:#666">
-        <strong>Approve as New Player</strong> — creates a new player record with their info and credentials.<br>
-        <strong>Link to Existing</strong> — adds their login credentials to an existing player record (use when the player is already in the system).
+
+      <div class="admin-table-wrap">
+        <div class="admin-table-header">
+          <h3>↑ Role Upgrade Requests
+            <span style="background:#6366f1;color:#fff;border-radius:10px;padding:2px 9px;font-size:12px;margin-left:8px">${actionableUpgrades.length}</span>
+          </h3>
+        </div>
+        <div style="padding:0 16px 16px;font-size:13px;color:#666">
+          Approved members requesting a role upgrade. Only requests you have permission to grant are shown here.
+        </div>
+        <table class="admin-table">
+          <thead><tr><th>Name / Email</th><th>Role Change</th><th>Requested</th><th>Actions</th></tr></thead>
+          <tbody>${upgradeRows}</tbody>
+        </table>
       </div>
-      <div id="link-existing-panel" style="display:none;padding:16px;background:#fefce8;border-top:1px solid #fde68a">
-        <strong style="font-size:13px">Select existing player to link credentials to:</strong>
-        <div id="link-player-list" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px"></div>
-        <button class="btn btn-secondary btn-sm" style="margin-top:10px" onclick="document.getElementById('link-existing-panel').style.display='none'">Cancel</button>
-      </div>
-      <table class="admin-table">
-        <thead><tr><th>Name</th><th>Username</th><th>Jersey / Pos</th><th>Teams</th><th>Requested</th><th>Actions</th></tr></thead>
-        <tbody id="pending-tbody">${pendingRows}</tbody>
-      </table>
-    </div>
-
-    <div class="admin-table-wrap">
-      <div class="admin-table-header"><h3>✅ Reviewed Requests</h3></div>
-      <table class="admin-table">
-        <thead><tr><th>Name</th><th>Username</th><th>Status</th><th>Reviewed</th><th>Notes</th><th>Actions</th></tr></thead>
-        <tbody>${reviewedRows}</tbody>
-      </table>
-    </div>
-  `);
-}
-
-function approveAsNew(reqId) {
-  const d = loadData();
-  const req = d.accountRequests.find(r => r.id === reqId);
-  if (!req) return;
-
-  // Check username not already taken
-  if (d.players.some(p => p.credentials?.username === req.username)) {
-    toast('Username already exists — use "Link Existing" instead.', 'danger'); return;
+    `);
+  } catch (err) {
+    setContent(`<div style="padding:40px;text-align:center;color:#dc2626">
+      <strong>Error loading requests:</strong> ${err.message}
+    </div>`);
   }
-
-  const newPlayer = {
-    id: 'p' + Date.now(),
-    firstName: req.firstName, lastName: req.lastName,
-    number: req.number || '', position: req.position || 'UT',
-    teams: req.teams || [], bats: 'R', throws: 'R',
-    joinYear: new Date().getFullYear(), active: true,
-    photo: '', email: req.email || '', phone: req.phone || '',
-    credentials: { username: req.username, password: req.password }
-  };
-  d.players.push(newPlayer);
-
-  const idx = d.accountRequests.findIndex(r => r.id === reqId);
-  d.accountRequests[idx].status = 'approved';
-  d.accountRequests[idx].reviewedAt = new Date().toISOString().split('T')[0];
-  d.accountRequests[idx].reviewNotes = 'Approved as new player';
-  d.accountRequests[idx].playerId = newPlayer.id;
-  saveData(d);
-  toast(`✅ Account approved! ${req.firstName} ${req.lastName} is now a player.`);
-  renderAccountRequests();
-  updateReqBadge();
 }
 
-let _linkingReqId = null;
-function showLinkExisting(reqId) {
-  _linkingReqId = reqId;
-  const d = loadData();
-  const req = d.accountRequests.find(r => r.id === reqId);
-  const panel = document.getElementById('link-existing-panel');
-  const list = document.getElementById('link-player-list');
-  if (!panel || !list || !req) return;
-
-  list.innerHTML = d.players.filter(p => p.active).map(p => `
-    <button class="btn btn-secondary btn-sm" onclick="confirmLinkExisting('${reqId}','${p.id}')">
-      ${p.firstName} ${p.lastName} #${p.number}
-    </button>`).join('');
-  panel.style.display = 'block';
-  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+async function approveProfile(profileId, grantRole) {
+  if (!confirm(`Approve this account as ${grantRole}?`)) return;
+  try {
+    const sb = _getClient();
+    const { error } = await sb.from('profiles').update({
+      approved: true,
+      role: grantRole,
+      pending_role: null,
+      rejection_reason: null,
+    }).eq('id', profileId);
+    if (error) throw error;
+    toast(`✅ Account approved as ${grantRole}!`);
+    renderAccountRequests();
+    updateReqBadge();
+  } catch (err) {
+    toast('Error: ' + err.message, 'danger');
+  }
 }
 
-function confirmLinkExisting(reqId, playerId) {
-  const d = loadData();
-  const req = d.accountRequests.find(r => r.id === reqId);
-  const pIdx = d.players.findIndex(p => p.id === playerId);
-  if (!req || pIdx < 0) return;
-
-  if (!confirm(`Link @${req.username} login to ${d.players[pIdx].firstName} ${d.players[pIdx].lastName}?`)) return;
-
-  d.players[pIdx].credentials = { username: req.username, password: req.password };
-  if (req.email) d.players[pIdx].email = req.email;
-
-  const rIdx = d.accountRequests.findIndex(r => r.id === reqId);
-  d.accountRequests[rIdx].status = 'approved';
-  d.accountRequests[rIdx].reviewedAt = new Date().toISOString().split('T')[0];
-  d.accountRequests[rIdx].reviewNotes = 'Linked to existing player';
-  d.accountRequests[rIdx].playerId = playerId;
-  saveData(d);
-  toast(`✅ Credentials linked to ${d.players[pIdx].firstName} ${d.players[pIdx].lastName}`);
-  renderAccountRequests();
-  updateReqBadge();
-}
-
-function denyRequest(reqId) {
-  const reason = prompt('Optional: reason for denial (shown in log only)');
+async function denyProfile(profileId) {
+  const reason = prompt('Reason for denial (optional — may be shown to the user):');
   if (reason === null) return; // cancelled
-  const d = loadData();
-  const idx = d.accountRequests.findIndex(r => r.id === reqId);
-  if (idx < 0) return;
-  d.accountRequests[idx].status = 'denied';
-  d.accountRequests[idx].reviewedAt = new Date().toISOString().split('T')[0];
-  d.accountRequests[idx].reviewNotes = reason || '';
-  saveData(d);
-  toast('Request denied.', 'danger');
-  renderAccountRequests();
-  updateReqBadge();
+  try {
+    const sb = _getClient();
+    const { error } = await sb.from('profiles').update({
+      rejection_reason: reason || null,
+    }).eq('id', profileId);
+    if (error) throw error;
+    toast('Registration denied.');
+    renderAccountRequests();
+    updateReqBadge();
+  } catch (err) {
+    toast('Error: ' + err.message, 'danger');
+  }
 }
 
-function deleteRequest(reqId) {
-  if (!confirm('Remove this request record?')) return;
-  const d = loadData();
-  d.accountRequests = d.accountRequests.filter(r => r.id !== reqId);
-  saveData(d);
-  renderAccountRequests();
+async function approveRoleUpgrade(profileId) {
+  try {
+    const sb = _getClient();
+    const { data: prof, error: fetchErr } = await sb
+      .from('profiles').select('pending_role, display_name').eq('id', profileId).single();
+    if (fetchErr) throw fetchErr;
+    if (!prof?.pending_role) { toast('No pending role found.', 'danger'); return; }
+    if (!confirm(`Approve ${prof.display_name || 'this user'} as ${prof.pending_role}?`)) return;
+
+    const { error } = await sb.from('profiles').update({
+      role: prof.pending_role,
+      pending_role: null,
+      rejection_reason: null,
+    }).eq('id', profileId);
+    if (error) throw error;
+    toast(`✅ Role upgraded to ${prof.pending_role}!`);
+    renderAccountRequests();
+    updateReqBadge();
+  } catch (err) {
+    toast('Error: ' + err.message, 'danger');
+  }
+}
+
+async function denyRoleUpgrade(profileId) {
+  const reason = prompt('Reason for denial (optional — may be shown to the user):');
+  if (reason === null) return; // cancelled
+  try {
+    const sb = _getClient();
+    const { error } = await sb.from('profiles').update({
+      pending_role: null,
+      rejection_reason: reason || null,
+    }).eq('id', profileId);
+    if (error) throw error;
+    toast('Role upgrade request denied.');
+    renderAccountRequests();
+    updateReqBadge();
+  } catch (err) {
+    toast('Error: ' + err.message, 'danger');
+  }
+}
+
+// ─── ADMIN: CREATE USER ──────────────────────────────────────
+// Admin picks email/name/role; we auto-generate a temp password, send it to
+// the user via the admin-create-user Edge Function, and flag the profile so
+// the user is forced to change the password on first login.
+
+function generateTempPassword() {
+  // 12 chars, no ambiguous lookalikes (0/O, 1/l/I), at least one of each class.
+  const upper  = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lower  = 'abcdefghijkmnopqrstuvwxyz';
+  const digits = '23456789';
+  const symbols= '!@#$%&*?';
+  const all = upper + lower + digits + symbols;
+  const rand = arr => arr[Math.floor(Math.random() * arr.length)];
+  // Guarantee one of each class, then fill the rest from the union.
+  let pw = [rand(upper), rand(lower), rand(digits), rand(symbols)];
+  while (pw.length < 12) pw.push(rand(all));
+  // Shuffle so the guaranteed chars aren't always at the front.
+  for (let i = pw.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pw[i], pw[j]] = [pw[j], pw[i]];
+  }
+  return pw.join('');
+}
+
+function showCreateUserModal() {
+  if (_adminProfile?.role !== 'admin') {
+    toast('Only admins can create users.', 'warning');
+    return;
+  }
+  const tempPw = generateTempPassword();
+  openModal('Create User', `
+    <div class="form-group">
+      <label class="form-label">Email</label>
+      <input type="email" class="form-input" id="cu-email" placeholder="player@example.com" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Display Name</label>
+      <input type="text" class="form-input" id="cu-name" placeholder="First Last" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Role</label>
+      <select class="form-select" id="cu-role">
+        <option value="player" selected>Player</option>
+        <option value="coach">Coach</option>
+        <option value="manager">Manager</option>
+        <option value="admin">Admin</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Temporary Password</label>
+      <div style="display:flex;gap:8px">
+        <input type="text" class="form-input" id="cu-temp-pw" value="${tempPw}" style="font-family:monospace">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('cu-temp-pw').value = generateTempPassword()">🎲 Regen</button>
+      </div>
+      <div style="font-size:12px;color:#888;margin-top:6px">
+        The user will be emailed this password and forced to change it on first sign-in.
+      </div>
+    </div>
+    <div id="cu-error" style="color:#dc2626;font-size:13px;min-height:18px;margin-top:8px"></div>
+  `, 'Create & Email', submitCreateUser);
+}
+
+async function submitCreateUser() {
+  const email = document.getElementById('cu-email')?.value.trim().toLowerCase() || '';
+  const name  = document.getElementById('cu-name')?.value.trim() || '';
+  const role  = document.getElementById('cu-role')?.value || 'player';
+  const tempPassword = document.getElementById('cu-temp-pw')?.value || '';
+  const errEl = document.getElementById('cu-error');
+
+  if (errEl) errEl.textContent = '';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { if (errEl) errEl.textContent = 'Enter a valid email.'; return; }
+  if (!name) { if (errEl) errEl.textContent = 'Display name is required.'; return; }
+  if (tempPassword.length < 8) { if (errEl) errEl.textContent = 'Temp password must be at least 8 characters.'; return; }
+
+  const saveBtn = document.getElementById('modal-save-btn');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Creating…'; }
+
+  try {
+    const sb = _getClient();
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session?.access_token) throw new Error('Your admin session expired. Sign in again.');
+
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/admin-create-user`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ email, displayName: name, role, tempPassword }),
+    });
+
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+
+    // Success — replace modal body with a confirmation that includes the
+    // temp password for the admin to copy if email delivery failed.
+    const emailMsg = body.emailSent
+      ? `✉️ Temp password emailed to <strong>${email}</strong>.`
+      : `⚠ Email NOT sent: ${body.emailError || 'unknown reason'}. Share the password below manually.`;
+
+    document.getElementById('modal-body').innerHTML = `
+      <div style="text-align:center;padding:8px 0">
+        <div style="font-size:48px;line-height:1">✅</div>
+        <h3 style="margin:8px 0 4px">User Created</h3>
+        <p style="color:#666;font-size:13px;margin:0 0 16px">${emailMsg}</p>
+        <div style="background:#f5f5f5;border-radius:8px;padding:14px;text-align:left">
+          <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#666;letter-spacing:0.5px">Temp password</div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+            <code id="cu-result-pw" style="flex:1;font-size:14px;background:#fff;padding:8px 10px;border-radius:6px;border:1px solid #ddd">${tempPassword}</code>
+            <button class="btn btn-secondary" type="button" onclick="navigator.clipboard.writeText(document.getElementById('cu-result-pw').textContent); toast('Copied to clipboard');">📋 Copy</button>
+          </div>
+        </div>
+        <p style="color:#888;font-size:12px;margin-top:16px">${escapeHtmlAdmin(name)} will be required to change this on first sign-in.</p>
+      </div>`;
+    if (saveBtn) saveBtn.style.display = 'none';
+    document.getElementById('modal-title').textContent = 'User Created';
+    toast(`User ${email} created`, 'success');
+    // Refresh the page so the new account doesn't show up as a duplicate
+    // pending request (admin-created accounts are pre-approved).
+    renderAccountRequests();
+  } catch (err) {
+    if (errEl) errEl.textContent = err.message || 'Could not create user.';
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Create & Email'; }
+  }
+}
+
+function escapeHtmlAdmin(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 // ─── DATA MANAGEMENT ──────────────────────────────────────
