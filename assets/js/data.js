@@ -395,6 +395,34 @@ function getLeaders(stat, limit = 5, filters = {}) {
   return results.slice(0, limit);
 }
 
+function getAvailableSeasons() {
+  const data = loadData();
+  const yearSet = new Set();
+  data.players.forEach(p => {
+    if (p.seasonStats) Object.keys(p.seasonStats).forEach(y => yearSet.add(y));
+  });
+  return [...yearSet].sort().reverse();
+}
+
+function getSeasonLeaders(stat, year, teamId, n = 5) {
+  const data = loadData();
+  let players = data.players.filter(p => p.active);
+  if (teamId && teamId !== 'all') players = players.filter(p => (p.teams || []).includes(teamId));
+  return players
+    .map(p => {
+      const s = (year === 'all') ? p.careerStats : (p.seasonStats && p.seasonStats[year]);
+      if (!s) return null;
+      const val = s[stat];
+      if (val == null) return null;
+      const numVal = typeof val === 'string' ? parseFloat(val) : Number(val);
+      if (isNaN(numVal)) return null;
+      return { player: p, stats: s, sortVal: numVal };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.sortVal - a.sortVal)
+    .slice(0, n);
+}
+
 // ─── SUPABASE CONFIG ──────────────────────────────────────
 // Replace these two values after creating your Supabase project
 const SUPABASE_URL     = 'https://mpgbgucmnxowteonldoh.supabase.co';
