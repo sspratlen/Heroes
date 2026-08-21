@@ -1027,7 +1027,7 @@ function buildTeamForm(t) {
     </div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Division</label>
-        <select id="tf-div" class="form-select">${['AAA','AA','A'].map(x=>`<option${t?.division===x?' selected':''}>${x}</option>`).join('')}</select>
+        <select id="tf-div" class="form-select">${['AAA','AA','A','Majors','Majors Plus'].map(x=>`<option${t?.division===x?' selected':''}>${x}</option>`).join('')}</select>
       </div>
       <div class="form-group"><label class="form-label">Age Group</label><input id="tf-age" type="number" class="form-input" value="${t?.ageGroup||50}"></div>
     </div>
