@@ -118,7 +118,7 @@ const PlayerAuth = {
       PlayerAuth.hideLoginModal();
       PlayerAuth.refreshNavAuth();
       // Refresh current page if it shows attendance
-      if (window.location.hash.includes('/tournaments')) {
+      if (window.location.hash.includes('/events')) {
         Router.dispatch();
       } else {
         Router.navigate('/my-schedule');
@@ -129,53 +129,8 @@ const PlayerAuth = {
     }
   },
 
-  // ── CHANGE PASSWORD ───────────────────────────────────────
-  showChangePasswordModal() {
-    const overlay = document.getElementById('player-login-modal');
-    document.getElementById('login-form-inner').innerHTML = `
-      <h2 style="font-size:18px;font-weight:800;margin-bottom:4px">Change Password</h2>
-      <p style="color:var(--gray);font-size:13px;margin-bottom:20px">Update your player login password</p>
-      <div class="form-group"><label class="form-label">Current Password</label>
-        <input type="password" id="pw-current" class="form-input" autocomplete="current-password"></div>
-      <div class="form-group"><label class="form-label">New Password</label>
-        <input type="password" id="pw-new" class="form-input" autocomplete="new-password"></div>
-      <div class="form-group"><label class="form-label">Confirm New Password</label>
-        <input type="password" id="pw-confirm" class="form-input" autocomplete="new-password"></div>
-      <div id="login-error-msg" style="color:var(--red);font-size:13px;min-height:18px;margin-bottom:8px"></div>
-      <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="PlayerAuth.submitPasswordChange()">Update Password</button>
-      <button class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:8px" onclick="PlayerAuth.hideLoginModal()">Cancel</button>
-    `;
-    overlay.classList.add('open');
-  },
-
-  submitPasswordChange() {
-    const current = document.getElementById('pw-current').value;
-    const newPw = document.getElementById('pw-new').value;
-    const confirm = document.getElementById('pw-confirm').value;
-    const errEl = document.getElementById('login-error-msg');
-
-    const player = this.getPlayer();
-    if (!player) return;
-
-    if (player.credentials?.password !== current) {
-      errEl.textContent = 'Current password is incorrect.'; return;
-    }
-    if (newPw.length < 4) {
-      errEl.textContent = 'New password must be at least 4 characters.'; return;
-    }
-    if (newPw !== confirm) {
-      errEl.textContent = 'Passwords do not match.'; return;
-    }
-
-    const d = loadData();
-    const idx = d.players.findIndex(p => p.id === player.id);
-    if (!d.players[idx].credentials) d.players[idx].credentials = {};
-    d.players[idx].credentials.password = newPw;
-    saveData(d);
-    this.hideLoginModal();
-    // Show success inline
-    if (typeof App !== 'undefined') App.toast('Password updated! ✓', 'success');
-  },
+  // Password changes for Supabase-authenticated users are handled by
+  // HeroesAuth.updatePassword() via the Change Password modal on /my page.
 
   // ── REGISTRATION ─────────────────────────────────────────
   register(formData) {
@@ -385,43 +340,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /* TOURNEY CARD */
     .tourney-card {
-      background: #fff; border-radius: 14px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-      overflow: hidden; margin-bottom: 24px;
+      background: #fff; border-radius: 16px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.07);
+      overflow: hidden; margin-bottom: 28px;
       border: 1px solid var(--border);
-      transition: box-shadow 0.2s;
+      transition: box-shadow 0.2s, transform 0.2s;
     }
-    .tourney-card:hover { box-shadow: 0 6px 24px rgba(0,0,0,0.12); }
+    .tourney-card:hover { box-shadow: 0 8px 32px rgba(0,0,0,0.13); transform: translateY(-2px); }
     .tourney-header {
-      background: linear-gradient(135deg, var(--dark), #2a0010);
-      padding: 22px 28px; position: relative; overflow: hidden;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      padding: 24px 28px 18px; position: relative; overflow: hidden;
     }
     .tourney-header::after {
-      content: '⚾'; position: absolute; right: 24px; top: 50%;
-      transform: translateY(-50%); font-size: 56px; opacity: 0.06;
+      content: var(--watermark, '📅'); position: absolute; right: 20px; top: 50%;
+      transform: translateY(-50%); font-size: 72px; opacity: 0.07; pointer-events: none;
     }
+    .tourney-header-inner { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+    .tourney-header-left { flex: 1; min-width: 0; }
+    .tourney-header-right { flex-shrink: 0; }
     .tourney-dates {
-      font-size: 12px; color: rgba(255,255,255,0.5); font-weight: 600;
-      text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;
+      font-size: 11px; color: rgba(255,255,255,0.5); font-weight: 700;
+      text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px;
     }
-    .tourney-name { font-size: 22px; font-weight: 900; color: #fff; margin-bottom: 6px; }
-    .tourney-location { font-size: 13px; color: rgba(255,255,255,0.7); display: flex; align-items: center; gap: 6px; }
-    .tourney-badges { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-    .tourney-body { padding: 22px 28px; }
-    .tourney-meta-grid {
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-      gap: 14px; margin-bottom: 20px; padding-bottom: 20px;
-      border-bottom: 1px solid var(--border);
-    }
-    .tourney-meta-item label { display: block; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray); margin-bottom: 3px; }
-    .tourney-meta-item .val { font-size: 14px; font-weight: 700; color: var(--text); }
-    .tourney-meta-item .val a { color: var(--red); }
-    .tourney-attendance-section { }
-    .tourney-attendance-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-    .tourney-attendance-header h4 { font-size: 14px; font-weight: 800; }
-    .attend-counts { display: flex; gap: 14px; font-size: 13px; }
-    .attend-count { display: flex; align-items: center; gap: 5px; font-weight: 700; }
-    .attend-count-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .tourney-name { font-size: 22px; font-weight: 900; color: #fff; margin-bottom: 8px; line-height: 1.2; }
+    .tourney-location { font-size: 13px; color: rgba(255,255,255,0.65); display: flex; align-items: center; gap: 5px; }
+    .tourney-badges { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+    .tourney-body { padding: 24px 28px; }
+    .tourney-attendance-section { margin-top: 4px; }
     .my-attendance-panel {
       background: linear-gradient(135deg, #f0fdf4, #fff);
       border: 2px solid #86efac; border-radius: 10px;
