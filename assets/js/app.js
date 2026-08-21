@@ -1751,6 +1751,12 @@ const GALLERY_CATS = [
   { id: 'individual', label: '👤 Individual' },
 ];
 
+function _galleryCanUpload() {
+  if (typeof HeroesAuth !== 'undefined' && HeroesAuth.isLoggedIn() && HeroesAuth.isApproved()) return true;
+  if (typeof PlayerAuth !== 'undefined' && PlayerAuth.isLoggedIn()) return true;
+  return false;
+}
+
 function renderGallery(cat) {
   if (cat) _galleryCategory = cat;
   const data = loadData();
@@ -1762,6 +1768,10 @@ function renderGallery(cat) {
   const catTabs = GALLERY_CATS.map(c =>
     `<button class="gallery-cat-btn${_galleryCategory===c.id?' active':''}" onclick="Router.navigate('/gallery/${c.id}')">${c.label}</button>`
   ).join('');
+
+  const uploadBtn = _galleryCanUpload()
+    ? `<button class="btn btn-primary btn-sm" onclick="showGalleryUpload()" style="margin-left:auto;flex-shrink:0">📷 Upload Photo</button>`
+    : '';
 
   const albumCards = filtered.map(al => {
     const photos = (data.photos || []).filter(p => p.albumId === al.id);
@@ -1792,12 +1802,97 @@ function renderGallery(cat) {
     </div>
     <section class="section">
       <div class="container">
-        <div class="gallery-cat-bar">${catTabs}</div>
+        <div class="gallery-cat-bar" style="align-items:center">${catTabs}${uploadBtn}</div>
         <div class="gallery-grid" id="gallery-grid">${albumCards}</div>
       </div>
     </section>
   `);
 }
+
+window.showGalleryUpload = function() {
+  const data = loadData();
+  const albums = (data.albums || []).sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  if (!albums.length) {
+    App.toast('No albums exist yet — ask an admin to create one first', 'info');
+    return;
+  }
+  const existing = document.getElementById('gallery-upload-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'gallery-upload-overlay';
+  overlay.className = 'lightbox-overlay';
+  overlay.innerHTML = `
+    <div class="lightbox-panel" style="max-width:440px" onclick="event.stopPropagation()">
+      <div class="lightbox-header">
+        <div class="lightbox-album-name">Upload Photo</div>
+        <button class="lightbox-close" onclick="document.getElementById('gallery-upload-overlay').remove()">✕</button>
+      </div>
+      <div style="padding:20px;display:flex;flex-direction:column;gap:14px">
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Album</label>
+          <select id="gu-album" class="form-select">
+            ${albums.map(al => {
+              const cat = GALLERY_CATS.find(c => c.id === al.category && c.id !== 'all');
+              return `<option value="${al.id}">${al.name}${cat ? ' · ' + cat.label : ''}</option>`;
+            }).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Photo *</label>
+          <input type="file" id="gu-file" class="form-input" accept="image/*" style="padding:8px">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Caption (optional)</label>
+          <input id="gu-caption" class="form-input" placeholder="Describe the photo…">
+        </div>
+        <div id="gu-status" style="font-size:13px;min-height:18px;color:var(--gray)"></div>
+        <button id="gu-submit-btn" class="btn btn-primary" onclick="submitGalleryUpload()" style="width:100%;justify-content:center">Upload Photo</button>
+      </div>
+    </div>`;
+  overlay.addEventListener('click', () => overlay.remove());
+  document.body.appendChild(overlay);
+};
+
+window.submitGalleryUpload = async function() {
+  const fileEl   = document.getElementById('gu-file');
+  const albumId  = document.getElementById('gu-album')?.value;
+  const caption  = document.getElementById('gu-caption')?.value?.trim() || '';
+  const statusEl = document.getElementById('gu-status');
+  const btn      = document.getElementById('gu-submit-btn');
+  const file     = fileEl?.files?.[0];
+
+  if (!file)    { statusEl.textContent = 'Please select a photo.'; return; }
+  if (!albumId) { statusEl.textContent = 'Please select an album.'; return; }
+
+  btn.disabled = true;
+  statusEl.textContent = 'Uploading…';
+
+  try {
+    const sb = _getClient();
+    if (!sb) { statusEl.textContent = 'Storage unavailable. Try again later.'; btn.disabled = false; return; }
+    const ext  = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const path = `gallery/${albumId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await sb.storage.from('team-photos').upload(path, file, { upsert: false, contentType: file.type || 'image/jpeg' });
+    if (error) { statusEl.textContent = 'Upload failed: ' + error.message; btn.disabled = false; return; }
+    const { data: { publicUrl } } = sb.storage.from('team-photos').getPublicUrl(path);
+
+    const d = loadData();
+    if (!d.photos) d.photos = [];
+    const uploader = HeroesAuth?.getProfile?.()?.display_name
+      || PlayerAuth?.getPlayer?.()?.firstName
+      || 'member';
+    d.photos.push({ id: 'ph' + Date.now(), albumId, url: publicUrl, caption, uploadedBy: uploader });
+    saveData(d);
+
+    document.getElementById('gallery-upload-overlay')?.remove();
+    App.toast('Photo uploaded!');
+    renderGallery();
+  } catch(e) {
+    statusEl.textContent = 'Error: ' + e.message;
+    btn.disabled = false;
+  }
+};
 
 // Gallery route handles optional category segment: /gallery or /gallery/site etc.
 Router.register('/gallery', (cat) => renderGallery(cat || 'all'));
