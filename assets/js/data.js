@@ -313,6 +313,10 @@ const HeroesData = {
   // ─── ACCOUNT REQUESTS ────────────────────────────────────
   accountRequests: [],
 
+  // ─── GALLERY ──────────────────────────────────────────────
+  albums: [],
+  photos: [],
+
   // ─── HOME PAGE LAYOUT ─────────────────────────────────────
   pageLayouts: {
     home: [
@@ -431,7 +435,7 @@ const SUPABASE_URL     = 'https://mpgbgucmnxowteonldoh.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_qEfH752_O5r7F9pdKTalEA_B8P0LkV0';
 
 // Collections that get synced to Supabase
-const DB_COLLECTIONS = ['config','teams','players','games','events','news','awards','sponsors','accountRequests','pageLayouts'];
+const DB_COLLECTIONS = ['config','teams','players','games','events','news','awards','sponsors','accountRequests','pageLayouts','albums','photos'];
 
 let _sb = null;
 function _getClient() {

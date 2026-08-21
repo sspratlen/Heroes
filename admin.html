@@ -1584,13 +1584,16 @@ function renderGalleryAdmin() {
     <div class="admin-table-wrap">
       <div class="admin-table-header"><h3>Albums</h3><button class="btn btn-primary btn-sm" onclick="addAlbum()">+ Add Album</button></div>
       <table class="admin-table">
-        <thead><tr><th>Name</th><th>Date</th><th>Team</th><th>Photos</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Name</th><th>Category</th><th>Date</th><th>Team</th><th>Photos</th><th>Actions</th></tr></thead>
         <tbody>${albums.length ? albums.map(al => {
           const photoCount = (data.photos||[]).filter(p=>p.albumId===al.id).length;
           const team = data.teams.find(t=>t.id===al.teamId);
+          const catColors = { site:'#0F766E', team:'#1C6EA4', individual:'#7C3AED' };
+          const catLabel = al.category ? al.category.charAt(0).toUpperCase()+al.category.slice(1) : '—';
           return `<tr>
             <td><strong>${al.name}</strong>${al.description?`<div style="font-size:11px;color:var(--gray)">${al.description}</div>`:''}
             </td>
+            <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:${catColors[al.category]||'var(--dark)'};color:#fff">${catLabel}</span></td>
             <td style="font-size:13px">${al.date||''}</td>
             <td style="font-size:13px">${team?.shortName||'—'}</td>
             <td><span class="tag tag-dark">${photoCount}</span></td>
@@ -1600,7 +1603,7 @@ function renderGalleryAdmin() {
               <button class="action-btn action-delete" onclick="deleteAlbum('${al.id}')">Del</button>
             </td>
           </tr>`;
-        }).join('') : '<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--gray)">No albums yet</td></tr>'}</tbody>
+        }).join('') : '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--gray)">No albums yet</td></tr>'}</tbody>
       </table>
     </div>
   `);
@@ -1609,16 +1612,23 @@ function buildAlbumForm(al, data) {
   return `
     <div class="form-group"><label class="form-label">Album Name*</label><input id="al-name" class="form-input" value="${al?.name||''}"></div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label">Date</label><input type="date" id="al-date" class="form-input" value="${al?.date||''}"></div>
-      <div class="form-group"><label class="form-label">Team</label>
-        <select id="al-team" class="form-select">
-          <option value="">All Teams</option>
-          ${data.teams.map(t=>`<option value="${t.id}"${al?.teamId===t.id?' selected':''}>${t.name}</option>`).join('')}
+      <div class="form-group"><label class="form-label">Category*</label>
+        <select id="al-category" class="form-select">
+          <option value="site"${(al?.category||'site')==='site'?' selected':''}>🏟 Site</option>
+          <option value="team"${al?.category==='team'?' selected':''}>⚾ Team</option>
+          <option value="individual"${al?.category==='individual'?' selected':''}>👤 Individual</option>
         </select>
       </div>
+      <div class="form-group"><label class="form-label">Date</label><input type="date" id="al-date" class="form-input" value="${al?.date||''}"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Team (optional)</label>
+      <select id="al-team" class="form-select">
+        <option value="">All Teams / Not team-specific</option>
+        ${data.teams.map(t=>`<option value="${t.id}"${al?.teamId===t.id?' selected':''}>${t.name}</option>`).join('')}
+      </select>
     </div>
     <div class="form-group"><label class="form-label">Description</label><textarea id="al-desc" class="form-input" rows="2">${al?.description||''}</textarea></div>
-    <div class="form-group"><label class="form-label">Cover Image URL</label><input id="al-cover" class="form-input" placeholder="https://..." value="${al?.coverUrl||''}"></div>
+    <div class="form-group"><label class="form-label">Cover Image URL (optional)</label><input id="al-cover" class="form-input" placeholder="Uses first photo if blank" value="${al?.coverUrl||''}"></div>
   `;
 }
 function addAlbum() {
@@ -1626,7 +1636,7 @@ function addAlbum() {
   openModal('Add Album', buildAlbumForm(null, data), 'Add Album', () => {
     const d = loadData();
     if (!d.albums) d.albums = [];
-    d.albums.push({ id:'al'+Date.now(), name:val('al-name'), date:val('al-date'), teamId:val('al-team'), description:val('al-desc'), coverUrl:val('al-cover') });
+    d.albums.push({ id:'al'+Date.now(), name:val('al-name'), category:val('al-category')||'site', date:val('al-date'), teamId:val('al-team'), description:val('al-desc'), coverUrl:val('al-cover') });
     saveData(d); closeModal(); renderGalleryAdmin(); toast('Album added!');
   });
 }
@@ -1634,7 +1644,7 @@ function editAlbum(id) {
   const data = loadData(); const al = (data.albums||[]).find(a=>a.id===id);
   openModal('Edit Album', buildAlbumForm(al, data), 'Save Changes', () => {
     const d = loadData(); const idx = (d.albums||[]).findIndex(a=>a.id===id);
-    if (idx>=0) d.albums[idx] = { ...d.albums[idx], name:val('al-name'), date:val('al-date'), teamId:val('al-team'), description:val('al-desc'), coverUrl:val('al-cover') };
+    if (idx>=0) d.albums[idx] = { ...d.albums[idx], name:val('al-name'), category:val('al-category')||'site', date:val('al-date'), teamId:val('al-team'), description:val('al-desc'), coverUrl:val('al-cover') };
     saveData(d); closeModal(); renderGalleryAdmin(); toast('Album updated!');
   });
 }
@@ -1656,15 +1666,29 @@ function managePhotos(albumId) {
       <button class="action-btn action-delete" onclick="deletePhoto('${p.id}','${albumId}')">Del</button>
     </div>`).join('') || '<p style="color:var(--gray);font-size:13px">No photos yet</p>';
   openModal(`Photos: ${album?.name||albumId}`, `
-    <div style="max-height:240px;overflow-y:auto;margin-bottom:16px">${photoList}</div>
+    <div style="max-height:200px;overflow-y:auto;margin-bottom:16px">${photoList}</div>
     <hr style="margin:12px 0;border-color:var(--border)">
-    <div style="font-weight:700;margin-bottom:10px;font-size:13px">Add Photo by URL</div>
-    <div class="form-group"><label class="form-label">Image URL*</label><input id="ph-url" class="form-input" placeholder="https://..."></div>
+    <div style="font-weight:700;margin-bottom:10px;font-size:13px">Add Photo</div>
+    <div class="form-group"><label class="form-label">Upload File</label>
+      <input type="file" id="ph-file" class="form-input" accept="image/*" onchange="previewGalleryUpload(this)">
+      <div id="ph-upload-status" style="font-size:12px;color:var(--gray);margin-top:4px"></div>
+    </div>
+    <div style="text-align:center;color:var(--gray);font-size:12px;margin:4px 0">— or paste URL —</div>
+    <div class="form-group"><label class="form-label">Image URL</label><input id="ph-url" class="form-input" placeholder="https://..."></div>
     <div class="form-group"><label class="form-label">Caption</label><input id="ph-caption" class="form-input" placeholder="Optional caption"></div>
-  `, 'Add Photo', () => {
-    const u = val('ph-url'); if (!u) { toast('URL required','error'); return false; }
+  `, 'Add Photo', async () => {
+    const fileInput = document.getElementById('ph-file');
+    const file = fileInput?.files?.[0];
+    let url = val('ph-url');
+    if (file) {
+      const statusEl = document.getElementById('ph-upload-status');
+      if (statusEl) statusEl.textContent = 'Uploading…';
+      url = await uploadGalleryPhoto(file, albumId);
+      if (!url) { toast('Upload failed','error'); return false; }
+    }
+    if (!url) { toast('File or URL required','error'); return false; }
     const d = loadData(); if (!d.photos) d.photos = [];
-    d.photos.push({ id:'ph'+Date.now(), albumId, url:u, caption:val('ph-caption') });
+    d.photos.push({ id:'ph'+Date.now(), albumId, url, caption:val('ph-caption') });
     saveData(d); closeModal(); managePhotos(albumId); toast('Photo added!');
   });
 }
@@ -1673,6 +1697,30 @@ window.deletePhoto = function(photoId, albumId) {
   const d = loadData(); d.photos = (d.photos||[]).filter(p=>p.id!==photoId);
   saveData(d); toast('Photo deleted'); managePhotos(albumId);
 };
+
+window.previewGalleryUpload = function(input) {
+  const el = document.getElementById('ph-upload-status');
+  if (el && input.files[0]) el.textContent = input.files[0].name;
+};
+
+async function uploadGalleryPhoto(file, albumId) {
+  try {
+    const sb = _getClient();
+    if (!sb) { toast('Supabase not connected','error'); return null; }
+    const ext = file.name.split('.').pop() || 'jpg';
+    const path = `gallery/${albumId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await sb.storage.from('team-photos').upload(path, file, { upsert: false, contentType: file.type || 'image/jpeg' });
+    if (error) {
+      console.error('Gallery upload error:', error);
+      return null;
+    }
+    const { data: { publicUrl } } = sb.storage.from('team-photos').getPublicUrl(path);
+    return publicUrl;
+  } catch(e) {
+    console.error('Gallery upload exception:', e);
+    return null;
+  }
+}
 
 // ─── SPONSORS ─────────────────────────────────────────────
 function renderSponsors() {

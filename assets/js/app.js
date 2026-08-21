@@ -1731,18 +1731,36 @@ function renderAwards() {
 }
 
 // ─── PAGE: GALLERY ─────────────────────────────────────────────
-function renderGallery() {
-  const data = loadData();
-  const albums = (data.albums || []).sort((a,b) => b.date.localeCompare(a.date));
+let _galleryCategory = 'all';
+const GALLERY_CATS = [
+  { id: 'all',        label: 'All Photos' },
+  { id: 'site',       label: '🏟 Site' },
+  { id: 'team',       label: '⚾ Team' },
+  { id: 'individual', label: '👤 Individual' },
+];
 
-  const albumCards = albums.map(al => {
+function renderGallery(cat) {
+  if (cat) _galleryCategory = cat;
+  const data = loadData();
+  const allAlbums = (data.albums || []).sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  const filtered = _galleryCategory === 'all'
+    ? allAlbums
+    : allAlbums.filter(al => al.category === _galleryCategory);
+
+  const catTabs = GALLERY_CATS.map(c =>
+    `<button class="gallery-cat-btn${_galleryCategory===c.id?' active':''}" onclick="Router.navigate('/gallery/${c.id}')">${c.label}</button>`
+  ).join('');
+
+  const albumCards = filtered.map(al => {
     const photos = (data.photos || []).filter(p => p.albumId === al.id);
     const cover = al.coverUrl || photos[0]?.url || '';
     const team = data.teams.find(t => t.id === al.teamId);
+    const catLabel = GALLERY_CATS.find(c => c.id === al.category && c.id !== 'all');
     return `<div class="gallery-album-card" onclick="openAlbum('${al.id}')">
       <div class="gallery-album-cover">
-        ${cover ? `<img src="${cover}" alt="${al.name}" onerror="this.parentElement.innerHTML='📷'">` : '<div class="gallery-album-empty">📷</div>'}
-        <div class="gallery-album-count">${photos.length} photos</div>
+        ${cover ? `<img src="${cover}" alt="${al.name}" onerror="this.parentElement.innerHTML='<div class=gallery-album-empty>📷</div>'">` : '<div class="gallery-album-empty">📷</div>'}
+        <div class="gallery-album-count">${photos.length} photo${photos.length!==1?'s':''}</div>
+        ${catLabel ? `<div class="gallery-album-cat">${catLabel.label}</div>` : ''}
       </div>
       <div class="gallery-album-info">
         <div class="gallery-album-name">${al.name}</div>
@@ -1762,41 +1780,88 @@ function renderGallery() {
     </div>
     <section class="section">
       <div class="container">
+        <div class="gallery-cat-bar">${catTabs}</div>
         <div class="gallery-grid" id="gallery-grid">${albumCards}</div>
       </div>
     </section>
   `);
 }
 
+// Gallery route handles optional category segment: /gallery or /gallery/site etc.
+Router.register('/gallery', (cat) => renderGallery(cat || 'all'));
+
+let _lightboxPhotos = [];
+let _lightboxIdx = 0;
+
 window.openAlbum = function(albumId) {
   const data = loadData();
   const album = (data.albums||[]).find(a => a.id === albumId);
   if (!album) return;
-  const photos = (data.photos||[]).filter(p => p.albumId === albumId);
-  if (!photos.length) { App.toast('No photos in this album yet', 'info'); return; }
+  _lightboxPhotos = (data.photos||[]).filter(p => p.albumId === albumId);
+  if (!_lightboxPhotos.length) { App.toast('No photos in this album yet', 'info'); return; }
+  _lightboxIdx = 0;
+  _buildLightbox(album.name);
+};
 
-  const grid = photos.map((p, i) => `
-    <div class="lightbox-thumb" onclick="lightboxGoto(${i})">
-      <img src="${p.url}" alt="${p.caption||''}" loading="lazy" onerror="this.parentElement.style.display='none'">
-    </div>`).join('');
-
+function _buildLightbox(albumName) {
   const existing = document.getElementById('lightbox-overlay');
   if (existing) existing.remove();
 
+  const thumbs = _lightboxPhotos.map((p, i) =>
+    `<div class="lightbox-thumb${i===_lightboxIdx?' active':''}" onclick="lightboxGoto(${i})">
+      <img src="${p.url}" alt="${p.caption||''}" loading="lazy" onerror="this.parentElement.style.display='none'">
+    </div>`).join('');
+
+  const p = _lightboxPhotos[_lightboxIdx];
   const overlay = document.createElement('div');
   overlay.id = 'lightbox-overlay';
   overlay.className = 'lightbox-overlay';
   overlay.innerHTML = `
     <div class="lightbox-panel" onclick="event.stopPropagation()">
       <div class="lightbox-header">
-        <div class="lightbox-album-name">${album.name}</div>
+        <div class="lightbox-album-name">${albumName}</div>
+        <span style="font-size:12px;color:var(--gray)">${_lightboxIdx+1} / ${_lightboxPhotos.length}</span>
         <button class="lightbox-close" onclick="document.getElementById('lightbox-overlay').remove()">✕</button>
       </div>
-      <div class="lightbox-grid">${grid}</div>
+      <div class="lightbox-viewer">
+        <button class="lightbox-nav lightbox-prev" onclick="lightboxPrev()" ${_lightboxIdx===0?'disabled':''}>‹</button>
+        <div class="lightbox-main">
+          <img id="lightbox-main-img" src="${p.url}" alt="${p.caption||''}" onerror="this.style.opacity=0.3">
+          ${p.caption ? `<div class="lightbox-caption">${p.caption}</div>` : ''}
+        </div>
+        <button class="lightbox-nav lightbox-next" onclick="lightboxNext()" ${_lightboxIdx===_lightboxPhotos.length-1?'disabled':''}>›</button>
+      </div>
+      <div class="lightbox-grid">${thumbs}</div>
     </div>`;
   overlay.addEventListener('click', () => overlay.remove());
   document.body.appendChild(overlay);
+  document.addEventListener('keydown', _lightboxKeyHandler);
+  overlay.addEventListener('remove', () => document.removeEventListener('keydown', _lightboxKeyHandler));
+}
+
+function _lightboxKeyHandler(e) {
+  if (!document.getElementById('lightbox-overlay')) { document.removeEventListener('keydown', _lightboxKeyHandler); return; }
+  if (e.key === 'ArrowRight') lightboxNext();
+  else if (e.key === 'ArrowLeft') lightboxPrev();
+  else if (e.key === 'Escape') document.getElementById('lightbox-overlay')?.remove();
+}
+
+window.lightboxGoto = function(i) {
+  _lightboxIdx = Math.max(0, Math.min(i, _lightboxPhotos.length - 1));
+  const p = _lightboxPhotos[_lightboxIdx];
+  const img = document.getElementById('lightbox-main-img');
+  if (img) { img.src = p.url; img.alt = p.caption || ''; img.style.opacity = 1; }
+  document.querySelectorAll('.lightbox-thumb').forEach((t, idx) => t.classList.toggle('active', idx === _lightboxIdx));
+  document.querySelector('.lightbox-prev')?.toggleAttribute('disabled', _lightboxIdx === 0);
+  document.querySelector('.lightbox-next')?.toggleAttribute('disabled', _lightboxIdx === _lightboxPhotos.length - 1);
+  const panel = document.querySelector('.lightbox-header span');
+  if (panel) panel.textContent = `${_lightboxIdx+1} / ${_lightboxPhotos.length}`;
+  const caption = document.querySelector('.lightbox-caption');
+  if (caption) caption.textContent = p.caption || '';
 };
+
+window.lightboxNext = function() { lightboxGoto(_lightboxIdx + 1); };
+window.lightboxPrev = function() { lightboxGoto(_lightboxIdx - 1); };
 
 // ─── REGISTER ROUTES ────────────────────────────────────────
 Router.register('/', renderHome);
@@ -1811,7 +1876,6 @@ Router.register('/about', renderAbout);
 Router.register('/contact', renderContact);
 Router.register('/sponsors', renderSponsors);
 Router.register('/awards', renderAwards);
-Router.register('/gallery', renderGallery);
 Router.register('*', renderNotFound);
 
 // ─── BOOT ────────────────────────────────────────────────────
