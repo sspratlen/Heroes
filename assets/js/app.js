@@ -2049,6 +2049,7 @@ function _buildLightbox(albumName) {
       <div class="lightbox-header">
         <div class="lightbox-album-name">${albumName}</div>
         <span style="font-size:12px;color:var(--gray)">${_lightboxIdx+1} / ${_lightboxPhotos.length}</span>
+        ${_galleryCanManageAlbums() ? `<button onclick="lightboxDeletePhoto()" title="Delete photo" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:18px;padding:4px 8px;border-radius:4px;line-height:1" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='none'">🗑</button>` : ''}
         <button class="lightbox-close" onclick="document.getElementById('lightbox-overlay').remove()">✕</button>
       </div>
       <div class="lightbox-viewer">
@@ -2090,6 +2091,31 @@ window.lightboxGoto = function(i) {
 
 window.lightboxNext = function() { lightboxGoto(_lightboxIdx + 1); };
 window.lightboxPrev = function() { lightboxGoto(_lightboxIdx - 1); };
+
+window.lightboxDeletePhoto = function() {
+  const photo = _lightboxPhotos[_lightboxIdx];
+  if (!photo) return;
+  const caption = photo.caption ? `"${photo.caption}"` : 'this photo';
+  if (!confirm(`Delete ${caption}? This cannot be undone.`)) return;
+
+  const d = loadData();
+  d.photos = (d.photos || []).filter(p => p.id !== photo.id);
+  saveData(d);
+
+  _lightboxPhotos.splice(_lightboxIdx, 1);
+
+  if (!_lightboxPhotos.length) {
+    document.getElementById('lightbox-overlay')?.remove();
+    renderGallery();
+    App.toast('Photo deleted', 'info');
+    return;
+  }
+
+  _lightboxIdx = Math.min(_lightboxIdx, _lightboxPhotos.length - 1);
+  const albumName = document.querySelector('.lightbox-album-name')?.textContent || '';
+  _buildLightbox(albumName);
+  App.toast('Photo deleted', 'info');
+};
 
 // ─── REGISTER ROUTES ────────────────────────────────────────
 Router.register('/', renderHome);
