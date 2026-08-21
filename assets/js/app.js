@@ -1765,6 +1765,12 @@ function _galleryCanUpload() {
   return false;
 }
 
+function _galleryCanManageAlbums() {
+  if (typeof HeroesAuth === 'undefined') return false;
+  if (!HeroesAuth.isLoggedIn() || !HeroesAuth.isApproved()) return false;
+  return HeroesAuth.isStaff();
+}
+
 function renderGallery(cat) {
   if (cat) _galleryCategory = cat;
   const data = loadData();
@@ -1778,9 +1784,13 @@ function renderGallery(cat) {
     `<button class="gallery-cat-btn${_galleryCategory===c.id?' active':''}" onclick="Router.navigate('/gallery/${c.id}')">${c.label}</button>`
   ).join('');
 
-  const uploadBtn = _galleryCanUpload()
-    ? `<button class="btn btn-primary btn-sm" onclick="showGalleryUpload()" style="margin-left:auto;flex-shrink:0">📷 Upload Photo</button>`
+  const createAlbumBtn = _galleryCanManageAlbums()
+    ? `<button class="btn btn-outline btn-sm" onclick="showCreateAlbum()" style="flex-shrink:0">＋ New Album</button>`
     : '';
+  const uploadBtn = _galleryCanUpload()
+    ? `<button class="btn btn-primary btn-sm" onclick="showGalleryUpload()" style="${createAlbumBtn?'':'margin-left:auto;'}flex-shrink:0">📷 Upload Photo</button>`
+    : '';
+  const actionBtns = `<div style="margin-left:auto;display:flex;gap:8px;flex-shrink:0">${createAlbumBtn}${uploadBtn}</div>`;
 
   const albumCards = filtered.map(al => {
     const photos = (data.photos || []).filter(p => p.albumId === al.id);
@@ -1811,7 +1821,7 @@ function renderGallery(cat) {
     </div>
     <section class="section">
       <div class="container">
-        <div class="gallery-cat-bar" style="align-items:center">${catTabs}${uploadBtn}</div>
+        <div class="gallery-cat-bar" style="align-items:center">${catTabs}${actionBtns}</div>
         <div class="gallery-grid" id="gallery-grid">${albumCards}</div>
       </div>
     </section>
@@ -1902,6 +1912,107 @@ window.submitGalleryUpload = async function() {
     statusEl.textContent = 'Error: ' + e.message;
     btn.disabled = false;
   }
+};
+
+window.showCreateAlbum = function() {
+  const data = loadData();
+  const existing = document.getElementById('gallery-create-album-overlay');
+  if (existing) existing.remove();
+
+  // Build category options from existing album categories
+  const knownCats = [
+    { id: 'site', label: '🏟 Site' },
+    { id: 'team', label: '⚾ Team' },
+    { id: 'individual', label: '👤 Individual' },
+  ];
+  const usedIds = new Set((data.albums || []).map(a => a.category).filter(Boolean));
+  const extraCats = [...usedIds].filter(id => !knownCats.find(k => k.id === id))
+    .map(id => ({ id, label: id.charAt(0).toUpperCase() + id.slice(1) }));
+  const allCats = [...knownCats, ...extraCats];
+  const catOptions = allCats.map(c => `<option value="${c.id}">${c.label}</option>`).join('');
+  const teamOptions = data.teams.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+  const today = new Date().toISOString().split('T')[0];
+
+  const overlay = document.createElement('div');
+  overlay.id = 'gallery-create-album-overlay';
+  overlay.className = 'lightbox-overlay';
+  overlay.innerHTML = `
+    <div class="lightbox-panel" style="max-width:480px" onclick="event.stopPropagation()">
+      <div class="lightbox-header">
+        <div class="lightbox-album-name">Create New Album</div>
+        <button class="lightbox-close" onclick="document.getElementById('gallery-create-album-overlay').remove()">✕</button>
+      </div>
+      <div style="padding:20px;display:flex;flex-direction:column;gap:14px">
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Album Name *</label>
+          <input id="ca-name" class="form-input" placeholder="e.g. Spring Tournament 2026">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Category *</label>
+            <select id="ca-category" class="form-select" onchange="document.getElementById('ca-cat-new-wrap').style.display=this.value==='__new__'?'block':'none'">
+              ${catOptions}
+              <option value="__new__">➕ New category...</option>
+            </select>
+            <div id="ca-cat-new-wrap" style="display:none;margin-top:6px">
+              <input id="ca-cat-new" class="form-input" placeholder="Category name">
+            </div>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Date</label>
+            <input type="date" id="ca-date" class="form-input" value="${today}">
+          </div>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Team (optional)</label>
+          <select id="ca-team" class="form-select">
+            <option value="">All Teams / Not team-specific</option>
+            ${teamOptions}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Description (optional)</label>
+          <textarea id="ca-desc" class="form-input" rows="2" placeholder="Brief description of this album"></textarea>
+        </div>
+        <div id="ca-status" style="font-size:13px;color:#666;min-height:18px"></div>
+        <button id="ca-submit-btn" class="btn btn-primary" onclick="submitCreateAlbum()" style="width:100%;justify-content:center">Create Album</button>
+      </div>
+    </div>
+  `;
+  overlay.addEventListener('click', () => overlay.remove());
+  document.body.appendChild(overlay);
+};
+
+window.submitCreateAlbum = function() {
+  const nameEl = document.getElementById('ca-name');
+  const statusEl = document.getElementById('ca-status');
+  const btn = document.getElementById('ca-submit-btn');
+  const name = (nameEl?.value || '').trim();
+  if (!name) { statusEl.textContent = 'Album name is required.'; statusEl.style.color = '#dc2626'; return; }
+
+  const catSel = document.getElementById('ca-category')?.value || 'site';
+  const category = catSel === '__new__'
+    ? (document.getElementById('ca-cat-new')?.value || '').toLowerCase().trim() || 'site'
+    : catSel;
+  const date = document.getElementById('ca-date')?.value || '';
+  const teamId = document.getElementById('ca-team')?.value || '';
+  const description = document.getElementById('ca-desc')?.value || '';
+
+  btn.disabled = true;
+  statusEl.style.color = '#666';
+  statusEl.textContent = 'Creating album…';
+
+  const d = loadData();
+  if (!d.albums) d.albums = [];
+  d.albums.push({ id: 'al' + Date.now(), name, category, date, teamId, description, coverUrl: '' });
+  saveData(d);
+
+  statusEl.style.color = '#16a34a';
+  statusEl.textContent = 'Album created!';
+  setTimeout(() => {
+    document.getElementById('gallery-create-album-overlay')?.remove();
+    renderGallery();
+  }, 700);
 };
 
 // Gallery route handles optional category segment: /gallery or /gallery/site etc.
