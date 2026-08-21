@@ -1609,15 +1609,29 @@ function renderGalleryAdmin() {
   `);
 }
 function buildAlbumForm(al, data) {
+  const knownCats = [
+    { id: 'site', label: '🏟 Site' },
+    { id: 'team', label: '⚾ Team' },
+    { id: 'individual', label: '👤 Individual' },
+  ];
+  const existingCatIds = new Set((data.albums||[]).map(a => a.category).filter(Boolean));
+  const extraCats = [...existingCatIds].filter(id => !knownCats.find(k => k.id === id))
+    .map(id => ({ id, label: id.charAt(0).toUpperCase() + id.slice(1) }));
+  const allCats = [...knownCats, ...extraCats];
+  const catOptions = allCats.map(c =>
+    `<option value="${c.id}"${(al?.category||'site')===c.id?' selected':''}>${c.label}</option>`
+  ).join('');
   return `
     <div class="form-group"><label class="form-label">Album Name*</label><input id="al-name" class="form-input" value="${al?.name||''}"></div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Category*</label>
-        <select id="al-category" class="form-select">
-          <option value="site"${(al?.category||'site')==='site'?' selected':''}>🏟 Site</option>
-          <option value="team"${al?.category==='team'?' selected':''}>⚾ Team</option>
-          <option value="individual"${al?.category==='individual'?' selected':''}>👤 Individual</option>
+        <select id="al-category" class="form-select" onchange="document.getElementById('al-cat-new-wrap').style.display=this.value==='__new__'?'block':'none'">
+          ${catOptions}
+          <option value="__new__">➕ New category...</option>
         </select>
+        <div id="al-cat-new-wrap" style="display:none;margin-top:6px">
+          <input id="al-cat-new" class="form-input" placeholder="Category name (e.g. Tournaments)">
+        </div>
       </div>
       <div class="form-group"><label class="form-label">Date</label><input type="date" id="al-date" class="form-input" value="${al?.date||''}"></div>
     </div>
@@ -1636,7 +1650,8 @@ function addAlbum() {
   openModal('Add Album', buildAlbumForm(null, data), 'Add Album', () => {
     const d = loadData();
     if (!d.albums) d.albums = [];
-    d.albums.push({ id:'al'+Date.now(), name:val('al-name'), category:val('al-category')||'site', date:val('al-date'), teamId:val('al-team'), description:val('al-desc'), coverUrl:val('al-cover') });
+    const alCat = val('al-category')==='__new__' ? (val('al-cat-new')||'').toLowerCase().trim()||'site' : val('al-category')||'site';
+    d.albums.push({ id:'al'+Date.now(), name:val('al-name'), category:alCat, date:val('al-date'), teamId:val('al-team'), description:val('al-desc'), coverUrl:val('al-cover') });
     saveData(d); closeModal(); renderGalleryAdmin(); toast('Album added!');
   });
 }
@@ -1644,7 +1659,8 @@ function editAlbum(id) {
   const data = loadData(); const al = (data.albums||[]).find(a=>a.id===id);
   openModal('Edit Album', buildAlbumForm(al, data), 'Save Changes', () => {
     const d = loadData(); const idx = (d.albums||[]).findIndex(a=>a.id===id);
-    if (idx>=0) d.albums[idx] = { ...d.albums[idx], name:val('al-name'), category:val('al-category')||'site', date:val('al-date'), teamId:val('al-team'), description:val('al-desc'), coverUrl:val('al-cover') };
+    const alCat2 = val('al-category')==='__new__' ? (val('al-cat-new')||'').toLowerCase().trim()||'site' : val('al-category')||'site';
+    if (idx>=0) d.albums[idx] = { ...d.albums[idx], name:val('al-name'), category:alCat2, date:val('al-date'), teamId:val('al-team'), description:val('al-desc'), coverUrl:val('al-cover') };
     saveData(d); closeModal(); renderGalleryAdmin(); toast('Album updated!');
   });
 }

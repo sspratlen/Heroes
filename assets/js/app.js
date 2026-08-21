@@ -1744,12 +1744,20 @@ function renderAwards() {
 
 // ─── PAGE: GALLERY ─────────────────────────────────────────────
 let _galleryCategory = 'all';
-const GALLERY_CATS = [
-  { id: 'all',        label: 'All Photos' },
-  { id: 'site',       label: '🏟 Site' },
-  { id: 'team',       label: '⚾ Team' },
-  { id: 'individual', label: '👤 Individual' },
-];
+const _CAT_LABELS = { site: '🏟 Site', team: '⚾ Team', individual: '👤 Individual' };
+
+function _getGalleryCats(albums) {
+  const seen = new Set();
+  const cats = [{ id: 'all', label: 'All Photos' }];
+  (albums || []).forEach(al => {
+    if (al.category && !seen.has(al.category)) {
+      seen.add(al.category);
+      const label = _CAT_LABELS[al.category] || (al.category.charAt(0).toUpperCase() + al.category.slice(1));
+      cats.push({ id: al.category, label });
+    }
+  });
+  return cats;
+}
 
 function _galleryCanUpload() {
   if (typeof HeroesAuth !== 'undefined' && HeroesAuth.isLoggedIn() && HeroesAuth.isApproved()) return true;
@@ -1765,7 +1773,8 @@ function renderGallery(cat) {
     ? allAlbums
     : allAlbums.filter(al => al.category === _galleryCategory);
 
-  const catTabs = GALLERY_CATS.map(c =>
+  const galleryCats = _getGalleryCats(allAlbums);
+  const catTabs = galleryCats.map(c =>
     `<button class="gallery-cat-btn${_galleryCategory===c.id?' active':''}" onclick="Router.navigate('/gallery/${c.id}')">${c.label}</button>`
   ).join('');
 
@@ -1777,7 +1786,7 @@ function renderGallery(cat) {
     const photos = (data.photos || []).filter(p => p.albumId === al.id);
     const cover = al.coverUrl || photos[0]?.url || '';
     const team = data.teams.find(t => t.id === al.teamId);
-    const catLabel = GALLERY_CATS.find(c => c.id === al.category && c.id !== 'all');
+    const catLabel = galleryCats.find(c => c.id === al.category && c.id !== 'all');
     return `<div class="gallery-album-card" onclick="openAlbum('${al.id}')">
       <div class="gallery-album-cover">
         ${cover ? `<img src="${cover}" alt="${al.name}" onerror="this.parentElement.innerHTML='<div class=gallery-album-empty>📷</div>'">` : '<div class="gallery-album-empty">📷</div>'}
@@ -1833,7 +1842,8 @@ window.showGalleryUpload = function() {
           <label class="form-label">Album</label>
           <select id="gu-album" class="form-select">
             ${albums.map(al => {
-              const cat = GALLERY_CATS.find(c => c.id === al.category && c.id !== 'all');
+              const allCats = _getGalleryCats(albums);
+              const cat = allCats.find(c => c.id === al.category && c.id !== 'all');
               return `<option value="${al.id}">${al.name}${cat ? ' · ' + cat.label : ''}</option>`;
             }).join('')}
           </select>
