@@ -1785,7 +1785,7 @@ function renderGallery(cat) {
   ).join('');
 
   const createAlbumBtn = _galleryCanManageAlbums()
-    ? `<button class="btn btn-outline btn-sm" onclick="showCreateAlbum()" style="flex-shrink:0">＋ New Album</button>`
+    ? `<button class="btn btn-sm" onclick="showCreateAlbum()" style="flex-shrink:0;background:transparent;border:2px solid #333;color:#333">＋ New Album</button>`
     : '';
   const uploadBtn = _galleryCanUpload()
     ? `<button class="btn btn-primary btn-sm" onclick="showGalleryUpload()" style="${createAlbumBtn?'':'margin-left:auto;'}flex-shrink:0">📷 Upload Photo</button>`
