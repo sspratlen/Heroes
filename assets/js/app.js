@@ -398,6 +398,13 @@ function renderHome() {
     </div>`;
   }).join('');
 
+  const _curYear = new Date().getFullYear();
+  const _curGames = data.games.filter(g => (g.season+'') === (_curYear+''));
+  const _curW = _curGames.filter(g => g.result === 'W').length;
+  const _curL = _curGames.filter(g => g.result === 'L').length;
+  const _curTotal = _curW + _curL;
+  const _curPct = _curTotal ? (_curW/_curTotal).toFixed(3).replace(/^0/,'') : '.000';
+
   App.render(`
     <!-- HERO -->
     <section id="hero">
@@ -407,11 +414,16 @@ function renderHome() {
         <div class="hero-content">
           <div class="hero-tag">⚾ Omaha, NE · Est. ${data.config.foundedYear}</div>
           <h1 class="hero-title">Heroes<br><span>Senior Softball</span></h1>
-          <p class="hero-subtitle">Competitive senior men's softball — three teams, one organization, a legacy of excellence.</p>
+          <p class="hero-subtitle">Competitive senior men's softball — ${data.teams.length} teams, one organization, a legacy of excellence.</p>
+          <div class="hero-season-record">
+            <div class="hero-season-year">${_curYear} Season</div>
+            <div class="hero-season-wl"><span class="hero-season-w">${_curW}W</span><span class="hero-season-sep">–</span><span class="hero-season-l">${_curL}L</span></div>
+            <div class="hero-season-pct">${_curPct} Win%</div>
+          </div>
           <div class="hero-record">
             <div class="hero-stat">
-              <div class="hero-stat-num">${data.teams.reduce((s,t)=>s+getTeamRecord(t.id,{season:'2025'}).wins,0)}</div>
-              <div class="hero-stat-label">2025 Wins</div>
+              <div class="hero-stat-num">${_curTotal}</div>
+              <div class="hero-stat-label">Games Played</div>
             </div>
             <div class="hero-stat-divider"></div>
             <div class="hero-stat">

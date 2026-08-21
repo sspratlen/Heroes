@@ -275,6 +275,13 @@ button { cursor: pointer; border: none; font-family: inherit; font-size: inherit
 .hero-title { font-size: clamp(32px, 6vw, 58px); font-weight: 900; color: var(--white); line-height: 1.1; letter-spacing: -2px; margin-bottom: 16px; }
 .hero-title span { color: var(--gold); }
 .hero-subtitle { color: rgba(255,255,255,0.75); font-size: 16px; margin-bottom: 30px; max-width: 480px; line-height: 1.7; }
+.hero-season-record { display: flex; align-items: baseline; gap: 14px; margin-bottom: 20px; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12); border-left: 4px solid var(--red); border-radius: 8px; padding: 14px 20px; width: fit-content; }
+.hero-season-year { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: rgba(255,255,255,0.5); align-self: center; }
+.hero-season-wl { display: flex; align-items: baseline; gap: 4px; }
+.hero-season-w { font-size: 44px; font-weight: 900; color: #4ade80; line-height: 1; }
+.hero-season-sep { font-size: 28px; font-weight: 700; color: rgba(255,255,255,0.3); }
+.hero-season-l { font-size: 44px; font-weight: 900; color: rgba(255,255,255,0.45); line-height: 1; }
+.hero-season-pct { font-size: 15px; font-weight: 700; color: rgba(255,255,255,0.55); align-self: center; }
 .hero-record { display: flex; gap: 24px; margin-bottom: 32px; }
 .hero-stat { text-align: center; }
 .hero-stat-num { font-size: 36px; font-weight: 900; color: var(--white); line-height: 1; }

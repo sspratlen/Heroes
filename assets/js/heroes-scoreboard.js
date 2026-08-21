@@ -103,7 +103,7 @@
       const l = games.filter(g => g.result === 'L').length;
       const total = w + l;
       const pct = total ? (w / total).toFixed(3).replace(/^0/, '') : '.000';
-      meta.innerHTML = `${year} · <strong style="color:#111">${w}W&ndash;${l}L</strong> · ${pct}`;
+      meta.innerHTML = `${year} &nbsp;<strong style="color:#16a34a">${w}W</strong><span style="color:#aaa">–</span><strong style="color:#555">${l}L</strong>&nbsp; <span style="color:#888;font-size:12px">${pct}</span>`;
     } catch (e) {
       meta.textContent = '';
     }
