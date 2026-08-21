@@ -101,7 +101,7 @@ const App = {
             <img src="assets/img/heroes-logo.jpg" alt="Heroes Logo">
             <div class="footer-brand-name">${data.config.orgName}</div>
           </div>
-          <p class="footer-tagline">A competitive senior men's softball organization featuring 55's AAA, 50's AAA, and 50's AA teams. Building a legacy of excellence since ${data.config.foundedYear}.</p>
+          <p class="footer-tagline">A competitive senior men's softball organization featuring AAA, AA, Majors, and Majors Plus divisions. Building a legacy of excellence since ${data.config.foundedYear}.</p>
           <div class="footer-social">
             <a class="social-btn" href="${data.config.facebookUrl}" target="_blank" title="Facebook">f</a>
             <a class="social-btn" href="${data.config.storeUrl}" target="_blank" title="Store">🛒</a>
@@ -292,7 +292,7 @@ function renderHome() {
           </div>
         </div>
         <div class="team-card-footer">
-          <span class="tag tag-${team.division === 'AAA' ? 'red' : 'dark'}">${team.division}</span>
+          <span class="tag" style="background:${team.color};color:#fff">${team.division}</span>
           <a class="btn btn-sm btn-dark" data-route="/team/${team.id}">View Team →</a>
         </div>
       </div>`;
@@ -1533,7 +1533,7 @@ function renderAbout() {
               Heroes Senior Softball was founded in ${data.config.foundedYear} with a simple mission: bring together competitive senior softball players who love the game and want to compete at the highest level.
             </p>
             <p style="font-size:15px;line-height:1.8;color:var(--text-light);margin-bottom:20px">
-              Since our inception, the team has grown to over 30 players across three competitive teams — the 55's AAA, 50's AAA, and 50's AA divisions. We compete in regional tournaments throughout the season, representing Omaha with pride.
+              Since our inception, the team has grown across multiple competitive divisions — AAA, AA, Majors, and Majors Plus. We compete in regional tournaments throughout the season, representing Omaha with pride.
             </p>
             <p style="font-size:15px;line-height:1.8;color:var(--text-light)">
               The nature of senior softball is very competitive. It comes down to strategy, teamwork, and a little luck to win tournaments. We're always improving, always learning, and always representing Heroes Senior Softball with class.
@@ -1548,7 +1548,7 @@ function renderAbout() {
                   ['Location', `${data.config.city}, ${data.config.state}`],
                   ['Teams', data.teams.length],
                   ['Active Players', data.players.filter(p=>p.active).length + '+'],
-                  ['Divisions', 'AAA & AA'],
+                  ['Divisions', 'AAA, AA, Majors & Majors Plus'],
                 ].map(([l,v])=>`<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--gray-light)">
                   <span style="color:var(--gray);font-size:13px">${l}</span>
                   <span style="font-weight:700">${v}</span>

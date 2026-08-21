@@ -146,7 +146,7 @@
             <img src="assets/img/heroes-logo.jpg" alt="Heroes Logo">
             <div class="footer-brand-name">${cfg.orgName}</div>
           </div>
-          <p class="footer-tagline">A competitive senior men's softball organization — 55's AAA, 50's AAA, and 50's AA. Building a legacy since ${cfg.foundedYear}.</p>
+          <p class="footer-tagline">A competitive senior men's softball organization — AAA, AA, Majors, and Majors Plus. Building a legacy since ${cfg.foundedYear}.</p>
           <div class="footer-social">
             <a class="social-btn" href="${cfg.facebookUrl || '#'}" target="_blank" title="Facebook">f</a>
             <a class="social-btn" href="${cfg.storeUrl || '#'}" target="_blank" title="Store">🛒</a>

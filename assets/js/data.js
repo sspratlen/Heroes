@@ -21,9 +21,11 @@ const HeroesData = {
 
   // ─── TEAMS ────────────────────────────────────────────────
   teams: [
-    { id: "55s-aaa", name: "55\'s AAA", shortName: "55s",   division: "AAA", ageGroup: 55, color: "#C8102E", manager: "Mike Marlow",    assistantManager: "James Bennar" },
-    { id: "50s-aaa", name: "50\'s AAA", shortName: "50s-A", division: "AAA", ageGroup: 50, color: "#1C6EA4", manager: "Scott Spratlen", assistantManager: "" },
-    { id: "50s-aa",  name: "50\'s AA",  shortName: "50s-B", division: "AA",  ageGroup: 50, color: "#16803A", manager: "Doyle Ollis",    assistantManager: "" },
+    { id: "55s-aaa",     name: "55\'s AAA",     shortName: "55s",   division: "AAA",         ageGroup: 55, color: "#C8102E", manager: "Mike Marlow",    assistantManager: "James Bennar" },
+    { id: "50s-aaa",     name: "50\'s AAA",     shortName: "50s-A", division: "AAA",         ageGroup: 50, color: "#1C6EA4", manager: "Scott Spratlen", assistantManager: "" },
+    { id: "50s-aa",      name: "50\'s AA",      shortName: "50s-B", division: "AA",          ageGroup: 50, color: "#16803A", manager: "Doyle Ollis",    assistantManager: "" },
+    { id: "majors",      name: "Majors",         shortName: "Maj",   division: "Majors",      ageGroup: null, color: "#C2410C", manager: "",             assistantManager: "" },
+    { id: "majors-plus", name: "Majors Plus",    shortName: "Maj+",  division: "Majors Plus", ageGroup: null, color: "#0F766E", manager: "",             assistantManager: "" },
   ],
 
   // ─── PLAYERS ──────────────────────────────────────────────
