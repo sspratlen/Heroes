@@ -29,7 +29,8 @@
     { label: 'Events',      route: '/events',     matches: ['/events', '/event', '/tournaments', '/tournament'] },
     { label: 'Season',      route: '/stats',      matches: ['/stats', '/schedule', '/season'] },
     { label: 'Players',     route: '/players',    matches: ['/players', '/player', '/team'] },
-    { label: 'Latest',      route: '/news',       matches: ['/news', '/awards', '/gallery', '/latest'] },
+    { label: 'Latest',      route: '/news',       matches: ['/news', '/awards', '/latest'] },
+    { label: 'Gallery',     route: '/gallery',    matches: ['/gallery'] },
     { label: 'My Heroes',   route: '/my',         matches: ['/my'], primary: true },
   ];
 
