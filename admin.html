@@ -561,6 +561,7 @@ function renderPlayers() {
           <input type="text" placeholder="Search players…" id="player-search-input"
             style="padding:7px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;outline:none"
             oninput="searchPlayers(this.value)">
+          <button class="btn btn-sm" onclick="showBulkInviteModal()" style="background:#1d4ed8;color:#fff">📧 Send Invites</button>
           <button class="btn btn-primary btn-sm" onclick="addPlayer()">+ New Player</button>
         </div>
       </div>
@@ -901,6 +902,116 @@ window.sendPlayerPasswordReset = async function(email, name) {
     toast('Could not send reset email: ' + (e.message || 'Unknown error'), 'error');
   }
 };
+
+window.showBulkInviteModal = async function() {
+  const data = loadData();
+  const withEmail = data.players.filter(p => p.active && p.email && p.email.trim());
+
+  if (!withEmail.length) {
+    toast('No active players have email addresses on file.', 'info');
+    return;
+  }
+
+  // Check which players already have Supabase accounts
+  const sb = _getClient();
+  let profiles = [];
+  try {
+    const { data: rows } = await sb.from('profiles').select('email');
+    profiles = (rows || []).map(r => r.email?.toLowerCase());
+  } catch(e) {}
+
+  const rows = withEmail.map(p => {
+    const hasAccount = profiles.includes(p.email.toLowerCase());
+    return `<tr id="inv-row-${p.id}">
+      <td style="padding:8px 6px;font-size:13px;font-weight:600">${p.firstName} ${p.lastName}</td>
+      <td style="padding:8px 6px;font-size:12px;color:#555">${p.email}</td>
+      <td style="padding:8px 6px;text-align:center">
+        <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;${hasAccount?'background:#dcfce7;color:#16a34a':'background:#fee2e2;color:#dc2626'}">
+          ${hasAccount ? 'has account' : 'no account'}
+        </span>
+      </td>
+      <td style="padding:8px 6px;text-align:right" id="inv-status-${p.id}">
+        <button class="btn btn-sm" onclick="sendOneInvite('${p.id}','${p.email}',${hasAccount})"
+          style="font-size:11px;padding:4px 10px;background:#1d4ed8;color:#fff">Send</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  openModal(
+    '📧 Send Invite Emails',
+    `<div style="margin-bottom:14px;padding:12px 14px;background:#eff6ff;border-radius:8px;font-size:13px;color:#1e40af;line-height:1.6">
+      <strong>How it works:</strong> Each player receives a secure link to set their own password.
+      The link expires after <strong>48 hours</strong>. Players with no account will be created automatically.
+      They must set their password when they click the link.
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="border-bottom:2px solid #e5e7eb">
+          <th style="padding:6px;text-align:left;font-size:11px;text-transform:uppercase;color:#888">Player</th>
+          <th style="padding:6px;text-align:left;font-size:11px;text-transform:uppercase;color:#888">Email</th>
+          <th style="padding:6px;text-align:center;font-size:11px;text-transform:uppercase;color:#888">Status</th>
+          <th style="padding:6px;text-align:right;font-size:11px;text-transform:uppercase;color:#888">Action</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div id="bulk-invite-progress" style="margin-top:12px;font-size:13px;color:#555;min-height:18px"></div>`,
+    'Send All Invites',
+    () => sendAllInvites(withEmail, profiles)
+  );
+};
+
+window.sendOneInvite = async function(playerId, email, hasAccount) {
+  const statusCell = document.getElementById('inv-status-' + playerId);
+  if (statusCell) statusCell.innerHTML = '<span style="font-size:11px;color:#888">Sending…</span>';
+
+  try {
+    const sb = _getClient();
+    const redirectTo = window.location.origin + window.location.pathname.replace(/admin\.html$/, '') + 'index.html';
+
+    if (!hasAccount) {
+      const tempPw = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2).toUpperCase() + '!1';
+      const player = loadData().players.find(p => p.id === playerId);
+      const displayName = player ? `${player.firstName} ${player.lastName}` : email.split('@')[0];
+      const { error: signUpErr } = await sb.auth.signUp({
+        email,
+        password: tempPw,
+        options: { data: { display_name: displayName, role: 'player', approved: false }, emailRedirectTo: redirectTo }
+      });
+      if (signUpErr && !signUpErr.message.includes('already registered')) throw signUpErr;
+    }
+
+    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo });
+    if (error) throw error;
+
+    if (statusCell) statusCell.innerHTML = '<span style="font-size:11px;font-weight:700;color:#16a34a">✓ Sent</span>';
+  } catch(e) {
+    if (statusCell) statusCell.innerHTML = `<span style="font-size:11px;color:#dc2626" title="${e.message}">✗ Error</span>`;
+  }
+};
+
+async function sendAllInvites(players, existingProfiles) {
+  const progress = document.getElementById('bulk-invite-progress');
+  let sent = 0, failed = 0;
+
+  for (const p of players) {
+    const hasAccount = existingProfiles.includes(p.email.toLowerCase());
+    if (progress) progress.textContent = `Sending ${sent + failed + 1} of ${players.length}…`;
+    try {
+      await window.sendOneInvite(p.id, p.email, hasAccount);
+      sent++;
+    } catch(e) { failed++; }
+    await new Promise(r => setTimeout(r, 400)); // avoid rate limiting
+  }
+
+  if (progress) {
+    progress.textContent = `Done — ${sent} sent${failed ? `, ${failed} failed` : ''}.`;
+    progress.style.color = failed ? '#dc2626' : '#16a34a';
+  }
+  // Close modal button becomes just a close
+  const btn = document.querySelector('.modal-confirm-btn');
+  if (btn) { btn.textContent = 'Done'; btn.onclick = closeModal; }
+}
 
 function buildPlayerForm(p, data) {
   const pos = ['P','C','1B','2B','3B','SS','OF','LF','CF','RF','DH','UT'];
