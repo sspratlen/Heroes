@@ -1365,13 +1365,14 @@ function renderTournaments() {
     tournaments = [...tournaments].sort((a,b) => new Date(a.date) - new Date(b.date));
   }
 
-  window.toggleFanAttend = function(eventId, btn) {
-    if (typeof HeroesAuth === 'undefined' || !HeroesAuth.canUseFanFeatures()) return;
+  window.toggleFanAttend = function(eventId, checkbox) {
+    if (typeof HeroesAuth === 'undefined' || !HeroesAuth.canUseFanFeatures()) {
+      checkbox.checked = !checkbox.checked; return;
+    }
     const attending = HeroesAuth.toggleAttendEvent(eventId);
-    btn.textContent = attending ? "✅ You're Attending" : "🙋 I'm Attending";
-    btn.style.background = attending ? '#dcfce7' : '#1d4ed8';
-    btn.style.color = attending ? '#15803d' : '#fff';
-    btn.style.borderColor = attending ? '#86efac' : '#1d4ed8';
+    checkbox.checked = attending;
+    const lbl = document.getElementById('fan-attend-label-' + eventId);
+    if (lbl) lbl.textContent = attending ? "You're attending! 🎉" : "I'm attending";
     App.toast(attending ? "You're attending! See you there. 🎉" : 'Removed from attending', 'info');
   };
 
@@ -1463,12 +1464,16 @@ function renderTournaments() {
 
       const canFanAttend = typeof HeroesAuth !== 'undefined' && HeroesAuth.canUseFanFeatures() && !isDone;
       const fanAttending = canFanAttend && HeroesAuth.isAttendingEvent(ev.id);
-      const fanAttendBtn = canFanAttend ? `
-        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-          <button onclick="toggleFanAttend('${ev.id}',this)"
-            style="padding:7px 18px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid;transition:all 0.15s;background:${fanAttending?'#dcfce7':'#1d4ed8'};color:${fanAttending?'#15803d':'#fff'};border-color:${fanAttending?'#86efac':'#1d4ed8'}">
-            ${fanAttending ? "✅ You're Attending" : "🙋 I'm Attending"}
-          </button>
+      const fanAttendSection = canFanAttend ? `
+        <div class="ev-attend" style="border-top:1px solid var(--border);margin-top:0">
+          <div class="ev-attend-head">
+            <span class="ev-attend-label">Fans</span>
+          </div>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:4px 0;font-size:14px;color:var(--text)">
+            <input type="checkbox" onchange="toggleFanAttend('${ev.id}',this)" ${fanAttending?'checked':''}
+              style="width:18px;height:18px;cursor:pointer;accent-color:#1d4ed8;flex-shrink:0">
+            <span id="fan-attend-label-${ev.id}">${fanAttending ? "You're attending! 🎉" : "I'm attending"}</span>
+          </label>
         </div>` : '';
 
       return `
@@ -1520,7 +1525,7 @@ function renderTournaments() {
               <div class="ev-avatars">${avatarHtml}</div>
             </div>
 
-            ${fanAttendBtn}
+            ${fanAttendSection}
 
           </div>
         </div>`;
