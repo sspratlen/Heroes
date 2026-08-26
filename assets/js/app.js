@@ -652,6 +652,7 @@ function renderPlayers() {
           <button class="filter-btn active" onclick="filterByStatus(this,'true')" data-status="true">Active</button>
           <button class="filter-btn" onclick="filterByStatus(this,'false')" data-status="false">Former</button>
           <button class="filter-btn" onclick="filterByStatus(this,'all')" data-status="all">All</button>
+          ${(typeof HeroesAuth !== 'undefined' && HeroesAuth.canUseFanFeatures()) ? `<button class="filter-btn" onclick="filterByStatus(this,'favorites')" data-status="favorites">⭐ Favorites</button>` : ''}
         </div>
         <div class="player-grid" id="player-grid">
           ${renderPlayerCards(data.players.filter(p => p.active), data)}
@@ -664,9 +665,16 @@ function renderPlayers() {
 window.toggleFavoritePlayer = function(playerId, btn) {
   if (typeof HeroesAuth === 'undefined' || !HeroesAuth.canUseFanFeatures()) return;
   const isFav = HeroesAuth.toggleFavorite(playerId);
-  btn.textContent = isFav ? '⭐' : '☆';
-  btn.title = isFav ? 'Remove from favorites' : 'Add to favorites';
-  btn.style.opacity = isFav ? '1' : '0.6';
+  if (btn.id === 'profile-fav-btn') {
+    btn.textContent = isFav ? '⭐ Favorited' : '☆ Add to Favorites';
+    btn.style.background = isFav ? '#fef9c3' : 'rgba(255,255,255,0.1)';
+    btn.style.color = isFav ? '#92400e' : '#fff';
+    btn.style.borderColor = isFav ? '#fde68a' : 'rgba(255,255,255,0.3)';
+  } else {
+    btn.textContent = isFav ? '⭐' : '☆';
+    btn.title = isFav ? 'Remove from favorites' : 'Add to favorites';
+    btn.style.opacity = isFav ? '1' : '0.6';
+  }
   App.toast(isFav ? 'Added to favorites!' : 'Removed from favorites', 'info');
 };
 
@@ -737,6 +745,10 @@ window.filterPlayers = function() {
   let players = data.players;
   if (status === 'true') players = players.filter(p => p.active);
   else if (status === 'false') players = players.filter(p => !p.active);
+  else if (status === 'favorites') {
+    const favs = typeof HeroesAuth !== 'undefined' ? HeroesAuth.getFavorites() : [];
+    players = players.filter(p => favs.includes(p.id));
+  }
   if (team) players = players.filter(p => p.teams.includes(team));
   if (q) players = players.filter(p => `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) || p.position.toLowerCase().includes(q));
   
@@ -760,6 +772,13 @@ function renderPlayer(playerId) {
   const stats25 = getPlayerStats(playerId, { season: '2025' });
   const yrs = new Date().getFullYear() - player.joinYear + 1;
   const teams = player.teams.map(id => data.teams.find(t => t.id === id)).filter(Boolean);
+  const canFav = typeof HeroesAuth !== 'undefined' && HeroesAuth.canUseFanFeatures();
+  const isFav = canFav && HeroesAuth.isFavorite(playerId);
+  const profileFavBtn = canFav ? `
+    <button id="profile-fav-btn" onclick="toggleFavoritePlayer('${playerId}', this)"
+      style="margin-top:12px;padding:7px 18px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid;transition:all 0.15s;background:${isFav?'#fef9c3':'rgba(255,255,255,0.12)'};color:${isFav?'#92400e':'#fff'};border-color:${isFav?'#fde68a':'rgba(255,255,255,0.3)'}">
+      ${isFav ? '⭐ Favorited' : '☆ Add to Favorites'}
+    </button>` : '';
 
   App.render(`
     <div class="player-profile-header">
@@ -778,6 +797,7 @@ function renderPlayer(playerId) {
             ${teams.map(t=>`<span class="tag tag-dark">${t.name}</span>`).join('')}
             <div class="years-badge">⭐ ${yrs} ${yrs===1?'Year':'Years'} with Heroes</div>
           </div>
+          ${profileFavBtn}
         </div>
       </div>
     </div>
