@@ -1188,7 +1188,8 @@ function renderNewsArticle(articleId) {
 
 // ─── PAGE: TOURNAMENTS ──────────────────────────────────
 let _tevFilter = 'all';
-let _tevSort   = 'date-asc';
+let _tevSort   = 'date-desc';
+let _tevView   = (()=>{ try { return localStorage.getItem('heroes_ev_view')||'card'; } catch(e){ return 'card'; } })();
 
 function renderTournaments() {
   // Inject styles once
@@ -1314,6 +1315,18 @@ function renderTournaments() {
       .ev-sort-wrap { display:flex; align-items:center; gap:8px; flex-shrink:0; }
       .ev-sort-label { font-size:13px; font-weight:700; color:var(--gray); }
       .ev-sort-select { border:1px solid var(--border); border-radius:20px; padding:6px 12px; font-size:12px; font-weight:700; background:#fff; cursor:pointer; outline:none; }
+      .ev-view-toggle { display:flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; flex-shrink:0; }
+      .ev-view-btn { background:none; border:none; padding:6px 10px; cursor:pointer; font-size:15px; color:var(--gray); transition:background 0.15s,color 0.15s; line-height:1; }
+      .ev-view-btn.active { background:#1d4ed8; color:#fff; }
+      /* ── grid view ── */
+      .ev-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px; }
+      .ev-tile { background:var(--card-bg,#fff); border:1px solid var(--border); border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:8px; cursor:default; transition:box-shadow 0.15s; }
+      .ev-tile:hover { box-shadow:0 4px 16px rgba(0,0,0,0.10); }
+      .ev-tile-top { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+      .ev-tile-date { font-size:11px; font-weight:800; text-transform:uppercase; color:var(--gray); letter-spacing:0.5px; }
+      .ev-tile-name { font-size:15px; font-weight:800; color:var(--text); line-height:1.3; }
+      .ev-tile-loc { font-size:12px; color:var(--gray); }
+      .ev-tile-pills { display:flex; flex-wrap:wrap; gap:5px; margin-top:2px; }
 
       /* ── empty state ── */
       .ev-empty { text-align:center; padding:60px 20px; color:var(--gray); }
@@ -1532,6 +1545,52 @@ function renderTournaments() {
     }).join('');
   }
 
+  function buildGrid(events) {
+    if (!events.length) return `
+      <div class="ev-empty">
+        <div class="ev-empty-icon">🏟️</div>
+        <h3>No events found</h3>
+        <p>Try a different filter</p>
+      </div>`;
+    const statusMap = {
+      upcoming:  ['#dbeafe','#1e40af','Upcoming'],
+      active:    ['#dcfce7','#15803d','In Progress'],
+      completed: ['#f3f4f6','#374151','Completed'],
+      cancelled: ['#fee2e2','#dc2626','Cancelled'],
+    };
+    return `<div class="ev-grid">${events.map(ev => {
+      const d1 = new Date(ev.date + 'T12:00:00');
+      const d2 = ev.endDate && ev.endDate !== ev.date ? new Date(ev.endDate + 'T12:00:00') : null;
+      const dateStr = d2
+        ? `${d1.toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${d2.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`
+        : d1.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      const teams = ev.teams.map(id => data.teams.find(t => t.id === id)).filter(Boolean);
+      const [sbg,scl,slbl] = statusMap[ev.status] || statusMap.upcoming;
+      const typeLabel = TYPE_LABELS[ev.type] || ev.type;
+      const canFanAttend = typeof HeroesAuth !== 'undefined' && HeroesAuth.canUseFanFeatures() && ev.status !== 'completed' && ev.status !== 'cancelled' && ev.allowFans !== false;
+      const fanAttending = canFanAttend && HeroesAuth.isAttendingEvent(ev.id);
+      const fanChk = canFanAttend ? `
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text);margin-top:4px;padding-top:8px;border-top:1px solid var(--border)">
+          <input type="checkbox" onchange="toggleFanAttend('${ev.id}',this)" ${fanAttending?'checked':''}
+            style="width:15px;height:15px;cursor:pointer;accent-color:#1d4ed8;flex-shrink:0">
+          <span id="fan-attend-label-${ev.id}">${fanAttending?"You're attending! 🎉":"I'm attending"}</span>
+        </label>` : '';
+      return `<div class="ev-tile">
+        <div class="ev-tile-top">
+          <div class="ev-tile-date">${dateStr}</div>
+          <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:${sbg};color:${scl};white-space:nowrap">${slbl}</span>
+        </div>
+        <div class="ev-tile-name">${ev.name}</div>
+        ${ev.location ? `<div class="ev-tile-loc">📍 ${ev.venue ? ev.venue+', ':''} ${ev.location}</div>` : ''}
+        <div class="ev-tile-pills">
+          <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:#f3f4f6;color:#374151">${typeLabel}</span>
+          ${teams.map(t=>`<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:#eff6ff;color:#1e40af">${t.shortName||t.name}</span>`).join('')}
+        </div>
+        ${fanChk}
+      </div>`;
+    }).join('')}</div>`;
+  }
+
   App.render(`
     <div class="page-banner">
       <div class="page-banner-inner">
@@ -1541,7 +1600,7 @@ function renderTournaments() {
       </div>
     </div>
     <section class="section">
-      <div class="container" style="max-width:900px">
+      <div class="container" style="max-width:${_tevView==='grid'?'1100':'900'}px">
         <div class="ev-controls-row">
           <div class="filter-row">
             <button class="filter-btn ${_tevFilter==='all'?'active':''}"       onclick="filterTourneys(this,'all')">All</button>
@@ -1552,16 +1611,22 @@ function renderTournaments() {
               return `<button class="filter-btn ${_tevFilter===t?'active':''}" onclick="filterTourneys(this,'${t}')">${lbl}</button>`;
             }).join('')}
           </div>
-          <div class="ev-sort-wrap">
-            <label class="ev-sort-label">Sort:</label>
-            <select class="ev-sort-select" onchange="sortTourneys(this.value)">
-              <option value="date-asc"  ${_tevSort==='date-asc' ?'selected':''}>Soonest First</option>
-              <option value="date-desc" ${_tevSort==='date-desc'?'selected':''}>Latest First</option>
-              <option value="upcoming"  ${_tevSort==='upcoming' ?'selected':''}>Upcoming First</option>
-            </select>
+          <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+            <div class="ev-sort-wrap">
+              <label class="ev-sort-label">Sort:</label>
+              <select class="ev-sort-select" onchange="sortTourneys(this.value)">
+                <option value="date-desc" ${_tevSort==='date-desc'?'selected':''}>Newest First</option>
+                <option value="date-asc"  ${_tevSort==='date-asc' ?'selected':''}>Oldest First</option>
+                <option value="upcoming"  ${_tevSort==='upcoming' ?'selected':''}>Upcoming First</option>
+              </select>
+            </div>
+            <div class="ev-view-toggle">
+              <button class="ev-view-btn ${_tevView==='card'?'active':''}" onclick="switchTevView('card')" title="Card view">☰</button>
+              <button class="ev-view-btn ${_tevView==='grid'?'active':''}" onclick="switchTevView('grid')" title="Grid view">⊞</button>
+            </div>
           </div>
         </div>
-        <div id="tourney-list">${buildCards(tournaments)}</div>
+        <div id="tourney-list">${_tevView==='grid' ? buildGrid(tournaments) : buildCards(tournaments)}</div>
       </div>
     </section>
   `);
@@ -1574,6 +1639,12 @@ window.filterTourneys = function(btn, filter) {
 
 window.sortTourneys = function(val) {
   _tevSort = val;
+  renderTournaments();
+};
+
+window.switchTevView = function(view) {
+  _tevView = view;
+  try { localStorage.setItem('heroes_ev_view', view); } catch(e) {}
   renderTournaments();
 };
 
@@ -2188,7 +2259,7 @@ Router.register('/player', (playerId) => renderPlayer(playerId));
 Router.register('/stats', renderStats);
 Router.register('/schedule', renderSchedule);
 Router.register('/news', (...args) => { if (args[0] === 'article') renderNewsArticle(args[1]); else renderNews(); });
-Router.register('/events', () => { _tevFilter = 'all'; _tevSort = 'date-asc'; renderTournaments(); });
+Router.register('/events', () => { _tevFilter = 'all'; _tevSort = 'date-desc'; renderTournaments(); });
 Router.register('/about', renderAbout);
 Router.register('/contact', renderContact);
 Router.register('/sponsors', renderSponsors);
