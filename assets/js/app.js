@@ -1462,7 +1462,7 @@ function renderTournaments() {
 
       const accentClass = isSocial ? 'ev-accent-social' : (isDone ? 'ev-accent-completed' : '');
 
-      const canFanAttend = typeof HeroesAuth !== 'undefined' && HeroesAuth.canUseFanFeatures() && !isDone;
+      const canFanAttend = typeof HeroesAuth !== 'undefined' && HeroesAuth.canUseFanFeatures() && !isDone && ev.allowFans !== false;
       const fanAttending = canFanAttend && HeroesAuth.isAttendingEvent(ev.id);
       const fanAttendSection = canFanAttend ? `
         <div class="ev-attend" style="border-top:1px solid var(--border);margin-top:0">
