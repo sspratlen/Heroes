@@ -1377,10 +1377,11 @@ function renderTournaments() {
   // All unique types present in data
   const allTypes = [...new Set((data.events || []).map(e => e.type).filter(Boolean))];
 
-  // Filter — status buttons (All/Upcoming/Completed); types via multi-select
+  // Filter — status buttons (All/Upcoming/Completed/Attending); types via multi-select
   let tournaments = [...(data.events || [])];
   if (_tevFilter === 'upcoming')       tournaments = tournaments.filter(e => e.status === 'upcoming' || e.status === 'active');
   else if (_tevFilter === 'completed') tournaments = tournaments.filter(e => e.status === 'completed' || e.status === 'cancelled');
+  else if (_tevFilter === 'attending') tournaments = tournaments.filter(e => typeof HeroesAuth !== 'undefined' && HeroesAuth.isAttendingEvent(e.id));
   if (_tevTypeFilters.length)          tournaments = tournaments.filter(e => _tevTypeFilters.includes(e.type));
 
   // Sort
@@ -1626,6 +1627,7 @@ function renderTournaments() {
             <button class="filter-btn ${_tevFilter==='all'?'active':''}"       onclick="filterTourneys(this,'all')">All</button>
             <button class="filter-btn ${_tevFilter==='upcoming'?'active':''}"  onclick="filterTourneys(this,'upcoming')">Upcoming</button>
             <button class="filter-btn ${_tevFilter==='completed'?'active':''}" onclick="filterTourneys(this,'completed')">Completed</button>
+            ${(typeof HeroesAuth !== 'undefined' && HeroesAuth.canUseFanFeatures()) ? `<button class="filter-btn ${_tevFilter==='attending'?'active':''}" onclick="filterTourneys(this,'attending')">🎟 Attending</button>` : ''}
             <div class="ev-type-dd" id="ev-type-dd">
               <button class="ev-type-dd-btn ${_tevTypeFilters.length?'has-filter':''}" onclick="toggleEvTypeDropdown(event)">
                 ${_tevTypeFilters.length ? _tevTypeFilters.map(t=>TYPE_LABELS[t]||t).join(', ') : 'All Types'} ▾
