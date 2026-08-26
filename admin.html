@@ -840,9 +840,16 @@ function adminOpenPhotoPicker(playerId, teamsStr) {
   });
 }
 
-function addPlayer() {
+async function addPlayer() {
   const data = loadData();
-  openModal('Add New Player', buildPlayerForm(null, data), 'Save Player', () => {
+  let availableUsers = [];
+  try {
+    const sb = _getClient();
+    const { data: profiles } = await sb.from('profiles').select('id, email, display_name').eq('approved', true);
+    const existingEmails = new Set(data.players.filter(p => p.email).map(p => p.email.toLowerCase()));
+    availableUsers = (profiles || []).filter(u => u.email && !existingEmails.has(u.email.toLowerCase()));
+  } catch(e) {}
+  openModal('Add New Player', buildPlayerForm(null, data, availableUsers), 'Save Player', () => {
     const d = loadData();
     const id = 'p' + Date.now();
     d.players.push({
@@ -855,6 +862,17 @@ function addPlayer() {
     saveData(d); closeModal(); renderPlayers(); toast('Player added!');
   });
 }
+
+window.pfFillFromUser = function(encoded) {
+  if (!encoded) return;
+  try {
+    const { name, email } = JSON.parse(decodeURIComponent(encoded));
+    const parts = (name || '').trim().split(/\s+/);
+    document.getElementById('pf-first').value = parts[0] || '';
+    document.getElementById('pf-last').value = parts.slice(1).join(' ') || '';
+    document.getElementById('pf-email').value = email || '';
+  } catch(e) {}
+};
 
 function editPlayer(id) {
   const data = loadData();
@@ -1013,9 +1031,22 @@ async function sendAllInvites(players, existingProfiles) {
   if (btn) { btn.textContent = 'Done'; btn.onclick = closeModal; }
 }
 
-function buildPlayerForm(p, data) {
+function buildPlayerForm(p, data, users = []) {
   const pos = ['P','C','1B','2B','3B','SS','OF','LF','CF','RF','DH','UT'];
-  return `
+  const userPicker = (!p && users.length) ? `
+    <div class="form-group" style="margin-bottom:16px;padding:12px 14px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe">
+      <label class="form-label" style="color:#1e40af;font-weight:700">Link to Registered User</label>
+      <select id="pf-user-select" class="form-select" onchange="pfFillFromUser(this.value)" style="margin-top:4px">
+        <option value="">— Enter manually —</option>
+        ${users.map(u => {
+          const payload = encodeURIComponent(JSON.stringify({ name: u.display_name || '', email: u.email }));
+          const label = u.display_name ? `${u.display_name} (${u.email})` : u.email;
+          return `<option value="${payload}">${label}</option>`;
+        }).join('')}
+      </select>
+      <div class="form-hint" style="margin-top:4px">Selecting a user pre-fills their name and email.</div>
+    </div>` : '';
+  return userPicker + `
     <div class="form-row">
       <div class="form-group"><label class="form-label">First Name*</label><input id="pf-first" class="form-input" value="${p?.firstName||''}"></div>
       <div class="form-group"><label class="form-label">Last Name*</label><input id="pf-last" class="form-input" value="${p?.lastName||''}"></div>
