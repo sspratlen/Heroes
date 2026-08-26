@@ -2262,14 +2262,28 @@ async function approveProfile(profileId, grantRole) {
   if (!confirm(`Approve this account as ${grantRole}?`)) return;
   try {
     const sb = _getClient();
-    const { error } = await sb.from('profiles').update({
-      approved: true,
-      role: grantRole,
-      pending_role: null,
-      rejection_reason: null,
-    }).eq('id', profileId);
+
+    // Look up the profile email so we can match against the player roster
+    const { data: prof } = await sb.from('profiles').select('email').eq('id', profileId).single();
+    const profileEmail = (prof?.email || '').toLowerCase();
+
+    // Find a matching player by email
+    const data = loadData();
+    const matched = profileEmail
+      ? data.players.find(p => p.email && p.email.toLowerCase() === profileEmail)
+      : null;
+
+    const updates = { approved: true, role: grantRole, pending_role: null, rejection_reason: null };
+    if (matched) updates.player_id = matched.id;
+
+    const { error } = await sb.from('profiles').update(updates).eq('id', profileId);
     if (error) throw error;
-    toast(`✅ Account approved as ${grantRole}!`);
+
+    if (matched) {
+      toast(`✅ Account approved as ${grantRole} and linked to player ${matched.firstName} ${matched.lastName}!`);
+    } else {
+      toast(`✅ Account approved as ${grantRole}!`);
+    }
     renderAccountRequests();
     updateReqBadge();
   } catch (err) {
