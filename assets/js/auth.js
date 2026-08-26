@@ -567,8 +567,8 @@ const HeroesAuth = {
         <img src="assets/img/heroes-logo.jpg" alt="Heroes Logo"
              onerror="this.style.background='#C8102E';this.style.borderRadius='50%'">
         <div>
-          <div class="auth-modal-title">Create Account</div>
-          <div class="auth-modal-subtitle">Request access to Heroes SSB</div>
+          <div class="auth-modal-title">Request Access</div>
+          <div class="auth-modal-subtitle">Heroes Senior Softball</div>
         </div>
       </div>
 
@@ -590,30 +590,12 @@ const HeroesAuth = {
         <label class="auth-form-label" for="ha-reg-pw">Password</label>
         <input  type="password" id="ha-reg-pw"    class="auth-form-input"
                 placeholder="Min 6 characters" autocomplete="new-password"
-                onkeydown="if(event.key==='Enter')document.getElementById('ha-reg-pw2').focus()">
-      </div>
-
-      <div class="auth-form-group">
-        <label class="auth-form-label" for="ha-reg-pw2">Confirm Password</label>
-        <input  type="password" id="ha-reg-pw2"   class="auth-form-input"
-                placeholder="Repeat password" autocomplete="new-password"
-                onkeydown="if(event.key==='Enter')document.getElementById('ha-reg-role').focus()">
-      </div>
-
-      <div class="auth-form-group">
-        <label class="auth-form-label" for="ha-reg-role">Requesting Access As</label>
-        <select id="ha-reg-role" class="auth-form-input" style="cursor:pointer"
                 onkeydown="if(event.key==='Enter')HeroesAuth.submitRegister()">
-          <option value="player">Player / Member</option>
-          <option value="coach">Coach (requires Manager or Admin approval)</option>
-          <option value="manager">Manager (requires Admin approval)</option>
-          <option value="admin">Admin (requires Admin approval)</option>
-        </select>
       </div>
 
       <div id="ha-error" class="auth-form-error" aria-live="polite"></div>
 
-      <button class="auth-submit-btn" onclick="HeroesAuth.submitRegister()">Create Account</button>
+      <button class="auth-submit-btn" onclick="HeroesAuth.submitRegister()">Request Access</button>
       <button class="auth-secondary-btn" onclick="HeroesAuth.hideLoginModal()">Cancel</button>
 
       <div class="auth-modal-footer">
@@ -796,14 +778,13 @@ const HeroesAuth = {
     const nameEl  = document.getElementById('ha-reg-name');
     const emailEl = document.getElementById('ha-reg-email');
     const pwEl    = document.getElementById('ha-reg-pw');
-    const pw2El   = document.getElementById('ha-reg-pw2');
     const errEl   = document.getElementById('ha-error');
-    if (!nameEl || !emailEl || !pwEl || !pw2El || !errEl) return;
+    if (!nameEl || !emailEl || !pwEl || !errEl) return;
 
     const displayName = nameEl.value.trim();
     const email       = emailEl.value.trim();
     const password    = pwEl.value;
-    const confirm     = pw2El.value;
+    const requestedRole = 'player';
 
     // Client-side validation
     if (!displayName) { errEl.textContent = 'Please enter your full name.'; return; }
@@ -813,13 +794,6 @@ const HeroesAuth = {
     if (!password || password.length < 6) {
       errEl.textContent = 'Password must be at least 6 characters.'; return;
     }
-    if (password !== confirm) {
-      errEl.textContent = 'Passwords do not match.'; return;
-    }
-
-    // Disable button while in flight
-    const roleEl      = document.getElementById('ha-reg-role');
-    const requestedRole = roleEl?.value || 'player';
 
     // Disable button while in flight
     const btn = document.querySelector('#auth-modal-inner .auth-submit-btn');
@@ -838,23 +812,13 @@ const HeroesAuth = {
     // Success — show confirmation state
     const inner = document.getElementById('auth-modal-inner');
     if (inner) {
-      const roleLabels = {
-        player:  'Player / Member',
-        coach:   'Coach',
-        manager: 'Manager',
-        admin:   'Admin',
-      };
-      const roleDisplay = roleLabels[requestedRole] || requestedRole;
-      const approverNote = requestedRole === 'player'
-        ? 'A team admin will review your account before you can log in.'
-        : `You requested the <strong>${roleDisplay}</strong> role. A qualified admin will review your request.`;
       inner.innerHTML = `
         <div class="auth-approval-state">
           <div class="auth-approval-icon">✅</div>
-          <h2 class="auth-approval-title">Account Request Submitted!</h2>
+          <h2 class="auth-approval-title">Request Submitted!</h2>
           <p class="auth-approval-msg">
-            Welcome, ${displayName}! Your account has been created and is
-            pending approval. ${approverNote}
+            Welcome, ${displayName}! Your account is pending approval.
+            A team admin will review it shortly — you'll have access once approved.
           </p>
           <button class="auth-submit-btn" onclick="HeroesAuth.hideLoginModal()">Got it</button>
         </div>`;
