@@ -688,7 +688,7 @@ function renderPlayerCards(players, data) {
 
     return `<div class="bc-scene" data-route="/player/${p.id}">
       <div class="bc-card">
-        <div class="bc-front" style="position:relative">
+        <div class="bc-front">
           ${favBtn}
           <div class="bc-brand" style="background:${teamColor}">
             <span>HEROES SSB</span>
