@@ -587,6 +587,14 @@ const HeroesAuth = {
       </div>
 
       <div class="auth-form-group">
+        <label class="auth-form-label" for="ha-reg-role">I am a…</label>
+        <select id="ha-reg-role" class="auth-form-input" style="cursor:pointer">
+          <option value="player">Player</option>
+          <option value="fan">Fan</option>
+        </select>
+      </div>
+
+      <div class="auth-form-group">
         <label class="auth-form-label" for="ha-reg-pw">Password</label>
         <input  type="password" id="ha-reg-pw"    class="auth-form-input"
                 placeholder="Min 6 characters" autocomplete="new-password"
@@ -784,7 +792,8 @@ const HeroesAuth = {
     const displayName = nameEl.value.trim();
     const email       = emailEl.value.trim();
     const password    = pwEl.value;
-    const requestedRole = 'player';
+    const roleEl = document.getElementById('ha-reg-role');
+    const requestedRole = roleEl ? roleEl.value : 'player';
 
     // Client-side validation
     if (!displayName) { errEl.textContent = 'Please enter your full name.'; return; }
