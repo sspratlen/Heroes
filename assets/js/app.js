@@ -661,7 +661,17 @@ function renderPlayers() {
   `);
 }
 
+window.toggleFavoritePlayer = function(playerId, btn) {
+  if (typeof HeroesAuth === 'undefined' || !HeroesAuth.canUseFanFeatures()) return;
+  const isFav = HeroesAuth.toggleFavorite(playerId);
+  btn.textContent = isFav ? '⭐' : '☆';
+  btn.title = isFav ? 'Remove from favorites' : 'Add to favorites';
+  btn.style.opacity = isFav ? '1' : '0.6';
+  App.toast(isFav ? 'Added to favorites!' : 'Removed from favorites', 'info');
+};
+
 function renderPlayerCards(players, data) {
+  const canFav = typeof HeroesAuth !== 'undefined' && HeroesAuth.canUseFanFeatures();
   return players.map(p => {
     const stats = getPlayerStats(p.id);
     const yrs = new Date().getFullYear() - p.joinYear + 1;
@@ -670,10 +680,16 @@ function renderPlayerCards(players, data) {
     const teamNames = playerTeams.map(t => t.shortName || t.name).join(' · ') || 'Heroes';
     const initials = `${p.firstName?.[0] || ''}${p.lastName?.[0] || ''}` || '?';
     const fullName = `${p.firstName || ''} ${p.lastName || ''}`.trim();
+    const isFav = canFav && HeroesAuth.isFavorite(p.id);
+    const favBtn = canFav
+      ? `<button onclick="event.stopPropagation();toggleFavoritePlayer('${p.id}',this)" title="${isFav?'Remove from favorites':'Add to favorites'}"
+           style="position:absolute;top:6px;right:6px;background:rgba(255,255,255,0.85);border:none;border-radius:50%;width:28px;height:28px;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:${isFav?'1':'0.6'};z-index:2">${isFav?'⭐':'☆'}</button>`
+      : '';
 
     return `<div class="bc-scene" data-route="/player/${p.id}">
       <div class="bc-card">
-        <div class="bc-front">
+        <div class="bc-front" style="position:relative">
+          ${favBtn}
           <div class="bc-brand" style="background:${teamColor}">
             <span>HEROES SSB</span>
             <span>#${p.number || '—'}</span>
@@ -1329,6 +1345,16 @@ function renderTournaments() {
     tournaments = [...tournaments].sort((a,b) => new Date(a.date) - new Date(b.date));
   }
 
+  window.toggleFanAttend = function(eventId, btn) {
+    if (typeof HeroesAuth === 'undefined' || !HeroesAuth.canUseFanFeatures()) return;
+    const attending = HeroesAuth.toggleAttendEvent(eventId);
+    btn.textContent = attending ? "✅ You're Attending" : "🙋 I'm Attending";
+    btn.style.background = attending ? '#dcfce7' : '#1d4ed8';
+    btn.style.color = attending ? '#15803d' : '#fff';
+    btn.style.borderColor = attending ? '#86efac' : '#1d4ed8';
+    App.toast(attending ? "You're attending! See you there. 🎉" : 'Removed from attending', 'info');
+  };
+
   function buildCards(events) {
     if (!events.length) return `
       <div class="ev-empty">
@@ -1415,6 +1441,16 @@ function renderTournaments() {
 
       const accentClass = isSocial ? 'ev-accent-social' : (isDone ? 'ev-accent-completed' : '');
 
+      const canFanAttend = typeof HeroesAuth !== 'undefined' && HeroesAuth.canUseFanFeatures() && !isDone;
+      const fanAttending = canFanAttend && HeroesAuth.isAttendingEvent(ev.id);
+      const fanAttendBtn = canFanAttend ? `
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+          <button onclick="toggleFanAttend('${ev.id}',this)"
+            style="padding:7px 18px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid;transition:all 0.15s;background:${fanAttending?'#dcfce7':'#1d4ed8'};color:${fanAttending?'#15803d':'#fff'};border-color:${fanAttending?'#86efac':'#1d4ed8'}">
+            ${fanAttending ? "✅ You're Attending" : "🙋 I'm Attending"}
+          </button>
+        </div>` : '';
+
       return `
         <div class="ev-card">
           <div class="ev-accent ${accentClass}"></div>
@@ -1463,6 +1499,8 @@ function renderTournaments() {
               </div>
               <div class="ev-avatars">${avatarHtml}</div>
             </div>
+
+            ${fanAttendBtn}
 
           </div>
         </div>`;

@@ -160,6 +160,50 @@ const HeroesAuth = {
     return ['admin', 'manager', 'coach'].includes(this.getRole());
   },
 
+  /** True if the user's role is 'fan'. */
+  isFan() { return this.getRole() === 'fan'; },
+
+  /** Any logged-in, approved user can use fan features (favorites, event attendance). */
+  canUseFanFeatures() { return this.isLoggedIn() && this.isApproved(); },
+
+  // ── Fan data (stored in localStorage per user) ────────────
+  _fanKey() {
+    const uid = this._profile?.id || this._session?.user?.id;
+    return uid ? `heroes_fan_${uid}` : null;
+  },
+  _fanData() {
+    const key = this._fanKey();
+    if (!key) return { favorites: [], attending: [] };
+    try { return JSON.parse(localStorage.getItem(key) || '{}'); } catch(e) { return {}; }
+  },
+  _saveFanData(d) {
+    const key = this._fanKey();
+    if (!key) return;
+    try { localStorage.setItem(key, JSON.stringify(d)); } catch(e) {}
+  },
+
+  getFavorites()      { return this._fanData().favorites || []; },
+  isFavorite(pid)     { return this.getFavorites().includes(pid); },
+  toggleFavorite(pid) {
+    const d = this._fanData();
+    d.favorites = d.favorites || [];
+    const i = d.favorites.indexOf(pid);
+    if (i >= 0) d.favorites.splice(i, 1); else d.favorites.push(pid);
+    this._saveFanData(d);
+    return d.favorites.includes(pid);
+  },
+
+  getAttendingEvents()    { return this._fanData().attending || []; },
+  isAttendingEvent(eid)   { return this.getAttendingEvents().includes(eid); },
+  toggleAttendEvent(eid) {
+    const d = this._fanData();
+    d.attending = d.attending || [];
+    const i = d.attending.indexOf(eid);
+    if (i >= 0) d.attending.splice(i, 1); else d.attending.push(eid);
+    this._saveFanData(d);
+    return d.attending.includes(eid);
+  },
+
 
   // ── Auth actions ──────────────────────────────────────────
 
