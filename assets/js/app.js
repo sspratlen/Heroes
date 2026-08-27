@@ -30,6 +30,17 @@ const Router = {
   }
 };
 
+// ─── HELPERS ────────────────────────────────────────────────
+function gameResult(g) {
+  if (g.heroScore != null && g.oppScore != null && g.heroScore !== '' && g.oppScore !== '') {
+    const h = Number(g.heroScore), o = Number(g.oppScore);
+    if (h > o) return 'W';
+    if (h < o) return 'L';
+    return 'T';
+  }
+  return g.result || '';
+}
+
 // ─── APP ────────────────────────────────────────────────────
 const App = {
   main: null,
@@ -304,7 +315,7 @@ function renderHome() {
     const team = data.teams.find(t => t.id === g.teamId);
     const d = new Date(g.date + 'T12:00:00');
     return `
-      <div class="game-item ${g.result === 'W' ? 'win' : g.result === 'L' ? 'loss' : ''}">
+      <div class="game-item ${gameResult(g) === 'W' ? 'win' : gameResult(g) === 'L' ? 'loss' : ''}">
         <div>
           <div class="game-date-day">${d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>
           <div class="game-date">${d.toLocaleDateString('en-US',{year:'numeric'})}</div>
@@ -323,7 +334,7 @@ function renderHome() {
           <div style="font-size:11px;color:var(--gray)">${team?.shortName}</div>
         </div>
         <div class="game-result">
-          ${g.result ? `<span class="result-badge result-${g.result}">${g.result}</span>` : '<span style="color:var(--gray);font-size:12px">TBD</span>'}
+          ${gameResult(g) ? `<span class="result-badge result-${gameResult(g)}">${gameResult(g)}</span>` : '<span style="color:var(--gray);font-size:12px">TBD</span>'}
         </div>
       </div>`;
   }).join('');
@@ -400,8 +411,8 @@ function renderHome() {
 
   const _curYear = new Date().getFullYear();
   const _curGames = data.games.filter(g => (g.season+'') === (_curYear+''));
-  const _curW = _curGames.filter(g => g.result === 'W').length;
-  const _curL = _curGames.filter(g => g.result === 'L').length;
+  const _curW = _curGames.filter(g => gameResult(g) === 'W').length;
+  const _curL = _curGames.filter(g => gameResult(g) === 'L').length;
   const _curTotal = _curW + _curL;
   const _curPct = _curTotal ? (_curW/_curTotal).toFixed(3).replace(/^0/,'') : '.000';
 
@@ -564,7 +575,7 @@ function renderTeam(teamId) {
 
   const gameRows = games.map(g => {
     const d = new Date(g.date + 'T12:00:00');
-    return `<div class="game-item ${g.result==='W'?'win':g.result==='L'?'loss':'upcoming'}">
+    return `<div class="game-item ${gameResult(g)==='W'?'win':gameResult(g)==='L'?'loss':'upcoming'}">
       <div>
         <div class="game-date-day">${d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>
         <div class="game-date">${g.season}</div>
@@ -577,7 +588,7 @@ function renderTeam(teamId) {
       <div class="game-score"><div class="score">
         <span class="score-hero">${g.heroScore??'–'}</span><span class="score-sep">-</span><span class="score-opp">${g.oppScore??'–'}</span>
       </div></div>
-      <div class="game-result">${g.result?`<span class="result-badge result-${g.result}">${g.result}</span>`:'<span style="color:var(--gray);font-size:12px">TBD</span>'}</div>
+      <div class="game-result">${gameResult(g)?`<span class="result-badge result-${gameResult(g)}">${gameResult(g)}</span>`:'<span style="color:var(--gray);font-size:12px">TBD</span>'}</div>
     </div>`;
   }).join('');
 
@@ -850,7 +861,7 @@ function renderPlayerGameLog(playerId, data) {
     return `<tr>
       <td>${d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</td>
       <td>${g.opponent}</td>
-      <td><span class="result-badge result-${g.result||'T'}">${g.result||'–'}</span></td>
+      <td><span class="result-badge result-${gameResult(g)||'T'}">${gameResult(g)||'–'}</span></td>
       <td>${ps.ab}</td><td>${ps.h}</td><td>${ps.d}</td><td>${ps.t}</td><td>${ps.hr}</td>
       <td>${ps.rbi}</td><td>${ps.r}</td><td>${ps.bb}</td><td>${ps.k}</td>
       <td class="stat-highlight">${StatCalc.avg(ps.h,ps.ab)}</td>
@@ -1013,7 +1024,7 @@ function renderSchedule() {
   const rows = games.map(g => {
     const team = data.teams.find(t => t.id === g.teamId);
     const d = new Date(g.date + 'T12:00:00');
-    return `<div class="game-item ${g.result==='W'?'win':g.result==='L'?'loss':'upcoming'} ${g.playerStats?.length?'has-boxscore':''}" onclick="showBoxScore('${g.id}')">
+    return `<div class="game-item ${gameResult(g)==='W'?'win':gameResult(g)==='L'?'loss':'upcoming'} ${g.playerStats?.length?'has-boxscore':''}" onclick="showBoxScore('${g.id}')">
       <div>
         <div class="game-date-day">${d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</div>
         <div class="game-date">${d.getFullYear()}</div>
@@ -1026,7 +1037,7 @@ function renderSchedule() {
       <div class="game-score"><div class="score">
         <span class="score-hero">${g.heroScore??'–'}</span><span class="score-sep">-</span><span class="score-opp">${g.oppScore??'–'}</span>
       </div></div>
-      <div class="game-result">${g.result?`<span class="result-badge result-${g.result}">${g.result}</span>`:'<span style="color:var(--gray);font-size:12px">TBD</span>'}
+      <div class="game-result">${gameResult(g)?`<span class="result-badge result-${gameResult(g)}">${gameResult(g)}</span>`:'<span style="color:var(--gray);font-size:12px">TBD</span>'}
       ${g.playerStats?.length ? '<div class="boxscore-hint">📊 Box Score</div>' : ''}
       </div>
     </div>`;
@@ -1102,7 +1113,7 @@ window.showBoxScore = function(gameId) {
         <div>
           <div class="boxscore-game-info">${dateStr} · ${team?.name || ''}</div>
           <div class="boxscore-matchup">Heroes <span>${g.heroScore}</span> – <span>${g.oppScore}</span> ${g.opponent}</div>
-          <div class="boxscore-result ${g.result==='W'?'w':g.result==='L'?'l':''}">${g.result==='W'?'✅ Win':g.result==='L'?'❌ Loss':'—'}</div>
+          <div class="boxscore-result ${gameResult(g)==='W'?'w':gameResult(g)==='L'?'l':''}">${gameResult(g)==='W'?'✅ Win':gameResult(g)==='L'?'❌ Loss':'—'}</div>
         </div>
         <button class="boxscore-close" onclick="document.getElementById('boxscore-modal').remove()">✕</button>
       </div>
