@@ -2265,14 +2265,67 @@ async function _doScan(gameId, { imageBase64, mediaType, imageUrl }) {
   const apiKey = _getScanApiKey();
   if (!apiKey) { toast('No Claude API key. Go to Settings first.', 'error'); return; }
 
+  // If stats are already entered, ask before overwriting
+  const existingInputs = [...document.querySelectorAll('#stat-rows-container input[data-stat]')]
+    .filter(inp => inp.value !== '' && inp.value !== '0' && inp.value !== null);
+  if (existingInputs.length > 0) {
+    const choice = await new Promise(resolve => {
+      openModal('Stats Already Entered', `
+        <p style="margin:0 0 16px;color:var(--text)">This game already has stats entered. How would you like to proceed?</p>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <button class="btn btn-danger" style="width:100%;text-align:left;padding:10px 14px" onclick="closeModal();window._scanChoice('clear')">
+            🗑️ <strong>Clear & Rescan</strong>
+            <div style="font-size:11px;opacity:.7;margin-top:2px">Wipe all existing stats, then fill from scorebook</div>
+          </button>
+          <button class="btn btn-secondary" style="width:100%;text-align:left;padding:10px 14px" onclick="closeModal();window._scanChoice('merge')">
+            ✏️ <strong>Add / Correct</strong>
+            <div style="font-size:11px;opacity:.7;margin-top:2px">Keep existing stats — scan only fills in missing or updates where found</div>
+          </button>
+          <button class="btn" style="width:100%;text-align:left;padding:10px 14px;border:1px solid var(--border)" onclick="closeModal();window._scanChoice('cancel')">
+            ✕ Cancel
+          </button>
+        </div>`, null, null);
+      window._scanChoice = (c) => { delete window._scanChoice; resolve(c); };
+    });
+    if (choice === 'cancel') return;
+    if (choice === 'clear') {
+      document.querySelectorAll('#stat-rows-container input[data-stat]').forEach(inp => { inp.value = ''; inp.style.background = ''; inp.title = ''; });
+      updateStatSummary();
+    }
+    // 'merge' falls through — existing values stay, scan will overwrite only what it finds
+  }
+
   const scanBtn = document.querySelector('[onclick^="scanScorebook"]');
   const origText = scanBtn?.innerHTML;
   if (scanBtn) { scanBtn.innerHTML = '⏳ Scanning…'; scanBtn.disabled = true; }
 
   try {
     const data = loadData();
+    const allTeams = data.teams || [];
     const allPlayers = data.players.filter(p => p.active);
-    const rosterNames = allPlayers.map(p => `${p.firstName} ${p.lastName} (#${p.number})`).join(', ');
+    const game = (data.games || []).find(g => g.id === gameId);
+    const gameTeamId = game?.teamId;
+
+    const primaryPlayers = gameTeamId
+      ? allPlayers.filter(p => (p.teams || []).includes(gameTeamId))
+      : allPlayers;
+    const subPlayers = gameTeamId
+      ? allPlayers.filter(p => !(p.teams || []).includes(gameTeamId))
+      : [];
+
+    const fmtPlayer = p => {
+      const team = allTeams.find(t => t.id === (p.teams?.[0] || p.teamId));
+      const teamLabel = team ? ` [${team.name}]` : '';
+      return `${p.firstName} ${p.lastName} (#${p.number})${teamLabel}`;
+    };
+
+    const rosterNames =
+      'PRIMARY TEAM PLAYERS (expected to appear on this scorebook):\n' +
+      primaryPlayers.map(fmtPlayer).join(', ') +
+      (subPlayers.length
+        ? '\n\nPOSSIBLE CROSS-TEAM SUBSTITUTES (only include if their name is visibly written on the scorebook as a sub):\n' +
+          subPlayers.map(fmtPlayer).join(', ')
+        : '');
 
     const body = { rosterNames, apiKey };
     if (imageUrl) body.imageUrl = imageUrl;
@@ -2291,43 +2344,104 @@ async function _doScan(gameId, { imageBase64, mediaType, imageUrl }) {
 
     const result = await response.json();
     const text = result.content?.find(b => b.type === 'text')?.text || '';
+    console.log('[scanScorebook] Claude raw response:', text);
 
     let parsed;
     try {
-      const clean = text.replace(/```json?\s*/g, '').replace(/```/g, '').trim();
-      parsed = JSON.parse(clean);
+      const match = text.match(/\{[\s\S]*\}/);
+      if (!match) throw new Error('no JSON object found');
+      parsed = JSON.parse(match[0]);
     } catch(e) {
-      throw new Error('Could not parse stats from the image. Try a clearer photo.');
+      console.error('[scanScorebook] parse error, raw text was:', text);
+      throw new Error('Could not parse stats. Raw response: ' + text.slice(0, 200));
     }
 
     const statKeys = ['ab','h','s','d','t','hr','hbp','k','bb','sf','rbi','r'];
-    let matched = 0, unmatched = [];
+    let matched = 0, crossTeamAdded = [], flagged = [], unmatched = [];
 
-    for (const entry of (parsed.players || [])) {
-      const entryName = (entry.name || '').toLowerCase().trim();
-      const entryNum  = String(entry.number || '').trim();
-      const player = allPlayers.find(p => {
+    // Match a scorebook entry to a player object.
+    // Priority: 1) primary team by name, 2) primary team by number,
+    //           3) other teams by name, 4) other teams by number.
+    // "Name match" = full name or last name match. Number match = exact jersey number.
+    function _matchPlayer(entryName, entryNum) {
+      const nameLower = entryName.toLowerCase();
+      const lastName  = nameLower.split(' ').pop();
+
+      const nameScore = p => {
         const full = `${p.firstName} ${p.lastName}`.toLowerCase();
         const last = p.lastName.toLowerCase();
-        if (full === entryName) return true;
-        if (entryName.includes(last) || last.includes(entryName.split(' ').pop())) return true;
-        if (entryNum && String(p.number) === entryNum) return true;
-        return false;
-      });
-      if (!player) { unmatched.push(entry.name); continue; }
-      const row = document.querySelector(`[data-row-player="${player.id}"]`);
-      if (!row) { unmatched.push(entry.name + ' (not in grid)'); continue; }
+        if (full === nameLower) return 3;
+        if (last === lastName) return 2;
+        if (full.includes(lastName) || lastName.includes(last)) return 1;
+        return 0;
+      };
+
+      const numMatch = p => entryNum && String(p.number) === entryNum;
+
+      // Try primary team first
+      let best = null, bestScore = 0;
+      for (const p of primaryPlayers) {
+        const s = nameScore(p);
+        if (s > bestScore) { best = p; bestScore = s; }
+      }
+      if (!best && entryNum) best = primaryPlayers.find(numMatch);
+
+      // Try other teams — replace if better score or if primary had no name match
+      for (const p of subPlayers) {
+        const s = nameScore(p);
+        if (s > bestScore) { best = p; bestScore = s; }
+        else if (s === 0 && !best && numMatch(p)) { best = p; }
+      }
+      if (!best && entryNum) best = subPlayers.find(numMatch);
+
+      return best || null;
+    }
+
+    function _applyStats(row, entry) {
       statKeys.forEach(key => {
         const inp = row.querySelector(`[data-stat="${key}"]`);
         if (inp && entry[key] != null && entry[key] !== '') inp.value = entry[key];
       });
+      if (entry.flagged) {
+        flagged.push(entry.name + (entry.notes ? ': ' + entry.notes : ''));
+        row.querySelectorAll('input[data-stat]').forEach(inp => {
+          inp.style.background = 'rgba(255,165,0,0.25)';
+          inp.title = '⚠️ ' + (entry.notes || 'Check totals');
+        });
+      }
+    }
+
+    for (const entry of (parsed.players || [])) {
+      const entryName = (entry.name || '').trim();
+      const entryNum  = String(entry.number || '').trim();
+
+      const player = _matchPlayer(entryName, entryNum);
+      if (!player) { unmatched.push(entryName); continue; }
+
+      let row = document.querySelector(`[data-row-player="${player.id}"]`);
+      const isCrossTeam = gameTeamId && !(player.teams || []).includes(gameTeamId);
+
+      if (!row) {
+        // Auto-add cross-team player to the grid
+        addPlayerToStatEntry(player.id, gameId);
+        row = document.querySelector(`[data-row-player="${player.id}"]`);
+        if (!row) { unmatched.push(entryName + ' (could not add to grid)'); continue; }
+        if (isCrossTeam) {
+          const team = allTeams.find(t => t.id === (player.teams?.[0] || player.teamId));
+          crossTeamAdded.push(`${player.firstName} ${player.lastName}` + (team ? ` [${team.name}]` : ''));
+        }
+      }
+
+      _applyStats(row, entry);
       matched++;
     }
 
     updateStatSummary();
     let msg = `Scanned ${matched} player${matched !== 1 ? 's' : ''} from scorebook.`;
+    if (crossTeamAdded.length) msg += ` Added cross-team: ${crossTeamAdded.join(', ')}.`;
+    if (flagged.length) msg += ` ⚠️ Review: ${flagged.join('; ')}.`;
     if (unmatched.length) msg += ` Could not match: ${unmatched.join(', ')}.`;
-    toast(msg);
+    toast(msg, flagged.length ? 'warning' : undefined);
   } catch(err) {
     toast('Scan failed: ' + err.message, 'error');
   } finally {
