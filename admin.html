@@ -1358,7 +1358,7 @@ function buildStatRow(p, existing = {}) {
     `<input type="number" min="0" class="stat-input" data-player="${p.id}" data-stat="${key}" value="${existing[key]||''}" oninput="updateStatSummary()" style="padding:5px 2px;text-align:center;border:1px solid var(--border);border-radius:4px;font-size:13px;width:100%;outline:none" onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'">`
   ).join('');
   const teamTag = p._guestTeam ? `<span style="font-size:10px;color:#6366f1;font-weight:700;margin-left:4px">${p._guestTeam}</span>` : '';
-  return `<div class="stat-entry-row" data-row-player="${p.id}">
+  return `<div class="stat-entry-row" data-row-player="${p.id}" data-sort-name="${p.lastName} ${p.firstName}" data-sort-num="${parseInt(p.number)||0}">
     <div class="player-label">${p.firstName} ${p.lastName} <span style="color:var(--gray)">#${p.number}</span>${teamTag}</div>
     ${inputs}
   </div>`;
@@ -1410,6 +1410,11 @@ window.loadStatEntry = function(gameId) {
         <div class="stat-entry-header">
           <span style="padding-left:8px">Player</span>
           ${headerCols.map(h=>`<span>${h}</span>`).join('')}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:11px;color:var(--gray);font-weight:700">Sort:</span>
+          <button id="sort-btn-name" onclick="sortStatRows('name')" style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid var(--border);background:var(--red);color:#fff">Name</button>
+          <button id="sort-btn-num"  onclick="sortStatRows('num')"  style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid var(--border);background:var(--white);color:var(--text)">Number</button>
         </div>
         <div id="stat-rows-container">
           ${rows}
@@ -1482,6 +1487,20 @@ window.addPlayerToStatEntry = function(playerId, gameId) {
   document.getElementById('stat-rows-container').insertAdjacentHTML('beforeend', row);
   document.getElementById('add-player-dd').style.display = 'none';
   updateStatSummary();
+};
+
+window.sortStatRows = function(by) {
+  const container = document.getElementById('stat-rows-container');
+  if (!container) return;
+  const rows = [...container.querySelectorAll('[data-row-player]')];
+  rows.sort((a, b) => by === 'num'
+    ? (parseInt(a.dataset.sortNum)||0) - (parseInt(b.dataset.sortNum)||0)
+    : (a.dataset.sortName||'').localeCompare(b.dataset.sortName||''));
+  rows.forEach(r => container.appendChild(r));
+  document.getElementById('sort-btn-name').style.background = by === 'name' ? 'var(--red)' : 'var(--white)';
+  document.getElementById('sort-btn-name').style.color    = by === 'name' ? '#fff' : 'var(--text)';
+  document.getElementById('sort-btn-num').style.background = by === 'num'  ? 'var(--red)' : 'var(--white)';
+  document.getElementById('sort-btn-num').style.color     = by === 'num'  ? '#fff' : 'var(--text)';
 };
 
 window.updateStatSummary = function() {
