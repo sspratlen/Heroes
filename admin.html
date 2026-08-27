@@ -2219,8 +2219,7 @@ function renderSettings() {
           <h4 style="margin:0 0 12px;font-size:14px;color:var(--text)">AI Integration</h4>
           <div class="form-group">
             <label class="form-label">Claude API Key <span style="font-weight:400;color:var(--gray)">(stored in your browser only)</span></label>
-            <input type="password" id="cfg-claude-key" class="form-input" placeholder="sk-ant-api…"
-              value="${(()=>{try{return localStorage.getItem('heroes_claude_api_key')||'';}catch(e){return '';}})()}">
+            <input type="password" id="cfg-claude-key" class="form-input" placeholder="sk-ant-api…">
             <div style="font-size:11px;color:var(--gray);margin-top:4px">
               Get your key at <strong>console.anthropic.com</strong> → API Keys → Create Key.
               Used for scorebook photo scanning only. Never sent to our servers.
@@ -2234,6 +2233,10 @@ function renderSettings() {
       </div>
     </div>
   `);
+  try {
+    const k = localStorage.getItem('heroes_claude_api_key');
+    if (k) { const el = document.getElementById('cfg-claude-key'); if (el) el.value = k; }
+  } catch(e) {}
 }
 window.saveSettings = function() {
   const d = loadData();
