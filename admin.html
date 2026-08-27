@@ -1251,7 +1251,7 @@ function addGame() {
       result: val('gf-result'), season: val('gf-season'), notes: val('gf-notes'),
       tournamentId: null, playerStats: []
     });
-    saveData(d); closeModal(); renderGames(); toast('Game added!');
+    saveCollection('games', d.games); closeModal(); renderGames(); toast('Game added!');
   });
 }
 
@@ -1265,13 +1265,13 @@ function editGame(id) {
       oppScore: val('gf-os')?parseInt(val('gf-os')):null,
       result: val('gf-result'), season: val('gf-season'), notes: val('gf-notes')
     };
-    saveData(d); closeModal(); renderGames(); toast('Game updated!');
+    saveCollection('games', d.games); closeModal(); renderGames(); toast('Game updated!');
   });
 }
 
 function deleteGame(id) {
   if (!confirm('Delete this game and all its stats?')) return;
-  const d = loadData(); d.games = d.games.filter(g=>g.id!==id); saveData(d); renderGames(); toast('Game deleted');
+  const d = loadData(); d.games = d.games.filter(g=>g.id!==id); saveCollection('games', d.games); renderGames(); toast('Game deleted');
 }
 
 function buildGameForm(g, data) {
@@ -1533,7 +1533,7 @@ window.saveStatsEntry = function(gameId) {
   });
   
   d.games[gameIdx].playerStats = Object.values(statsMap).filter(ps => ps.ab > 0);
-  saveData(d);
+  saveCollection('games', d.games);
   toast('Stats saved! ✓', 'success');
 };
 
@@ -2251,7 +2251,7 @@ window.saveSettings = function() {
     if (claudeKey) localStorage.setItem('heroes_claude_api_key', claudeKey);
     else localStorage.removeItem('heroes_claude_api_key');
   } catch(e) {}
-  saveData(d); renderSettings(); toast('Settings saved!');
+  saveCollection('config', d.config); renderSettings(); toast('Settings saved!');
 };
 
 // ─── SCOREBOOK SCAN ───────────────────────────────────────

@@ -468,6 +468,16 @@ function saveData(data) {
   _pushToSupabase(data);
 }
 
+// saveCollection: update a single named collection without touching others.
+// Use this instead of saveData() when only one collection changed — prevents
+// stale in-memory snapshots from overwriting other collections in Supabase.
+function saveCollection(name, value) {
+  const data = loadData();
+  data[name] = value;
+  localStorage.setItem('heroes_data', JSON.stringify(data));
+  _pushCollectionToSupabase(name, value);
+}
+
 async function _pushToSupabase(data) {
   const client = _getClient();
   if (!client) return;
@@ -476,6 +486,20 @@ async function _pushToSupabase(data) {
       .filter(col => data[col] !== undefined)
       .map(col => ({ collection: col, value: data[col], updated_at: new Date().toISOString() }));
     const { error } = await client.from('heroes_data').upsert(rows, { onConflict: 'collection' });
+    if (error) console.warn('Supabase push error:', error.message);
+  } catch(e) {
+    console.warn('Supabase push failed (offline?):', e.message);
+  }
+}
+
+async function _pushCollectionToSupabase(name, value) {
+  const client = _getClient();
+  if (!client) return;
+  try {
+    const { error } = await client.from('heroes_data').upsert(
+      [{ collection: name, value: value, updated_at: new Date().toISOString() }],
+      { onConflict: 'collection' }
+    );
     if (error) console.warn('Supabase push error:', error.message);
   } catch(e) {
     console.warn('Supabase push failed (offline?):', e.message);
