@@ -494,15 +494,21 @@ async function _pushToSupabase(data) {
 
 async function _pushCollectionToSupabase(name, value) {
   const client = _getClient();
-  if (!client) return;
+  if (!client) return false;
   try {
     const { error } = await client.from('heroes_data').upsert(
       [{ collection: name, value: value, updated_at: new Date().toISOString() }],
       { onConflict: 'collection' }
     );
-    if (error) console.warn('Supabase push error:', error.message);
+    if (error) {
+      console.error('Supabase push error:', error.message);
+      if (typeof toast === 'function') toast('⚠️ Cloud save failed: ' + error.message + ' — data is local only.', 'error');
+      return false;
+    }
+    return true;
   } catch(e) {
     console.warn('Supabase push failed (offline?):', e.message);
+    return false;
   }
 }
 
