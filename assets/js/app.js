@@ -644,6 +644,7 @@ function renderTeam(teamId) {
 // ─── PAGE: PLAYERS ──────────────────────────────────────────
 function renderPlayers() {
   const data = loadData();
+  const seasons = [...new Set(data.games.map(g => g.season).filter(Boolean))].sort().reverse();
   App.render(`
     <div class="page-banner">
       <div class="page-banner-inner">
@@ -660,6 +661,10 @@ function renderPlayers() {
             <option value="">All Teams</option>
             ${data.teams.map(t=>`<option value="${t.id}">${t.name}</option>`).join('')}
           </select>
+          <select class="form-select" id="player-season-filter" onchange="setPlayerSeasonFilter(this.value)" style="max-width:130px">
+            <option value="">Career Stats</option>
+            ${seasons.map(s=>`<option value="${s}" ${_playerSeasonFilter===s?'selected':''}>${s} Season</option>`).join('')}
+          </select>
           <button class="filter-btn active" onclick="filterByStatus(this,'true')" data-status="true">Active</button>
           <button class="filter-btn" onclick="filterByStatus(this,'false')" data-status="false">Former</button>
           <button class="filter-btn" onclick="filterByStatus(this,'all')" data-status="all">All</button>
@@ -672,6 +677,11 @@ function renderPlayers() {
     </section>
   `);
 }
+
+window.setPlayerSeasonFilter = function(val) {
+  _playerSeasonFilter = val || null;
+  filterPlayers();
+};
 
 window.toggleFavoritePlayer = function(playerId, btn) {
   if (typeof HeroesAuth === 'undefined' || !HeroesAuth.canUseFanFeatures()) return;
@@ -691,8 +701,9 @@ window.toggleFavoritePlayer = function(playerId, btn) {
 
 function renderPlayerCards(players, data) {
   const canFav = typeof HeroesAuth !== 'undefined' && HeroesAuth.canUseFanFeatures();
+  const seasonFilter = _playerSeasonFilter || null;
   return players.map(p => {
-    const stats = getPlayerStats(p.id);
+    const stats = seasonFilter ? getPlayerStats(p.id, { season: seasonFilter }) : getPlayerStats(p.id);
     const yrs = new Date().getFullYear() - p.joinYear + 1;
     const playerTeams = (p.teams || []).map(tid => data.teams.find(t => t.id === tid)).filter(Boolean);
     const teamColor = playerTeams[0]?.color || '#C8102E';
@@ -739,7 +750,7 @@ function renderPlayerCards(players, data) {
             <div class="bc-bs"><div class="bc-bs-val">${stats.rbi}</div><div class="bc-bs-lbl">RBI</div></div>
             <div class="bc-bs"><div class="bc-bs-val">${stats.ops}</div><div class="bc-bs-lbl">OPS</div></div>
           </div>
-          <div class="bc-back-footer">${stats.g} G · ${stats.ab} AB · Career</div>
+          <div class="bc-back-footer">${stats.g} G · ${stats.ab} AB · ${seasonFilter ? seasonFilter + ' Season' : 'Career'}</div>
         </div>
       </div>
     </div>`;
@@ -781,6 +792,7 @@ function renderPlayer(playerId) {
   
   const stats = getPlayerStats(playerId);
   const curSeason = String(new Date().getFullYear());
+  const allSeasons = [...new Set(data.games.map(g => g.season).filter(Boolean))].sort().reverse();
   const stats25 = getPlayerStats(playerId, { season: curSeason });
   const yrs = new Date().getFullYear() - player.joinYear + 1;
   const teams = player.teams.map(id => data.teams.find(t => t.id === id)).filter(Boolean);
@@ -815,12 +827,16 @@ function renderPlayer(playerId) {
     </div>
     <section class="section">
       <div class="container">
-        <div class="tabs">
-          <button class="tab-btn active" onclick="switchTab(event,'ptab-2025')">${curSeason} Season</button>
+        <div class="tabs" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+          <button class="tab-btn active" onclick="switchTab(event,'ptab-season')">Season</button>
+          <select id="profile-season-select" onchange="switchProfileSeason('${playerId}',this.value)"
+            style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);font-size:13px;font-weight:700;cursor:pointer;background:var(--card-bg,#fff);color:var(--text);height:36px">
+            ${allSeasons.map(s=>`<option value="${s}" ${s===curSeason?'selected':''}>${s}</option>`).join('')}
+          </select>
           <button class="tab-btn" onclick="switchTab(event,'ptab-career')">Career</button>
           <button class="tab-btn" onclick="switchTab(event,'ptab-games')">Game Log</button>
         </div>
-        <div id="ptab-2025" class="tab-content active">
+        <div id="ptab-season" class="tab-content active">
           <div class="career-stat-row">
             ${[['G',stats25.g],['AB',stats25.ab],['H',stats25.h],['2B',stats25.d],['3B',stats25.t],['HR',stats25.hr],
                ['RBI',stats25.rbi],['R',stats25.r],['BB',stats25.bb],['K',stats25.k]].map(([l,v])=>
@@ -1199,6 +1215,7 @@ function renderNewsArticle(articleId) {
 }
 
 // ─── PAGE: TOURNAMENTS ──────────────────────────────────
+let _playerSeasonFilter = null; // null = career (all seasons)
 let _tevFilter      = 'all';
 let _tevSort        = 'date-desc';
 let _tevView        = (()=>{ try { return localStorage.getItem('heroes_ev_view')||'card'; } catch(e){ return 'card'; } })();
@@ -1883,6 +1900,23 @@ function renderNotFound() {
 }
 
 // ─── UTILITIES ──────────────────────────────────────────────
+window.switchProfileSeason = function(playerId, season) {
+  const s = getPlayerStats(playerId, { season });
+  const panel = document.getElementById('ptab-season');
+  if (!panel) return;
+  const statRows = [
+    [['G',s.g],['AB',s.ab],['H',s.h],['2B',s.d],['3B',s.t],['HR',s.hr],['RBI',s.rbi],['R',s.r],['BB',s.bb],['K',s.k]],
+    [['AVG',s.avg],['OBP',s.obp],['SLG',s.slg],['OPS',s.ops],['TB',s.tb]]
+  ];
+  panel.innerHTML = `
+    <div class="career-stat-row">
+      ${statRows[0].map(([l,v])=>`<div class="career-stat"><div class="val">${v}</div><div class="lbl">${l}</div></div>`).join('')}
+    </div>
+    <div class="career-stat-row" style="background:#fff0f0">
+      ${statRows[1].map(([l,v])=>`<div class="career-stat"><div class="val" style="color:var(--red)">${v}</div><div class="lbl">${l}</div></div>`).join('')}
+    </div>`;
+};
+
 window.switchTab = function(e, tabId) {
   const allBtns = e.target.parentElement.querySelectorAll('.tab-btn');
   allBtns.forEach(b => b.classList.remove('active'));
@@ -2318,7 +2352,7 @@ window.lightboxDeletePhoto = function() {
 // ─── REGISTER ROUTES ────────────────────────────────────────
 Router.register('/', renderHome);
 Router.register('/team', (teamId) => renderTeam(teamId));
-Router.register('/players', renderPlayers);
+Router.register('/players', () => { _playerSeasonFilter = null; renderPlayers(); });
 Router.register('/player', (playerId) => renderPlayer(playerId));
 Router.register('/stats', renderStats);
 Router.register('/schedule', renderSchedule);
