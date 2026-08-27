@@ -1403,6 +1403,7 @@ window.loadStatEntry = function(gameId) {
               <div id="add-player-list" style="max-height:240px;overflow-y:auto"></div>
             </div>
           </div>
+          <button class="btn btn-secondary btn-sm" onclick="scanScorebook('${gameId}')" title="Upload a scorebook photo to auto-fill stats">📷 Scan Scorebook</button>
           <button class="btn btn-success" onclick="saveStatsEntry('${gameId}')">💾 Save Stats</button>
         </div>
       </div>
@@ -2214,6 +2215,18 @@ function renderSettings() {
             <input type="password" id="cfg-pw" class="form-input" placeholder="Enter new password (leave blank to keep current)">
           </div>
         </div>
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+          <h4 style="margin:0 0 12px;font-size:14px;color:var(--text)">AI Integration</h4>
+          <div class="form-group">
+            <label class="form-label">Claude API Key <span style="font-weight:400;color:var(--gray)">(stored in your browser only)</span></label>
+            <input type="password" id="cfg-claude-key" class="form-input" placeholder="sk-ant-api…"
+              value="${(()=>{try{return localStorage.getItem('heroes_claude_api_key')||'';}catch(e){return '';}})()}">
+            <div style="font-size:11px;color:var(--gray);margin-top:4px">
+              Get your key at <strong>console.anthropic.com</strong> → API Keys → Create Key.
+              Used for scorebook photo scanning only. Never sent to our servers.
+            </div>
+          </div>
+        </div>
       </div>
       <div class="admin-form-footer">
         <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
@@ -2230,7 +2243,167 @@ window.saveSettings = function() {
   };
   const newPw = val('cfg-pw');
   if (newPw) d.config.adminPassword = newPw;
+  const claudeKey = document.getElementById('cfg-claude-key')?.value.trim();
+  try {
+    if (claudeKey) localStorage.setItem('heroes_claude_api_key', claudeKey);
+    else localStorage.removeItem('heroes_claude_api_key');
+  } catch(e) {}
   saveData(d); renderSettings(); toast('Settings saved!');
+};
+
+// ─── SCOREBOOK SCAN ───────────────────────────────────────
+
+window.scanScorebook = function(gameId) {
+  let apiKey;
+  try { apiKey = localStorage.getItem('heroes_claude_api_key'); } catch(e) {}
+  if (!apiKey) {
+    toast('No Claude API key set. Go to Settings and add your API key first.', 'error');
+    return;
+  }
+
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const scanBtn = document.querySelector('[onclick^="scanScorebook"]');
+    const origText = scanBtn?.innerHTML;
+    if (scanBtn) { scanBtn.innerHTML = '⏳ Scanning…'; scanBtn.disabled = true; }
+
+    try {
+      const base64 = await new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = ev => res(ev.target.result.split(',')[1]);
+        reader.onerror = rej;
+        reader.readAsDataURL(file);
+      });
+
+      const mediaType = file.type || 'image/jpeg';
+
+      const data = loadData();
+      const game = data.games.find(g => g.id === gameId);
+      const allPlayers = data.players.filter(p => p.active);
+      const rosterNames = allPlayers.map(p => `${p.firstName} ${p.lastName} (#${p.number})`).join(', ');
+
+      const prompt = `You are reading a softball/baseball scorebook photo. Extract every player's batting statistics from the scorebook.
+
+The roster for this game includes: ${rosterNames}
+
+Return ONLY valid JSON in this exact shape (no markdown, no explanation):
+{
+  "players": [
+    {
+      "name": "First Last",
+      "number": "##",
+      "ab": 0,
+      "h": 0,
+      "s": 0,
+      "d": 0,
+      "t": 0,
+      "hr": 0,
+      "hbp": 0,
+      "k": 0,
+      "bb": 0,
+      "sf": 0,
+      "rbi": 0,
+      "r": 0
+    }
+  ]
+}
+
+Rules:
+- Only include players you can clearly read stats for
+- Use 0 for any stat column you cannot read clearly
+- "s" = singles, "d" = doubles, "t" = triples, "hr" = home runs
+- "hbp" = hit by pitch, "k" = strikeout, "bb" = walk, "sf" = sacrifice fly
+- "rbi" = runs batted in, "r" = runs scored
+- "h" = total hits (singles + doubles + triples + home runs)
+- Match player names to the roster above as best you can`;
+
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-client-side-keys': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-opus-5',
+          max_tokens: 4096,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+              { type: 'text', text: prompt }
+            ]
+          }]
+        })
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err?.error?.message || `API error ${response.status}`);
+      }
+
+      const result = await response.json();
+      const text = result.content?.find(b => b.type === 'text')?.text || '';
+
+      let parsed;
+      try {
+        // Strip any accidental markdown fences
+        const clean = text.replace(/```json?\s*/g, '').replace(/```/g, '').trim();
+        parsed = JSON.parse(clean);
+      } catch(e) {
+        throw new Error('Could not parse stats from the image. Try a clearer photo.');
+      }
+
+      const statKeys = ['ab','h','s','d','t','hr','hbp','k','bb','sf','rbi','r'];
+      let matched = 0, unmatched = [];
+
+      for (const entry of (parsed.players || [])) {
+        const entryName = (entry.name || '').toLowerCase().trim();
+        const entryNum  = String(entry.number || '').trim();
+
+        // Find best-match player: exact name, then last name, then number
+        const player = allPlayers.find(p => {
+          const full = `${p.firstName} ${p.lastName}`.toLowerCase();
+          const last = p.lastName.toLowerCase();
+          if (full === entryName) return true;
+          if (entryName.includes(last) || last.includes(entryName.split(' ').pop())) return true;
+          if (entryNum && String(p.number) === entryNum) return true;
+          return false;
+        });
+
+        if (!player) { unmatched.push(entry.name); continue; }
+
+        const row = document.querySelector(`[data-row-player="${player.id}"]`);
+        if (!row) { unmatched.push(entry.name + ' (not in grid)'); continue; }
+
+        statKeys.forEach(key => {
+          const input = row.querySelector(`[data-stat="${key}"]`);
+          if (input && entry[key] != null && entry[key] !== '') {
+            input.value = entry[key];
+          }
+        });
+        matched++;
+      }
+
+      updateStatSummary();
+
+      let msg = `Scanned ${matched} player${matched !== 1 ? 's' : ''} from scorebook.`;
+      if (unmatched.length) msg += ` Could not match: ${unmatched.join(', ')}.`;
+      toast(msg);
+
+    } catch(err) {
+      toast('Scan failed: ' + err.message, 'error');
+    } finally {
+      if (scanBtn) { scanBtn.innerHTML = origText; scanBtn.disabled = false; }
+    }
+  };
+  input.click();
 };
 
 // ─── ACCOUNT REQUESTS ─────────────────────────────────────
