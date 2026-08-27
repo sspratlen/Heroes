@@ -1976,12 +1976,18 @@ function renderAwards() {
 
 // ─── PAGE: GALLERY ─────────────────────────────────────────────
 let _galleryCategory = 'all';
-const _CAT_LABELS = { site: '🏟 Site', team: '⚾ Team', individual: '👤 Individual' };
+const _CAT_LABELS = { site: '🏟 Site', team: '⚾ Team', individual: '👤 Individual', scorebook: '📋 Scorebook' };
+
+function _isStaffUser() {
+  return typeof HeroesAuth !== 'undefined' && HeroesAuth.isLoggedIn() && HeroesAuth.isStaff();
+}
 
 function _getGalleryCats(albums) {
   const seen = new Set();
   const cats = [{ id: 'all', label: 'All Photos' }];
+  const staff = _isStaffUser();
   (albums || []).forEach(al => {
+    if (al.category === 'scorebook' && !staff) return;
     if (al.category && !seen.has(al.category)) {
       seen.add(al.category);
       const label = _CAT_LABELS[al.category] || (al.category.charAt(0).toUpperCase() + al.category.slice(1));
@@ -2006,7 +2012,10 @@ function _galleryCanManageAlbums() {
 function renderGallery(cat) {
   if (cat) _galleryCategory = cat;
   const data = loadData();
-  const allAlbums = (data.albums || []).sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  const staff = _isStaffUser();
+  const allAlbums = (data.albums || [])
+    .filter(al => al.category !== 'scorebook' || staff)
+    .sort((a,b) => (b.date||'').localeCompare(a.date||''));
   const filtered = _galleryCategory === 'all'
     ? allAlbums
     : allAlbums.filter(al => al.category === _galleryCategory);
