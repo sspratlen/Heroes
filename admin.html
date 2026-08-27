@@ -1352,25 +1352,39 @@ function renderStatsEntry(keepTeam) {
   `);
 }
 
+function buildStatRow(p, existing = {}) {
+  const statKeys = ['ab','h','s','d','t','hr','hbp','k','bb','sf','rbi','r'];
+  const inputs = statKeys.map(key =>
+    `<input type="number" min="0" class="stat-input" data-player="${p.id}" data-stat="${key}" value="${existing[key]||''}" style="padding:5px 2px;text-align:center;border:1px solid var(--border);border-radius:4px;font-size:13px;width:100%;outline:none" onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'">`
+  ).join('');
+  const teamTag = p._guestTeam ? `<span style="font-size:10px;color:#6366f1;font-weight:700;margin-left:4px">${p._guestTeam}</span>` : '';
+  return `<div class="stat-entry-row" data-row-player="${p.id}">
+    <div class="player-label">${p.firstName} ${p.lastName} <span style="color:var(--gray)">#${p.number}</span>${teamTag}</div>
+    ${inputs}
+  </div>`;
+}
+
 window.loadStatEntry = function(gameId) {
   const data = loadData();
   const game = data.games.find(g=>g.id===gameId);
   if (!game) return;
   const team = data.teams.find(t=>t.id===game.teamId);
   const players = data.players.filter(p=>p.teams.includes(game.teamId)&&p.active);
-  
+
+  // Also include any players from other teams who already have stats in this game
+  const extraPlayerIds = (game.playerStats||[]).map(ps=>ps.playerId).filter(pid=>!players.find(p=>p.id===pid));
+  const extraPlayers = extraPlayerIds.map(pid => {
+    const p = data.players.find(pl=>pl.id===pid);
+    if (!p) return null;
+    const pt = data.teams.find(t=>t.id===p.teams?.[0]);
+    return { ...p, _guestTeam: pt?.shortName };
+  }).filter(Boolean);
+
   const headerCols = ['AB','H','1B','2B','3B','HR','HBP','K','BB','SF','RBI','R'];
-  const statKeys = ['ab','h','s','d','t','hr','hbp','k','bb','sf','rbi','r'];
-  
-  const rows = players.map(p => {
+
+  const rows = [...players, ...extraPlayers].map(p => {
     const existing = game.playerStats?.find(ps=>ps.playerId===p.id) || {};
-    const inputs = statKeys.map(key =>
-      `<input type="number" min="0" class="stat-input" data-player="${p.id}" data-stat="${key}" value="${existing[key]||''}" style="padding:5px 2px;text-align:center;border:1px solid var(--border);border-radius:4px;font-size:13px;width:100%;outline:none" onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'">`
-    ).join('');
-    return `<div class="stat-entry-row">
-      <div class="player-label">${p.firstName} ${p.lastName} <span style="color:var(--gray)">#${p.number}</span></div>
-      ${inputs}
-    </div>`;
+    return buildStatRow(p, existing);
   }).join('');
 
   document.getElementById('stat-entry-panel').innerHTML = `
@@ -1380,20 +1394,87 @@ window.loadStatEntry = function(gameId) {
           <h3>${team?.name}: vs ${game.opponent}</h3>
           <div style="font-size:12px;color:var(--gray)">${game.date} · Score: ${game.heroScore??'–'} - ${game.oppScore??'–'} · <span style="color:${gameResult(game)==='W'?'#15803d':'#dc2626'}">${gameResult(game)||'TBD'}</span></div>
         </div>
-        <button class="btn btn-success" onclick="saveStatsEntry('${gameId}')">💾 Save Stats</button>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <div style="position:relative">
+            <button class="btn btn-primary btn-sm" onclick="toggleAddPlayerDD('${gameId}')">+ Add Player</button>
+            <div id="add-player-dd" style="display:none;position:absolute;right:0;top:calc(100% + 6px);background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.15);z-index:300;width:260px;padding:10px">
+              <input id="add-player-search" type="text" placeholder="Search players…" oninput="filterAddPlayerList('${gameId}')"
+                style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:8px;box-sizing:border-box">
+              <div id="add-player-list" style="max-height:240px;overflow-y:auto"></div>
+            </div>
+          </div>
+          <button class="btn btn-success" onclick="saveStatsEntry('${gameId}')">💾 Save Stats</button>
+        </div>
       </div>
       <div style="padding:16px;overflow-x:auto">
         <div class="stat-entry-header">
           <span style="padding-left:8px">Player</span>
           ${headerCols.map(h=>`<span>${h}</span>`).join('')}
         </div>
-        ${rows}
+        <div id="stat-rows-container">
+          ${rows}
+        </div>
         <div style="margin-top:16px;padding:12px;background:var(--gray-light);border-radius:6px;font-size:12px;color:var(--gray)">
           <strong>Key:</strong> AB=At Bats · H=Hits · 1B=Singles · 2B=Doubles · 3B=Triples · HR=Home Runs · HBP=Hit By Pitch · K=Strikeouts · BB=Walks · SF=Sac Fly · RBI · R=Runs
         </div>
       </div>
     </div>
   `;
+
+  document.addEventListener('click', function _addPlayerClose(e) {
+    if (!e.target.closest('#add-player-dd') && !e.target.closest('[onclick^="toggleAddPlayerDD"]')) {
+      const dd = document.getElementById('add-player-dd');
+      if (dd) dd.style.display = 'none';
+      document.removeEventListener('click', _addPlayerClose);
+    }
+  });
+};
+
+window.toggleAddPlayerDD = function(gameId) {
+  const dd = document.getElementById('add-player-dd');
+  if (!dd) return;
+  const open = dd.style.display === 'none';
+  dd.style.display = open ? 'block' : 'none';
+  if (open) {
+    document.getElementById('add-player-search').value = '';
+    filterAddPlayerList(gameId);
+    document.getElementById('add-player-search').focus();
+  }
+};
+
+window.filterAddPlayerList = function(gameId) {
+  const data = loadData();
+  const q = (document.getElementById('add-player-search').value || '').toLowerCase();
+  const already = new Set([...document.querySelectorAll('[data-row-player]')].map(el=>el.dataset.rowPlayer));
+  const candidates = data.players
+    .filter(p => p.active && !already.has(p.id))
+    .filter(p => !q || `${p.firstName} ${p.lastName} ${p.number}`.toLowerCase().includes(q))
+    .sort((a,b) => a.lastName.localeCompare(b.lastName));
+
+  const list = document.getElementById('add-player-list');
+  if (!list) return;
+  if (!candidates.length) { list.innerHTML = '<div style="font-size:12px;color:var(--gray);padding:6px 4px">No players found</div>'; return; }
+
+  list.innerHTML = candidates.map(p => {
+    const pt = data.teams.find(t => t.id === p.teams?.[0]);
+    return `<div onclick="addPlayerToStatEntry('${p.id}','${gameId}')"
+      style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600"
+      onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''">
+      <span>${p.firstName} ${p.lastName} <span style="color:var(--gray)">#${p.number}</span></span>
+      <span style="font-size:10px;color:#6366f1;font-weight:700">${pt?.shortName||''}</span>
+    </div>`;
+  }).join('');
+};
+
+window.addPlayerToStatEntry = function(playerId, gameId) {
+  const data = loadData();
+  const p = data.players.find(pl=>pl.id===playerId);
+  if (!p) return;
+  const pt = data.teams.find(t=>t.id===p.teams?.[0]);
+  const existing = data.games.find(g=>g.id===gameId)?.playerStats?.find(ps=>ps.playerId===playerId) || {};
+  const row = buildStatRow({ ...p, _guestTeam: pt?.shortName }, existing);
+  document.getElementById('stat-rows-container').insertAdjacentHTML('beforeend', row);
+  document.getElementById('add-player-dd').style.display = 'none';
 };
 
 window.saveStatsEntry = function(gameId) {
