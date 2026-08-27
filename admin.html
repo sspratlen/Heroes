@@ -1355,7 +1355,7 @@ function renderStatsEntry(keepTeam) {
 function buildStatRow(p, existing = {}) {
   const statKeys = ['ab','h','s','d','t','hr','hbp','k','bb','sf','rbi','r'];
   const inputs = statKeys.map(key =>
-    `<input type="number" min="0" class="stat-input" data-player="${p.id}" data-stat="${key}" value="${existing[key]||''}" style="padding:5px 2px;text-align:center;border:1px solid var(--border);border-radius:4px;font-size:13px;width:100%;outline:none" onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'">`
+    `<input type="number" min="0" class="stat-input" data-player="${p.id}" data-stat="${key}" value="${existing[key]||''}" oninput="updateStatSummary()" style="padding:5px 2px;text-align:center;border:1px solid var(--border);border-radius:4px;font-size:13px;width:100%;outline:none" onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'">`
   ).join('');
   const teamTag = p._guestTeam ? `<span style="font-size:10px;color:#6366f1;font-weight:700;margin-left:4px">${p._guestTeam}</span>` : '';
   return `<div class="stat-entry-row" data-row-player="${p.id}">
@@ -1414,7 +1414,11 @@ window.loadStatEntry = function(gameId) {
         <div id="stat-rows-container">
           ${rows}
         </div>
-        <div style="margin-top:16px;padding:12px;background:var(--gray-light);border-radius:6px;font-size:12px;color:var(--gray)">
+        <div id="stat-summary-row" class="stat-entry-row" style="margin-top:8px;background:var(--gray-light);border-radius:6px;font-weight:800;font-size:13px;border:2px solid var(--border)">
+          <div class="player-label" style="font-weight:800;color:var(--text)">Team Totals</div>
+          ${['ab','h','s','d','t','hr','hbp','k','bb','sf','rbi','r'].map(k=>`<div id="sum-${k}" style="text-align:center;padding:5px 2px;color:var(--red)">0</div>`).join('')}
+        </div>
+        <div style="margin-top:12px;padding:12px;background:var(--gray-light);border-radius:6px;font-size:12px;color:var(--gray)">
           <strong>Key:</strong> AB=At Bats · H=Hits · 1B=Singles · 2B=Doubles · 3B=Triples · HR=Home Runs · HBP=Hit By Pitch · K=Strikeouts · BB=Walks · SF=Sac Fly · RBI · R=Runs
         </div>
       </div>
@@ -1428,6 +1432,8 @@ window.loadStatEntry = function(gameId) {
       document.removeEventListener('click', _addPlayerClose);
     }
   });
+
+  updateStatSummary();
 };
 
 window.toggleAddPlayerDD = function(gameId) {
@@ -1475,6 +1481,21 @@ window.addPlayerToStatEntry = function(playerId, gameId) {
   const row = buildStatRow({ ...p, _guestTeam: pt?.shortName }, existing);
   document.getElementById('stat-rows-container').insertAdjacentHTML('beforeend', row);
   document.getElementById('add-player-dd').style.display = 'none';
+  updateStatSummary();
+};
+
+window.updateStatSummary = function() {
+  const statKeys = ['ab','h','s','d','t','hr','hbp','k','bb','sf','rbi','r'];
+  const totals = {};
+  statKeys.forEach(k => totals[k] = 0);
+  document.querySelectorAll('.stat-input').forEach(inp => {
+    const k = inp.dataset.stat;
+    if (k && totals[k] !== undefined) totals[k] += parseInt(inp.value) || 0;
+  });
+  statKeys.forEach(k => {
+    const el = document.getElementById('sum-' + k);
+    if (el) el.textContent = totals[k] || '0';
+  });
 };
 
 window.saveStatsEntry = function(gameId) {
