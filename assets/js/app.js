@@ -769,7 +769,8 @@ function renderPlayer(playerId) {
   if (!player) return renderNotFound();
   
   const stats = getPlayerStats(playerId);
-  const stats25 = getPlayerStats(playerId, { season: '2025' });
+  const curSeason = String(new Date().getFullYear());
+  const stats25 = getPlayerStats(playerId, { season: curSeason });
   const yrs = new Date().getFullYear() - player.joinYear + 1;
   const teams = player.teams.map(id => data.teams.find(t => t.id === id)).filter(Boolean);
   const canFav = typeof HeroesAuth !== 'undefined' && HeroesAuth.canUseFanFeatures();
@@ -804,7 +805,7 @@ function renderPlayer(playerId) {
     <section class="section">
       <div class="container">
         <div class="tabs">
-          <button class="tab-btn active" onclick="switchTab(event,'ptab-2025')">2025 Season</button>
+          <button class="tab-btn active" onclick="switchTab(event,'ptab-2025')">${curSeason} Season</button>
           <button class="tab-btn" onclick="switchTab(event,'ptab-career')">Career</button>
           <button class="tab-btn" onclick="switchTab(event,'ptab-games')">Game Log</button>
         </div>
