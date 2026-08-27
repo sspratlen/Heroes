@@ -2325,25 +2325,10 @@ Rules:
 - "h" = total hits (singles + doubles + triples + home runs)
 - Match player names to the roster above as best you can`;
 
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch('https://mpgbgucmnxowteonldoh.supabase.co/functions/v1/scan-scorebook', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-client-side-keys': 'true'
-        },
-        body: JSON.stringify({
-          model: 'claude-opus-5',
-          max_tokens: 4096,
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
-              { type: 'text', text: prompt }
-            ]
-          }]
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: base64, mediaType, rosterNames, apiKey })
       });
 
       if (!response.ok) {
