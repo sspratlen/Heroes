@@ -147,6 +147,17 @@
 <script>
 'use strict';
 
+// ─── HELPERS ──────────────────────────────────────────────
+function gameResult(g) {
+  if (g.heroScore != null && g.oppScore != null && g.heroScore !== '' && g.oppScore !== '') {
+    const h = Number(g.heroScore), o = Number(g.oppScore);
+    if (h > o) return 'W';
+    if (h < o) return 'L';
+    return 'T';
+  }
+  return g.result || '';
+}
+
 // ─── AUTH ─────────────────────────────────────────────────
 const ADMIN_ROLES = ['admin', 'manager', 'coach'];
 
@@ -451,7 +462,7 @@ function toast(msg, type = 'success') {
 function renderDashboard() {
   const data = loadData();
   const totalGames = data.games.length;
-  const wins = data.games.filter(g => g.result === 'W').length;
+  const wins = data.games.filter(g => gameResult(g) === 'W').length;
   const pct = totalGames ? Math.round(wins/totalGames*100) : 0;
   const recentGames = [...data.games].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
   
@@ -468,7 +479,7 @@ function renderDashboard() {
         <div class="stat-card-sub">${pct}% win rate</div>
       </div>
       <div class="stat-card" style="border-color:#F0A500">
-        <div class="stat-card-value" style="color:#F0A500">${data.games.filter(g=>g.result==='L').length}</div>
+        <div class="stat-card-value" style="color:#F0A500">${data.games.filter(g=>gameResult(g)==='L').length}</div>
         <div class="stat-card-label">Season Losses</div>
         <div class="stat-card-sub">${totalGames} total games</div>
       </div>
@@ -490,7 +501,7 @@ function renderDashboard() {
               <td style="font-weight:700">${g.opponent}</td>
               <td><span style="font-size:11px;font-weight:700">${team?.shortName||''}</span></td>
               <td>${g.heroScore??'–'} - ${g.oppScore??'–'}</td>
-              <td><span style="padding:3px 8px;border-radius:20px;font-size:11px;font-weight:800;background:${g.result==='W'?'#dcfce7':g.result==='L'?'#fee2e2':'#fef9c3'};color:${g.result==='W'?'#15803d':g.result==='L'?'#dc2626':'#92400e'}">${g.result||'–'}</span></td>
+              <td><span style="padding:3px 8px;border-radius:20px;font-size:11px;font-weight:800;background:${gameResult(g)==='W'?'#dcfce7':gameResult(g)==='L'?'#fee2e2':'#fef9c3'};color:${gameResult(g)==='W'?'#15803d':gameResult(g)==='L'?'#dc2626':'#92400e'}">${gameResult(g)||'–'}</span></td>
             </tr>`;
           }).join('')}</tbody>
         </table>
@@ -514,7 +525,7 @@ function renderDashboard() {
         <thead><tr><th>Team</th><th>Manager</th><th>Players</th><th>Wins</th><th>Losses</th><th>Ties</th><th>Win %</th></tr></thead>
         <tbody>${data.teams.map(team=>{
           const games = data.games.filter(g=>g.teamId===team.id);
-          const w=games.filter(g=>g.result==='W').length, l=games.filter(g=>g.result==='L').length, t2=games.filter(g=>g.result==='T').length;
+          const w=games.filter(g=>gameResult(g)==='W').length, l=games.filter(g=>gameResult(g)==='L').length, t2=games.filter(g=>gameResult(g)==='T').length;
           const pct2=games.length?Math.round(w/games.length*100):0;
           return `<tr>
             <td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${team.color};margin-right:8px"></span><strong>${team.name}</strong></td>
@@ -1208,7 +1219,7 @@ function renderGames() {
             <td><strong>${g.opponent}</strong></td>
             <td style="font-size:12px;color:var(--gray)">${g.location}</td>
             <td>${g.heroScore??'–'} - ${g.oppScore??'–'}</td>
-            <td><span style="padding:3px 8px;border-radius:20px;font-size:11px;font-weight:800;background:${g.result==='W'?'#dcfce7':g.result==='L'?'#fee2e2':'#fef9c3'};color:${g.result==='W'?'#15803d':g.result==='L'?'#dc2626':'#92400e'}">${g.result||'TBD'}</span></td>
+            <td><span style="padding:3px 8px;border-radius:20px;font-size:11px;font-weight:800;background:${gameResult(g)==='W'?'#dcfce7':gameResult(g)==='L'?'#fee2e2':'#fef9c3'};color:${gameResult(g)==='W'?'#15803d':gameResult(g)==='L'?'#dc2626':'#92400e'}">${gameResult(g)||'TBD'}</span></td>
             <td><span style="font-size:12px;color:${statCount?'#15803d':'var(--gray)'}">${statCount?`✓ ${statCount} players`:'No stats'}</span></td>
             <td style="display:flex;gap:4px;flex-wrap:wrap">
               <button class="action-btn action-edit" onclick="editGame('${g.id}')">Edit</button>
@@ -1296,25 +1307,39 @@ function buildGameForm(g, data) {
 }
 
 // ─── STAT ENTRY ────────────────────────────────────────────
-function renderStatsEntry() {
+let _seTeam = 'all';
+
+function renderStatsEntry(keepTeam) {
+  if (!keepTeam) _seTeam = 'all';
   const data = loadData();
-  const pendingGames = data.games.filter(g => g.result && (!g.playerStats || g.playerStats.length === 0));
-  
+  const teams = data.teams || [];
+
+  const filtered = data.games
+    .filter(g => _seTeam === 'all' || g.teamId === _seTeam)
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const teamBtns = `<div style="display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px;border-bottom:1px solid var(--border)">
+    <button onclick="_seTeam='all';renderStatsEntry(true)" style="padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid var(--border);background:${_seTeam==='all'?'var(--red)':'var(--white)'};color:${_seTeam==='all'?'#fff':'var(--text)'}">All</button>
+    ${teams.map(t=>`<button onclick="_seTeam='${t.id}';renderStatsEntry(true)" style="padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid var(--border);background:${_seTeam===t.id?'var(--red)':'var(--white)'};color:${_seTeam===t.id?'#fff':'var(--text)'}">${t.shortName}</button>`).join('')}
+  </div>`;
+
+  const gameList = filtered.map(g => {
+    const hasStats = g.playerStats && g.playerStats.length > 0;
+    const team = data.teams.find(t => t.id === g.teamId);
+    return `<div onclick="loadStatEntry('${g.id}')" style="padding:10px 12px;border-radius:6px;cursor:pointer;margin-bottom:4px;border:1px solid var(--border);transition:all 0.1s" onmouseover="this.style.background='#fff5f5'" onmouseout="this.style.background=''">
+      <div style="font-size:11px;font-weight:700;color:var(--gray)">${g.date} · ${team?.shortName}</div>
+      <div style="font-size:13px;font-weight:700">vs ${g.opponent}</div>
+      <div style="font-size:11px;color:${hasStats?'#15803d':'#f59e0b'}">${hasStats?'✓ Stats entered':'⚠ No stats'}</div>
+    </div>`;
+  }).join('') || '<p style="font-size:12px;color:var(--gray);padding:12px">No games found</p>';
+
   setContent(`
     <div style="display:grid;grid-template-columns:300px 1fr;gap:20px">
       <div class="admin-table-wrap" style="height:fit-content">
         <div class="admin-table-header"><h3>Select Game</h3></div>
-        <div style="padding:12px">
-          ${pendingGames.length ? '<p style="font-size:12px;color:var(--gray);margin-bottom:12px">Games without stats:</p>' : ''}
-          ${data.games.map(g=>{
-            const hasStats = g.playerStats && g.playerStats.length > 0;
-            const team = data.teams.find(t=>t.id===g.teamId);
-            return `<div onclick="loadStatEntry('${g.id}')" style="padding:10px 12px;border-radius:6px;cursor:pointer;margin-bottom:4px;border:1px solid var(--border);transition:all 0.1s" onmouseover="this.style.background='#fff5f5'" onmouseout="this.style.background=''">
-              <div style="font-size:11px;font-weight:700;color:var(--gray)">${g.date} · ${team?.shortName}</div>
-              <div style="font-size:13px;font-weight:700">vs ${g.opponent}</div>
-              <div style="font-size:11px;color:${hasStats?'#15803d':'#f59e0b'}">${hasStats?'✓ Stats entered':'⚠ No stats'}</div>
-            </div>`;
-          }).join('')}
+        ${teamBtns}
+        <div style="padding:12px;max-height:70vh;overflow-y:auto">
+          ${gameList}
         </div>
       </div>
       <div id="stat-entry-panel">
@@ -1353,7 +1378,7 @@ window.loadStatEntry = function(gameId) {
       <div class="admin-table-header">
         <div>
           <h3>${team?.name}: vs ${game.opponent}</h3>
-          <div style="font-size:12px;color:var(--gray)">${game.date} · Score: ${game.heroScore??'–'} - ${game.oppScore??'–'} · <span style="color:${game.result==='W'?'#15803d':'#dc2626'}">${game.result||'TBD'}</span></div>
+          <div style="font-size:12px;color:var(--gray)">${game.date} · Score: ${game.heroScore??'–'} - ${game.oppScore??'–'} · <span style="color:${gameResult(game)==='W'?'#15803d':'#dc2626'}">${gameResult(game)||'TBD'}</span></div>
         </div>
         <button class="btn btn-success" onclick="saveStatsEntry('${gameId}')">💾 Save Stats</button>
       </div>
