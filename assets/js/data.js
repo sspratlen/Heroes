@@ -404,8 +404,10 @@ function getTeamRecord(teamId, filters = {}) {
 function getLeaders(stat, limit = 5, filters = {}) {
   const data = loadData();
   const players = data.players.filter(p => p.active);
+  // Rate stats need AB; counting stats only need at least one plate appearance (h+bb+hbp>0)
+  const rateStats = new Set(['avg','obp','slg','ops']);
   const results = players.map(p => ({ player: p, stats: getPlayerStats(p.id, filters) }))
-    .filter(x => x.stats.ab >= 5)
+    .filter(x => rateStats.has(stat) ? x.stats.ab >= 5 : (x.stats.h + x.stats.bb + x.stats.hbp + x.stats.r + x.stats.rbi) > 0)
     .sort((a, b) => {
       const va = parseFloat('0' + a.stats[stat]) || a.stats[stat] || 0;
       const vb = parseFloat('0' + b.stats[stat]) || b.stats[stat] || 0;
