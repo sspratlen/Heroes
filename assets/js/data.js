@@ -381,10 +381,23 @@ function getPlayerStats(playerId, filters = {}) {
 function getTeamRecord(teamId, filters = {}) {
   const data = loadData();
   let games = data.games.filter(g => g.teamId === teamId);
-  if (filters.season) games = games.filter(g => g.season === filters.season);
-  const wins = games.filter(g => g.result === 'W').length;
-  const losses = games.filter(g => g.result === 'L').length;
-  const ties = games.filter(g => g.result === 'T').length;
+  if (filters.season) games = games.filter(g => (g.season+'') === (filters.season+''));
+  const res = g => {
+    if (g.heroScore != null && g.oppScore != null && g.heroScore !== '' && g.oppScore !== '') {
+      const h = Number(g.heroScore), o = Number(g.oppScore);
+      if (h > o) return 'W';
+      if (h < o) return 'L';
+      return 'T';
+    }
+    const r = (g.result || '').toLowerCase();
+    if (r === 'w' || r === 'win') return 'W';
+    if (r === 'l' || r === 'loss') return 'L';
+    if (r === 't') return 'T';
+    return null;
+  };
+  const wins = games.filter(g => res(g) === 'W').length;
+  const losses = games.filter(g => res(g) === 'L').length;
+  const ties = games.filter(g => res(g) === 'T').length;
   return { wins, losses, ties, games: games.length };
 }
 

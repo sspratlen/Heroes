@@ -291,8 +291,9 @@ function renderHome() {
   const layout = data.pageLayouts?.home || [];
   
   // Build team cards
+  const _homeYear = new Date().getFullYear();
   const teamCards = data.teams.map(team => {
-    const rec = getTeamRecord(team.id);
+    const rec = getTeamRecord(team.id, { season: _homeYear });
     return `
       <div class="team-card fade-in" data-route="/team/${team.id}" style="cursor:pointer">
         <div class="team-card-banner" style="background:${team.color}"></div>
@@ -413,9 +414,12 @@ function renderHome() {
   }).join('');
 
   const _curYear = new Date().getFullYear();
-  const _curGames = data.games.filter(g => (g.season+'') === (_curYear+''));
-  const _curW = _curGames.filter(g => gameResult(g) === 'W').length;
-  const _curL = _curGames.filter(g => gameResult(g) === 'L').length;
+  const _curRec = data.teams.reduce((acc, t) => {
+    const r = getTeamRecord(t.id, { season: _curYear });
+    return { w: acc.w + r.wins, l: acc.l + r.losses };
+  }, { w: 0, l: 0 });
+  const _curW = _curRec.w;
+  const _curL = _curRec.l;
   const _curTotal = _curW + _curL;
   const _curPct = _curTotal ? (_curW/_curTotal).toFixed(3).replace(/^0/,'') : '.000';
 
