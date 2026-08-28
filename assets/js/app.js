@@ -74,6 +74,7 @@ const App = {
       <li class="nav-item"><a class="nav-link" data-route="/players">Players</a></li>
       <li class="nav-item"><a class="nav-link" data-route="/stats">Stats</a></li>
       <li class="nav-item"><a class="nav-link" data-route="/schedule">Scoreboard</a></li>
+      <li class="nav-item"><a class="nav-link" data-route="/tournament-results">Tournaments</a></li>
       <li class="nav-item"><a class="nav-link" data-route="/news">News</a></li>
       <li class="nav-item"><a class="nav-link" data-route="/events">Events</a></li>
       <li class="nav-item"><a class="nav-link" data-route="/awards">Awards</a></li>
@@ -96,6 +97,7 @@ const App = {
       <a class="mobile-nav-link" data-route="/players">Players</a>
       <a class="mobile-nav-link" data-route="/stats">Stats</a>
       <a class="mobile-nav-link" data-route="/schedule">Scoreboard</a>
+      <a class="mobile-nav-link" data-route="/tournament-results">Tournaments</a>
       <a class="mobile-nav-link" data-route="/news">News</a>
       <a class="mobile-nav-link" data-route="/events">Events</a>
       <a class="mobile-nav-link" data-route="/awards">Awards</a>
@@ -129,6 +131,7 @@ const App = {
           <div class="footer-links">
             <a class="footer-link" data-route="/stats">Stats & Leaderboards</a>
             <a class="footer-link" data-route="/schedule">Scoreboard</a>
+            <a class="footer-link" data-route="/tournament-results">Tournaments</a>
             <a class="footer-link" data-route="/players">Player Directory</a>
             <a class="footer-link" data-route="/events">Events</a>
             <a class="footer-link" data-route="/awards">Awards</a>
@@ -1931,6 +1934,141 @@ window.switchTab = function(e, tabId) {
 };
 
 // ─── PAGE: AWARDS ─────────────────────────────────────────────
+// ─── PAGE: TOURNAMENT RESULTS ──────────────────────────────────
+function renderTournamentResults() {
+  const data = loadData();
+  const tournaments = [...(data.tournaments || [])].sort((a, b) =>
+    (b.startDate || '').localeCompare(a.startDate || '')
+  );
+
+  function trophyBadge(place) {
+    if (place === 1) return '<span style="font-size:48px;line-height:1;display:block;margin-bottom:6px">🥇</span><span class="tr-placement-label" style="color:#b45309">Champions · 1st Place</span>';
+    if (place === 2) return '<span style="font-size:48px;line-height:1;display:block;margin-bottom:6px">🥈</span><span class="tr-placement-label" style="color:#6b7280">2nd Place</span>';
+    if (place === 3) return '<span style="font-size:48px;line-height:1;display:block;margin-bottom:6px">🥉</span><span class="tr-placement-label" style="color:#92400e">3rd Place</span>';
+    if (place >= 4)  return `<span style="font-size:36px;line-height:1;display:block;margin-bottom:6px">🏐</span><span class="tr-placement-label" style="color:var(--gray)">${place}th Place</span>`;
+    return '';
+  }
+
+  const byYear = {};
+  tournaments.forEach(t => {
+    const yr = t.season || (t.startDate ? t.startDate.slice(0, 4) : 'Unknown');
+    byYear[yr] = byYear[yr] || [];
+    byYear[yr].push(t);
+  });
+  const years = Object.keys(byYear).sort().reverse();
+
+  const sections = years.map(year => {
+    const cards = byYear[year].map(t => {
+      const team   = data.teams.find(tm => tm.id === t.teamId);
+      const tGames = (data.games || []).filter(g => g.tournamentId === t.id)
+        .sort((a, b) => a.date.localeCompare(b.date));
+      const dateStr = t.startDate && t.endDate && t.startDate !== t.endDate
+        ? `${t.startDate} – ${t.endDate}` : (t.startDate || '');
+
+      const record = tGames.reduce((r, g) => {
+        const res = gameResult(g);
+        if (res === 'W') r.w++;
+        else if (res === 'L') r.l++;
+        else if (res === 'T') r.t++;
+        return r;
+      }, { w: 0, l: 0, t: 0 });
+
+      const gameRows = tGames.map(g => {
+        const res = gameResult(g);
+        return `<div class="tr-game-row">
+          <span class="tr-game-date">${g.date}</span>
+          <span class="tr-game-opp">vs ${g.opponent}</span>
+          <span class="tr-game-score">${g.heroScore ?? '–'} – ${g.oppScore ?? '–'}</span>
+          <span class="result-badge result-${res || 'tbd'}">${res || 'TBD'}</span>
+        </div>`;
+      }).join('');
+
+      const hasPlacement = t.placement != null;
+
+      return `<div class="tr-card ${hasPlacement ? 'tr-card-placed' : ''} fade-in">
+        ${hasPlacement ? `<div class="tr-trophy-col">${trophyBadge(t.placement)}</div>` : ''}
+        <div class="tr-body">
+          <div class="tr-header">
+            <div>
+              <div class="tr-name">${t.name}</div>
+              ${dateStr ? `<div class="tr-meta">📅 ${dateStr}</div>` : ''}
+              ${t.location ? `<div class="tr-meta">📍 ${t.location}</div>` : ''}
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+              ${team ? `<span class="tag tag-dark" style="font-size:11px">${team.shortName || team.name}</span>` : ''}
+              ${tGames.length ? `<span style="font-size:12px;color:var(--gray)">${record.w}W – ${record.l}L${record.t ? ' – '+record.t+'T' : ''}</span>` : ''}
+            </div>
+          </div>
+          ${tGames.length ? `<div class="tr-games">${gameRows}</div>` : '<p style="font-size:13px;color:var(--gray);margin:12px 0 0">No games linked yet</p>'}
+          ${t.notes ? `<div class="tr-notes">${t.notes}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+
+    return `<div class="awards-year-section">
+      <div class="awards-year-header">
+        <span class="awards-year-label">${year}</span>
+        <span class="awards-year-sub">Tournament Season</span>
+      </div>
+      ${cards}
+    </div>`;
+  }).join('');
+
+  App.render(`
+    <style>
+      .tr-card {
+        display:flex; background:var(--card); border-radius:16px;
+        border:1px solid var(--border); box-shadow:0 2px 12px rgba(0,0,0,0.06);
+        overflow:hidden; margin-bottom:20px;
+        transition:box-shadow 0.2s, transform 0.2s;
+      }
+      .tr-card:hover { box-shadow:0 6px 28px rgba(0,0,0,0.12); transform:translateY(-2px); }
+      .tr-card-placed { border-color:rgba(200,16,46,0.2); }
+      .tr-trophy-col {
+        width:130px; flex-shrink:0; display:flex; flex-direction:column;
+        align-items:center; justify-content:center; padding:24px 16px;
+        background:linear-gradient(160deg,rgba(200,16,46,0.05) 0%,rgba(200,16,46,0.02) 100%);
+        border-right:1px solid var(--border); text-align:center;
+      }
+      .tr-placement-label { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; }
+      .tr-body { flex:1; padding:22px 24px; min-width:0; }
+      .tr-header { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:14px; }
+      .tr-name { font-size:20px; font-weight:900; color:var(--dark); line-height:1.2; }
+      .tr-meta { font-size:13px; color:var(--gray); margin-top:4px; }
+      .tr-games { border-top:1px solid var(--border); padding-top:12px; display:flex; flex-direction:column; gap:8px; }
+      .tr-game-row { display:flex; align-items:center; gap:12px; font-size:13px; }
+      .tr-game-date { color:var(--gray); font-size:12px; min-width:90px; }
+      .tr-game-opp { flex:1; font-weight:600; color:var(--text); }
+      .tr-game-score { font-weight:700; color:var(--dark); min-width:60px; text-align:right; }
+      .result-badge { padding:2px 8px; border-radius:20px; font-size:11px; font-weight:800; }
+      .result-W { background:#dcfce7; color:#15803d; }
+      .result-L { background:#fee2e2; color:#dc2626; }
+      .result-T { background:#fef9c3; color:#92400e; }
+      .result-tbd { background:#f3f4f6; color:#6b7280; }
+      .tr-notes { margin-top:12px; font-size:13px; color:var(--gray); font-style:italic; }
+      @media(max-width:600px) {
+        .tr-trophy-col { width:90px; padding:16px 10px; }
+        .tr-body { padding:16px; }
+        .tr-name { font-size:16px; }
+        .tr-game-date { min-width:72px; }
+      }
+    </style>
+    <div class="page-banner">
+      <div class="page-banner-inner">
+        <div class="breadcrumb"><a data-route="/">Home</a><span>Tournaments</span></div>
+        <h1>Tournament <span>Results</span></h1>
+        <p>Heroes team placements and results across all tournaments</p>
+      </div>
+    </div>
+    <section class="section">
+      <div class="container" style="max-width:860px">
+        ${sections || '<p style="color:var(--gray);text-align:center;padding:48px 0">No tournaments recorded yet</p>'}
+      </div>
+    </section>
+  `);
+}
+
+// ─── PAGE: AWARDS ──────────────────────────────────────────────
 function renderAwards() {
   const data = loadData();
   const byYear = {};
@@ -2371,6 +2509,7 @@ Router.register('/about', renderAbout);
 Router.register('/contact', renderContact);
 Router.register('/sponsors', renderSponsors);
 Router.register('/awards', renderAwards);
+Router.register('/tournament-results', renderTournamentResults);
 Router.register('*', renderNotFound);
 
 // ─── BOOT ────────────────────────────────────────────────────
