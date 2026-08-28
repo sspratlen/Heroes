@@ -75,6 +75,9 @@
       <a class="sidebar-link" onclick="showPage('stats-entry')">
         <span class="icon">📝</span> Stat Entry
       </a>
+      <a class="sidebar-link" onclick="showPage('player-stats')">
+        <span class="icon">📊</span> Player Stats
+      </a>
       <a class="sidebar-link" onclick="showPage('tournaments')">
         <span class="icon">🏆</span> Tournaments
       </a>
@@ -421,6 +424,7 @@ function showPage(page) {
     'teams': ['Teams','Manage Teams',true],
     'games': ['Scoreboard','Manage Games & Results',true],
     'stats-entry': ['Stat Entry','Enter Game Statistics',false],
+    'player-stats': ['Player Stats','Edit Stats by Player',false],
     'events': ['Events','Manage Events',true],
     'availability': ['Player Availability','Event Availability',false],
     'news': ['News','Manage Announcements',true],
@@ -440,7 +444,7 @@ function showPage(page) {
   
   updateReqBadge();
   const fn = { dashboard: renderDashboard, players: renderPlayers, teams: renderTeams,
-    games: renderGames, 'stats-entry': renderStatsEntry, events: renderEvents,
+    games: renderGames, 'stats-entry': renderStatsEntry, 'player-stats': renderPlayerStats, events: renderEvents,
     availability: renderAvailability, news: renderNews, awards: renderAwards,
     sponsors: renderSponsors, 'page-builder': renderPageBuilder,
     settings: renderSettings, data: renderData, 'account-requests': renderAccountRequests,
@@ -1729,6 +1733,192 @@ window.saveStatsEntry = function(gameId) {
   d.games[gameIdx].playerStats = Object.values(statsMap).filter(ps => ps.ab > 0);
   saveCollection('games', d.games);
   toast('Stats saved! ✓', 'success');
+};
+
+// ─── PLAYER STATS ──────────────────────────────────────────
+let _psPlayerId = null;
+let _psTeam = 'all';
+let _psSearch = '';
+
+function renderPlayerStats(keepFilter) {
+  if (!keepFilter) { _psTeam = 'all'; _psPlayerId = null; _psSearch = ''; }
+  const data = loadData();
+  const teams = data.teams || [];
+
+  const mkBtn = (id, label) => {
+    const on = _psTeam === id;
+    return `<button onclick="_psTeam='${id}';renderPlayerStats(true)" style="padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid var(--border);background:${on?'var(--red)':'var(--white)'};color:${on?'#fff':'var(--text)'}">${label}</button>`;
+  };
+  const teamBtns = `<div style="display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px;border-bottom:1px solid var(--border)">
+    ${mkBtn('all','All')}${teams.map(t=>mkBtn(t.id,t.shortName)).join('')}
+  </div>`;
+
+  const players = data.players
+    .filter(p => p.active && (_psTeam==='all' || (p.teams||[]).includes(_psTeam)))
+    .filter(p => !_psSearch || `${p.firstName} ${p.lastName} ${p.number}`.toLowerCase().includes(_psSearch))
+    .sort((a,b) => a.lastName.localeCompare(b.lastName));
+
+  const playerList = players.map(p => {
+    const pt = data.teams.find(t=>t.id===p.teams?.[0]);
+    const sel = p.id === _psPlayerId;
+    return `<div onclick="loadPlayerStatEdit('${p.id}')"
+      style="padding:8px 10px;border-radius:6px;cursor:pointer;margin-bottom:3px;border:1px solid ${sel?'var(--red)':'transparent'};background:${sel?'#fff5f5':''};transition:all 0.1s"
+      onmouseover="if('${p.id}'!=='${_psPlayerId}')this.style.background='#f9fafb'"
+      onmouseout="if('${p.id}'!=='${_psPlayerId}')this.style.background=''">
+      <div style="font-size:13px;font-weight:700">${p.firstName} ${p.lastName} <span style="color:var(--gray);font-weight:400">#${p.number}</span></div>
+      <div style="font-size:11px;color:var(--gray)">${pt?.shortName||''}</div>
+    </div>`;
+  }).join('') || '<p style="font-size:12px;color:var(--gray);padding:12px">No players found</p>';
+
+  setContent(`
+    <div style="display:grid;grid-template-columns:260px 1fr;gap:20px">
+      <div class="admin-table-wrap" style="height:fit-content">
+        <div class="admin-table-header"><h3>Players</h3></div>
+        ${teamBtns}
+        <div style="padding:8px 12px;border-bottom:1px solid var(--border)">
+          <input type="text" placeholder="Search players…" id="ps-search-inp" value="${_psSearch.replace(/"/g,'&quot;')}"
+            oninput="_psSearch=this.value.toLowerCase();renderPlayerStats(true)"
+            style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box">
+        </div>
+        <div style="padding:12px;max-height:70vh;overflow-y:auto">${playerList}</div>
+      </div>
+      <div id="ps-panel">
+        <div style="background:var(--white);border-radius:8px;box-shadow:var(--shadow);padding:40px;text-align:center;color:var(--gray)">
+          <div style="font-size:48px;margin-bottom:16px">👤</div>
+          <p>Select a player to view and edit their game stats</p>
+        </div>
+      </div>
+    </div>
+  `);
+
+  if (_psPlayerId) loadPlayerStatEdit(_psPlayerId);
+}
+
+window.loadPlayerStatEdit = function(playerId) {
+  _psPlayerId = playerId;
+  const data = loadData();
+  const player = data.players.find(p=>p.id===playerId);
+  if (!player) return;
+
+  const panel = document.getElementById('ps-panel');
+  if (!panel) { renderPlayerStats(true); return; }
+
+  // Refresh selected highlight in player list without full re-render
+  document.querySelectorAll('[data-ps-pid]').forEach(el => {
+    const sel = el.dataset.psPid === playerId;
+    el.style.border = `1px solid ${sel?'var(--red)':'transparent'}`;
+    el.style.background = sel ? '#fff5f5' : '';
+  });
+
+  const teamIds = player.teams || [];
+  const statKeys = ['ab','h','s','d','t','hr','hbp','k','bb','sf','rbi','r'];
+  const statLabels = ['AB','H','1B','2B','3B','HR','HBP','K','BB','SF','RBI','R'];
+
+  const games = data.games
+    .filter(g => teamIds.includes(g.teamId))
+    .sort((a,b) => b.date.localeCompare(a.date));
+
+  const inpStyle = 'width:42px;padding:4px 2px;text-align:center;border:1px solid var(--border);border-radius:4px;font-size:12px;outline:none;box-sizing:border-box';
+
+  const rows = games.map(g => {
+    const team = data.teams.find(t=>t.id===g.teamId);
+    const ps = (g.playerStats||[]).find(s=>s.playerId===playerId) || {};
+    const result = gameResult(g);
+    const rb = result
+      ? `<span style="padding:2px 7px;border-radius:10px;font-size:11px;font-weight:800;background:${result==='W'?'#dcfce7':'#fee2e2'};color:${result==='W'?'#15803d':'#dc2626'}">${result}</span>`
+      : '<span style="color:var(--gray);font-size:11px">–</span>';
+    const cells = statKeys.map(k =>
+      `<td style="padding:3px"><input type="number" min="0" class="ps-inp" data-game="${g.id}" data-stat="${k}" value="${ps[k]!=null?ps[k]:''}" style="${inpStyle}" onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'" oninput="updatePsTotals()"></td>`
+    ).join('');
+    return `<tr>
+      <td style="font-size:12px;white-space:nowrap;padding:4px 6px">${g.date}</td>
+      <td style="font-size:11px;color:var(--gray);white-space:nowrap;padding:4px 6px">${team?.shortName||''}</td>
+      <td style="font-size:12px;white-space:nowrap;padding:4px 6px;max-width:160px;overflow:hidden;text-overflow:ellipsis">vs ${g.opponent}</td>
+      <td style="font-size:12px;white-space:nowrap;padding:4px 6px">${g.heroScore??'–'}–${g.oppScore??'–'}</td>
+      <td style="padding:4px 6px">${rb}</td>
+      ${cells}
+      <td style="padding:4px 6px"><button class="btn btn-success btn-sm" onclick="savePlayerGameStat('${g.id}','${playerId}',this)">Save</button></td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="20" style="text-align:center;padding:20px;color:var(--gray)">No games found</td></tr>`;
+
+  const totalCells = statKeys.map(k =>
+    `<td id="ps-total-${k}" style="text-align:center;font-weight:800;color:var(--red);padding:4px 3px">0</td>`
+  ).join('');
+
+  panel.innerHTML = `
+    <div class="admin-table-wrap">
+      <div class="admin-table-header">
+        <div>
+          <h3>${player.firstName} ${player.lastName} <span style="color:var(--gray);font-weight:400">#${player.number}</span></h3>
+          <div style="font-size:12px;color:var(--gray)">${games.length} game${games.length!==1?'s':''} · Click Save on any row to update that game's stats</div>
+        </div>
+      </div>
+      <div style="overflow-x:auto;padding:12px">
+        <table class="admin-table" style="min-width:920px">
+          <thead>
+            <tr>
+              <th>Date</th><th>Team</th><th>Opponent</th><th>Score</th><th>W/L</th>
+              ${statLabels.map(l=>`<th style="min-width:44px;text-align:center">${l}</th>`).join('')}
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+          <tfoot>
+            <tr style="background:var(--gray-light)">
+              <td colspan="5" style="font-weight:800;padding:6px 8px;font-size:13px">Totals (all games shown)</td>
+              ${totalCells}
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  `;
+
+  updatePsTotals();
+};
+
+window.updatePsTotals = function() {
+  const statKeys = ['ab','h','s','d','t','hr','hbp','k','bb','sf','rbi','r'];
+  const totals = {};
+  statKeys.forEach(k => totals[k] = 0);
+  document.querySelectorAll('.ps-inp').forEach(inp => {
+    const k = inp.dataset.stat;
+    if (k) totals[k] += parseInt(inp.value) || 0;
+  });
+  statKeys.forEach(k => {
+    const el = document.getElementById('ps-total-' + k);
+    if (el) el.textContent = totals[k] || 0;
+  });
+};
+
+window.savePlayerGameStat = function(gameId, playerId, btn) {
+  const d = loadData();
+  const gameIdx = d.games.findIndex(g => g.id === gameId);
+  if (gameIdx < 0) return;
+
+  const statKeys = ['ab','h','s','d','t','hr','hbp','k','bb','sf','rbi','r'];
+  const statObj = { playerId };
+  statKeys.forEach(k => statObj[k] = 0);
+  document.querySelectorAll(`.ps-inp[data-game="${gameId}"]`).forEach(inp => {
+    statObj[inp.dataset.stat] = parseInt(inp.value) || 0;
+  });
+
+  const ps = d.games[gameIdx].playerStats ? [...d.games[gameIdx].playerStats] : [];
+  const idx = ps.findIndex(s => s.playerId === playerId);
+  if (idx >= 0) ps[idx] = statObj;
+  else ps.push(statObj);
+  d.games[gameIdx].playerStats = ps;
+
+  saveCollection('games', d.games);
+
+  if (btn) {
+    const orig = btn.textContent;
+    btn.textContent = '✓ Saved';
+    btn.style.background = '#15803d';
+    setTimeout(() => { btn.textContent = orig; btn.style.background = ''; }, 1500);
+  }
+  toast('Stats saved!', 'success');
 };
 
 // ─── EVENTS ────────────────────────────────────────────────
