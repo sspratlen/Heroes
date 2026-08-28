@@ -455,6 +455,7 @@ function loadData() {
     try {
       const d = JSON.parse(saved);
       if (!d.accountRequests) d.accountRequests = [];
+      if (!d.tournaments) d.tournaments = [];
       return d;
     } catch(e) {}
   }

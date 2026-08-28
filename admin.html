@@ -75,6 +75,9 @@
       <a class="sidebar-link" onclick="showPage('stats-entry')">
         <span class="icon">📝</span> Stat Entry
       </a>
+      <a class="sidebar-link" onclick="showPage('tournaments')">
+        <span class="icon">🏆</span> Tournaments
+      </a>
 
       <div class="sidebar-section-label" style="margin-top:12px">Events</div>
       <a class="sidebar-link" onclick="showPage('events')">
@@ -428,6 +431,7 @@ function showPage(page) {
     'data': ['Data Management','Import / Export',false],
     'account-requests': ['Account Requests','Review & Approve Player Accounts',false],
     'gallery': ['Photo Gallery','Manage Albums & Photos',true],
+    'tournaments': ['Tournaments','Manage Tournament Results',true],
   };
   
   const [title, sub, showAdd] = pages[page] || ['Unknown','',false];
@@ -440,11 +444,11 @@ function showPage(page) {
     availability: renderAvailability, news: renderNews, awards: renderAwards,
     sponsors: renderSponsors, 'page-builder': renderPageBuilder,
     settings: renderSettings, data: renderData, 'account-requests': renderAccountRequests,
-    gallery: renderGalleryAdmin }[page];
+    gallery: renderGalleryAdmin, tournaments: renderTournaments }[page];
   if (fn) fn();
 }
 function triggerAddNew() {
-  const fns = { players: addPlayer, teams: addTeam, games: addGame, events: addEvent, news: addNews, awards: addAward, sponsors: addSponsor, gallery: addAlbum };
+  const fns = { players: addPlayer, teams: addTeam, games: addGame, events: addEvent, news: addNews, awards: addAward, sponsors: addSponsor, gallery: addAlbum, tournaments: addTournament };
   if (fns[currentPage]) fns[currentPage]();
 }
 
@@ -1209,15 +1213,19 @@ function renderGames() {
         </div>
       </div>
       <table class="admin-table" id="games-table">
-        <thead><tr><th>Date</th><th>Team</th><th>Opponent</th><th>Location</th><th>Score</th><th>Result</th><th>Stats</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Date</th><th>Team</th><th>Opponent</th><th>Tournament</th><th>Score</th><th>Result</th><th>Stats</th><th>Actions</th></tr></thead>
         <tbody>${games.map(g=>{
           const team = data.teams.find(t=>t.id===g.teamId);
           const statCount = g.playerStats?.reduce((s,ps)=>s+(ps.ab>0?1:0),0)||0;
+          const tourney = g.tournamentId ? (data.tournaments||[]).find(t=>t.id===g.tournamentId) : null;
+          const tourneyCell = tourney
+            ? `<span style="font-size:11px;color:var(--text)">${tourneyTrophy(tourney.placement)}${tourney.name}</span>`
+            : `<span style="font-size:11px;color:var(--gray)">—</span>`;
           return `<tr data-team="${g.teamId}">
             <td>${g.date}</td>
             <td><span style="font-size:11px;font-weight:700;color:var(--red)">${team?.shortName||''}</span></td>
             <td><strong>${g.opponent}</strong></td>
-            <td style="font-size:12px;color:var(--gray)">${g.location}</td>
+            <td>${tourneyCell}</td>
             <td>${g.heroScore??'–'} - ${g.oppScore??'–'}</td>
             <td><span style="padding:3px 8px;border-radius:20px;font-size:11px;font-weight:800;background:${gameResult(g)==='W'?'#dcfce7':gameResult(g)==='L'?'#fee2e2':'#fef9c3'};color:${gameResult(g)==='W'?'#15803d':gameResult(g)==='L'?'#dc2626':'#92400e'}">${gameResult(g)||'TBD'}</span></td>
             <td><span style="font-size:12px;color:${statCount?'#15803d':'var(--gray)'}">${statCount?`✓ ${statCount} players`:'No stats'}</span></td>
@@ -1249,7 +1257,7 @@ function addGame() {
       heroScore: val('gf-hs')?parseInt(val('gf-hs')):null,
       oppScore: val('gf-os')?parseInt(val('gf-os')):null,
       result: val('gf-result'), season: val('gf-season'), notes: val('gf-notes'),
-      tournamentId: null, playerStats: []
+      tournamentId: val('gf-tournament')||null, playerStats: []
     });
     saveCollection('games', d.games); closeModal(); renderGames(); toast('Game added!');
   });
@@ -1263,7 +1271,8 @@ function editGame(id) {
       opponent: val('gf-opp'), location: val('gf-loc'),
       heroScore: val('gf-hs')?parseInt(val('gf-hs')):null,
       oppScore: val('gf-os')?parseInt(val('gf-os')):null,
-      result: val('gf-result'), season: val('gf-season'), notes: val('gf-notes')
+      result: val('gf-result'), season: val('gf-season'), notes: val('gf-notes'),
+      tournamentId: val('gf-tournament')||null
     };
     saveCollection('games', d.games); closeModal(); renderGames(); toast('Game updated!');
   });
@@ -1302,8 +1311,192 @@ function buildGameForm(g, data) {
         <input id="gf-season" class="form-input" value="${g?.season||season}">
       </div>
     </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Tournament</label>
+        <select id="gf-tournament" class="form-select">
+          <option value="">— None —</option>
+          ${(data.tournaments||[]).map(t=>`<option value="${t.id}"${g?.tournamentId===t.id?' selected':''}>${tourneyTrophy(t.placement)}${t.name}${t.startDate?' ('+t.startDate+')':''}</option>`).join('')}
+        </select>
+      </div>
+    </div>
     <div class="form-group"><label class="form-label">Notes</label><textarea id="gf-notes" class="form-textarea">${g?.notes||''}</textarea></div>
   `;
+}
+
+// ─── TOURNAMENTS ───────────────────────────────────────────
+
+function tourneyTrophy(place) {
+  if (place === 1) return '🥇 ';
+  if (place === 2) return '🥈 ';
+  if (place === 3) return '🥉 ';
+  if (place >= 4)  return `#${place} `;
+  return '';
+}
+
+function placementLabel(place) {
+  if (!place) return '—';
+  if (place === 1) return '🥇 1st Place';
+  if (place === 2) return '🥈 2nd Place';
+  if (place === 3) return '🥉 3rd Place';
+  return `#${place} Place`;
+}
+
+function renderTournaments() {
+  const data = loadData();
+  const tournaments = [...(data.tournaments||[])].sort((a,b)=>(b.startDate||'').localeCompare(a.startDate||''));
+  setContent(`
+    <div class="admin-table-wrap">
+      <div class="admin-table-header">
+        <h3>Tournaments (${tournaments.length})</h3>
+        <button class="btn btn-primary btn-sm" onclick="addTournament()">+ Add Tournament</button>
+      </div>
+      ${tournaments.length === 0 ? `<div style="text-align:center;padding:48px;color:var(--gray)">No tournaments yet. Click "+ Add Tournament" to create one.</div>` : `
+      <table class="admin-table">
+        <thead><tr><th>Tournament</th><th>Team</th><th>Dates</th><th>Games</th><th>Placement</th><th>Actions</th></tr></thead>
+        <tbody>${tournaments.map(t => {
+          const team  = data.teams.find(tm=>tm.id===t.teamId);
+          const games = (data.games||[]).filter(g=>g.tournamentId===t.id);
+          const trophy = t.placement ? `<span style="font-size:18px">${tourneyTrophy(t.placement).trim()}</span> <strong>${placementLabel(t.placement)}</strong>` : '<span style="color:var(--gray);font-size:12px">Not set</span>';
+          const dateStr = t.startDate && t.endDate && t.startDate!==t.endDate
+            ? `${t.startDate} – ${t.endDate}` : (t.startDate||'—');
+          return `<tr>
+            <td><strong>${t.name}</strong>${t.location?`<br><span style="font-size:11px;color:var(--gray)">${t.location}</span>`:''}</td>
+            <td style="font-size:12px;font-weight:700;color:var(--red)">${team?.shortName||'—'}</td>
+            <td style="font-size:12px">${dateStr}</td>
+            <td style="font-size:12px">${games.length} game${games.length!==1?'s':''}</td>
+            <td>${trophy}</td>
+            <td style="display:flex;gap:4px;flex-wrap:wrap">
+              <button class="action-btn action-edit" onclick="editTournament('${t.id}')">Edit</button>
+              <button class="action-btn action-edit" onclick="setTournamentPlacement('${t.id}')">🏆 Place</button>
+              <button class="action-btn action-delete" onclick="deleteTournament('${t.id}')">Del</button>
+            </td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`}
+    </div>
+  `);
+}
+
+function buildTournamentForm(t, data) {
+  return `
+    <div class="form-row">
+      <div class="form-group" style="flex:2"><label class="form-label">Tournament Name*</label>
+        <input id="tf-name" class="form-input" value="${t?.name||''}" placeholder="e.g. Summer Classic">
+      </div>
+      <div class="form-group"><label class="form-label">Team</label>
+        <select id="tf-team" class="form-select">
+          <option value="">— Any —</option>
+          ${(data.teams||[]).map(tm=>`<option value="${tm.id}"${t?.teamId===tm.id?' selected':''}>${tm.name}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Start Date</label>
+        <input type="date" id="tf-start" class="form-input" value="${t?.startDate||''}">
+      </div>
+      <div class="form-group"><label class="form-label">End Date</label>
+        <input type="date" id="tf-end" class="form-input" value="${t?.endDate||''}">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Location</label>
+        <input id="tf-location" class="form-input" value="${t?.location||''}" placeholder="Park / City">
+      </div>
+      <div class="form-group"><label class="form-label">Season</label>
+        <input id="tf-season" class="form-input" value="${t?.season||new Date().getFullYear()}">
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Notes</label>
+      <textarea id="tf-notes" class="form-textarea">${t?.notes||''}</textarea>
+    </div>
+  `;
+}
+
+function addTournament() {
+  const data = loadData();
+  openModal('Add Tournament', buildTournamentForm(null, data), 'Add Tournament', () => {
+    const name = val('tf-name').trim();
+    if (!name) { toast('Tournament name is required'); return; }
+    const d = loadData();
+    if (!d.tournaments) d.tournaments = [];
+    d.tournaments.push({
+      id: 'tr'+Date.now(), name,
+      teamId: val('tf-team')||null,
+      startDate: val('tf-start')||null,
+      endDate: val('tf-end')||null,
+      location: val('tf-location'),
+      season: val('tf-season')||new Date().getFullYear(),
+      placement: null,
+      notes: val('tf-notes')
+    });
+    saveCollection('tournaments', d.tournaments);
+    closeModal(); renderTournaments(); toast('Tournament added!');
+  });
+}
+
+function editTournament(id) {
+  const data = loadData();
+  const t = (data.tournaments||[]).find(x=>x.id===id);
+  openModal('Edit Tournament', buildTournamentForm(t, data), 'Save Changes', () => {
+    const name = val('tf-name').trim();
+    if (!name) { toast('Tournament name is required'); return; }
+    const d = loadData();
+    const idx = d.tournaments.findIndex(x=>x.id===id);
+    d.tournaments[idx] = { ...d.tournaments[idx], name,
+      teamId: val('tf-team')||null,
+      startDate: val('tf-start')||null,
+      endDate: val('tf-end')||null,
+      location: val('tf-location'),
+      season: val('tf-season')||new Date().getFullYear(),
+      notes: val('tf-notes')
+    };
+    saveCollection('tournaments', d.tournaments);
+    closeModal(); renderTournaments(); toast('Tournament updated!');
+  });
+}
+
+function setTournamentPlacement(id) {
+  const data = loadData();
+  const t = (data.tournaments||[]).find(x=>x.id===id);
+  const places = [1,2,3,4,5,6,7,8];
+  openModal(`Set Placement — ${t?.name||''}`,
+    `<p style="margin:0 0 16px;color:var(--text)">Select where your team finished in this tournament:</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      ${places.map(p=>`
+        <button onclick="savePlacement('${id}',${p});closeModal()" style="
+          padding:14px 10px;border-radius:10px;border:2px solid ${t?.placement===p?'var(--red)':'var(--border)'};
+          background:${t?.placement===p?'rgba(200,16,46,0.08)':'var(--card)'};
+          cursor:pointer;font-size:${p<=3?'22px':'16px'};font-weight:700;color:var(--text);
+          display:flex;flex-direction:column;align-items:center;gap:4px">
+          ${p<=3?['🥇','🥈','🥉'][p-1]:''}
+          <span style="font-size:13px">${p===1?'1st':p===2?'2nd':p===3?'3rd':p+'th'} Place</span>
+        </button>`).join('')}
+      <button onclick="savePlacement('${id}',null);closeModal()" style="
+        padding:14px 10px;border-radius:10px;border:2px solid var(--border);
+        background:var(--card);cursor:pointer;font-size:13px;color:var(--gray);grid-column:span 2">
+        Clear Placement
+      </button>
+    </div>`, null, null);
+}
+
+window.savePlacement = function(id, place) {
+  const d = loadData();
+  const idx = d.tournaments.findIndex(x=>x.id===id);
+  if (idx<0) return;
+  d.tournaments[idx].placement = place;
+  saveCollection('tournaments', d.tournaments);
+  renderTournaments();
+  toast(place ? `Placement set to ${placementLabel(place)}` : 'Placement cleared');
+};
+
+function deleteTournament(id) {
+  if (!confirm('Delete this tournament? Games assigned to it will be unlinked.')) return;
+  const d = loadData();
+  d.tournaments = (d.tournaments||[]).filter(t=>t.id!==id);
+  d.games = d.games.map(g=>g.tournamentId===id?{...g,tournamentId:null}:g);
+  saveCollection('tournaments', d.tournaments);
+  saveCollection('games', d.games);
+  renderTournaments(); toast('Tournament deleted');
 }
 
 // ─── STAT ENTRY ────────────────────────────────────────────
