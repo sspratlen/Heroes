@@ -1596,6 +1596,7 @@ window.loadStatEntry = function(gameId) {
               <div id="add-player-list" style="max-height:240px;overflow-y:auto"></div>
             </div>
           </div>
+          <button class="btn btn-secondary btn-sm" onclick="importTeamPages('${gameId}')" title="Paste stats copied from TeamPages">📋 Import TeamPages</button>
           <button class="btn btn-secondary btn-sm" onclick="scanScorebook('${gameId}')" title="Upload a scorebook photo to auto-fill stats">📷 Scan Scorebook</button>
           <button class="btn btn-success" onclick="saveStatsEntry('${gameId}')">💾 Save Stats</button>
         </div>
@@ -2410,6 +2411,15 @@ function renderSettings() {
           </div>
         </div>
         <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+          <h4 style="margin:0 0 8px;font-size:14px;color:var(--text)">TeamPages Importer</h4>
+          <p style="font-size:12px;color:var(--gray);margin:0 0 12px">Drag this bookmarklet to your browser's bookmark bar. When you're on a TeamPages game stats page, click it — it copies the stats table so you can paste into <strong>Stat Entry → Import TeamPages</strong>.</p>
+          <a id="tp-bookmarklet-link" href="javascript:(function(){var t=null;for(var el of document.querySelectorAll('table')){if(/AB/.test(el.innerText)&&/RBI/.test(el.innerText)){t=el;break;}}if(!t){alert('No stats table found on this page.');return;}var hrow=t.querySelector('thead tr');if(!hrow)hrow=t.querySelector('tr');var headers=[...hrow.querySelectorAll('th,td')].map(function(h){return h.innerText.trim();});var rows=[...t.querySelectorAll('tbody tr')].map(function(tr){return[...tr.querySelectorAll('td')].map(function(td){return td.innerText.trim();});}).filter(function(r){return r.length>2&&r[1];});var tsv=[headers.join('\t')].concat(rows.map(function(r){return r.join('\t');})).join('\n');navigator.clipboard.writeText(tsv).then(function(){var d=document.createElement('div');d.style.cssText='position:fixed;top:20px;left:50%;transform:translateX(-50%);background:%2315803d;color:%23fff;padding:12px 28px;border-radius:8px;font-family:sans-serif;font-size:16px;font-weight:bold;z-index:99999;box-shadow:0 4px 20px rgba(0,0,0,.35)';d.textContent='✓ Stats copied! Paste in Heroes Admin → Stat Entry → Import TeamPages';document.body.appendChild(d);setTimeout(function(){d.remove();},3500);}).catch(function(){var d=document.createElement('div');d.style.cssText='position:fixed;inset:20px;background:%23fff;border-radius:8px;padding:20px;z-index:99999;box-shadow:0 4px 40px rgba(0,0,0,.4);display:flex;flex-direction:column;gap:10px;font-family:sans-serif';d.innerHTML='<h3 style=margin:0>Copy this → paste in Heroes Admin</h3><textarea style=flex:1;font-size:11px;font-family:monospace>'+tsv+'</textarea><button onclick=this.parentElement.remove() style=padding:8px 16px;background:%23dc2626;color:%23fff;border:none;border-radius:4px;cursor:pointer>Close</button>';document.body.appendChild(d);});})();"
+            style="display:inline-block;padding:8px 18px;background:var(--red);color:#fff;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;cursor:grab;border:2px dashed rgba(255,255,255,0.4)"
+            ondragstart="event.dataTransfer.setData('text/plain', this.href)">
+            📋 TeamPages Scraper ← drag me to bookmarks bar
+          </a>
+        </div>
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
           <h4 style="margin:0 0 12px;font-size:14px;color:var(--text)">AI Integration</h4>
           <div class="form-group">
             <label class="form-label">Claude API Key <span style="font-weight:400;color:var(--gray)">(stored in your browser only)</span></label>
@@ -2639,6 +2649,160 @@ async function _doScan(gameId, { imageBase64, mediaType, imageUrl }) {
     toast('Scan failed: ' + err.message, 'error');
   } finally {
     if (scanBtn) { scanBtn.innerHTML = origText; scanBtn.disabled = false; }
+  }
+}
+
+// ─── TEAMPAGES IMPORT ──────────────────────────────────────
+
+window.importTeamPages = function(gameId) {
+  openModal('Import from TeamPages',
+    `<div style="margin-bottom:12px;font-size:13px;color:var(--text)">
+      <strong>Step 1:</strong> Go to the game on TeamPages, click the
+      <strong>📋 TeamPages Scraper</strong> bookmarklet.<br>
+      <strong>Step 2:</strong> Paste the copied stats below.
+    </div>
+    <div style="background:var(--gray-light);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--gray)">
+      💡 Don't have the bookmarklet yet? Go to
+      <strong>Settings → TeamPages Bookmarklet</strong> to install it.
+    </div>
+    <textarea id="tp-paste" class="form-textarea" rows="10"
+      placeholder="Paste the copied TeamPages stats here…"
+      style="font-family:monospace;font-size:11px;resize:vertical"></textarea>
+    <div id="tp-preview" style="margin-top:8px;font-size:12px;color:var(--gray)"></div>`,
+    'Import Stats',
+    () => _applyTeamPagesImport(gameId)
+  );
+  // Show live preview as user pastes
+  setTimeout(() => {
+    const ta = document.getElementById('tp-paste');
+    if (ta) ta.addEventListener('input', () => _previewTeamPagesPaste(gameId));
+  }, 100);
+};
+
+function _parseTeamPagesTSV(raw) {
+  const lines = raw.trim().split('\n').map(l => l.trimEnd());
+  if (lines.length < 2) return null;
+
+  // Find the header line (contains AB and RBI)
+  let headerIdx = lines.findIndex(l => /\bAB\b/.test(l) && /\bRBI\b/.test(l));
+  if (headerIdx < 0) headerIdx = 0;
+  const headers = lines[headerIdx].split('\t').map(h => h.trim());
+
+  const col = key => headers.findIndex(h => h.toUpperCase() === key.toUpperCase());
+  const iNum  = col('Number');
+  const iName = col('Name');
+  const iAB   = col('AB');
+  const iH    = col('H');
+  const iR    = col('R');
+  const iRBI  = col('RBI');
+  const iBB   = col('BB');
+  const iSO   = col('SO');
+  const i1B   = col('1B');
+  const i2B   = col('2B');
+  const i3B   = col('3B');
+  const iHR   = col('HR');
+  const iSF   = col('SF');
+
+  if (iName < 0 || iAB < 0) return null;
+
+  const players = [];
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const cells = lines[i].split('\t');
+    if (cells.length < 3) continue;
+    const name = cells[iName]?.trim();
+    if (!name || name.toLowerCase().includes('total')) continue;
+    const ab = parseInt(cells[iAB]) || 0;
+    const h  = parseInt(cells[iH])  || 0;
+    const r  = parseInt(cells[iR])  || 0;
+    if (ab === 0 && h === 0 && r === 0 && parseInt(cells[iBB]||'0') === 0) continue; // skip blank rows
+    players.push({
+      rawName: name,
+      number:  cells[iNum]?.trim() || '',
+      ab, h,
+      s:   parseInt(cells[i1B]) || 0,
+      d:   parseInt(cells[i2B]) || 0,
+      t:   parseInt(cells[i3B]) || 0,
+      hr:  parseInt(cells[iHR]) || 0,
+      hbp: 0,
+      k:   parseInt(cells[iSO]) || 0,
+      bb:  parseInt(cells[iBB]) || 0,
+      sf:  parseInt(cells[iSF]) || 0,
+      rbi: parseInt(cells[iRBI])|| 0,
+      r
+    });
+  }
+  return players;
+}
+
+function _matchPlayerInGrid(rawName, number) {
+  // Try to match the grid rows by last name, then full name, then number
+  const rows = document.querySelectorAll('#stat-rows-container .stat-entry-row[data-row-player]');
+  const nameLower = rawName.toLowerCase();
+  const lastName  = nameLower.split(/\s+/).pop();
+
+  let best = null, bestScore = 0;
+  for (const row of rows) {
+    const label = (row.querySelector('.player-label')?.textContent || '').toLowerCase();
+    // Extract player number from label (e.g. "#16")
+    const numMatch = label.match(/#(\d+)/);
+    const rowNum   = numMatch ? numMatch[1] : '';
+    const rowText  = label.replace(/#\d+/, '').trim();
+
+    let score = 0;
+    if (rowText === nameLower)       score = 10;
+    else if (rowText.includes(lastName) || lastName.includes(rowText.split(' ').pop())) score = 5;
+    if (number && rowNum === String(number)) score += 3;
+
+    if (score > bestScore) { bestScore = score; best = row; }
+  }
+  return bestScore >= 3 ? best : null;
+}
+
+function _previewTeamPagesPaste() {
+  const raw = document.getElementById('tp-paste')?.value || '';
+  const players = _parseTeamPagesTSV(raw);
+  const el = document.getElementById('tp-preview');
+  if (!el) return;
+  if (!players) { el.textContent = ''; return; }
+  const nonZero = players.filter(p => p.ab > 0 || p.bb > 0);
+  el.innerHTML = `<span style="color:#15803d">✓ Found <strong>${players.length}</strong> players with stats (${nonZero.length} with plate appearances)</span>`;
+}
+
+function _applyTeamPagesImport(gameId) {
+  const raw = document.getElementById('tp-paste')?.value || '';
+  const players = _parseTeamPagesTSV(raw);
+  if (!players || players.length === 0) {
+    toast('Could not parse stats — make sure you copied from the TeamPages bookmarklet', 'error');
+    return;
+  }
+
+  const data = loadData();
+  const game = data.games.find(g => g.id === gameId);
+
+  let matched = 0, unmatched = [];
+
+  for (const entry of players) {
+    const row = _matchPlayerInGrid(entry.rawName, entry.number);
+    if (!row) { unmatched.push(`${entry.rawName} #${entry.number}`); continue; }
+
+    const statMap = { ab: entry.ab, h: entry.h, s: entry.s, d: entry.d, t: entry.t,
+      hr: entry.hr, hbp: entry.hbp, k: entry.k, bb: entry.bb, sf: entry.sf,
+      rbi: entry.rbi, r: entry.r };
+
+    for (const [key, val] of Object.entries(statMap)) {
+      const inp = row.querySelector(`input[data-stat="${key}"]`);
+      if (inp && val > 0) { inp.value = val; inp.style.background = 'rgba(34,197,94,0.15)'; }
+    }
+    matched++;
+  }
+
+  updateStatSummary();
+  closeModal();
+
+  if (unmatched.length) {
+    toast(`Imported ${matched} players. Not found: ${unmatched.join(', ')}`, 'warn');
+  } else {
+    toast(`✓ Imported stats for ${matched} players`);
   }
 }
 
