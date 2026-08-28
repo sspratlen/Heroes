@@ -1600,6 +1600,7 @@ window.loadStatEntry = function(gameId) {
               <div id="add-player-list" style="max-height:240px;overflow-y:auto"></div>
             </div>
           </div>
+          <button class="btn btn-secondary btn-sm" onclick="clearStatsEntry()" title="Clear all stat inputs for this game">🗑 Clear Stats</button>
           <button class="btn btn-secondary btn-sm" onclick="importTeamPages('${gameId}')" title="Paste stats copied from TeamPages">📋 Import TeamPages</button>
           <button class="btn btn-secondary btn-sm" onclick="scanScorebook('${gameId}')" title="Upload a scorebook photo to auto-fill stats">📷 Scan Scorebook</button>
           <button class="btn btn-success" onclick="saveStatsEntry('${gameId}')">💾 Save Stats</button>
@@ -1733,6 +1734,12 @@ window.saveStatsEntry = function(gameId) {
   d.games[gameIdx].playerStats = Object.values(statsMap).filter(ps => ps.ab > 0);
   saveCollection('games', d.games);
   toast('Stats saved! ✓', 'success');
+};
+
+window.clearStatsEntry = function() {
+  if (!confirm('Clear all stat inputs? This does not save — you would still need to click Save Stats.')) return;
+  document.querySelectorAll('.stat-input').forEach(inp => { inp.value = ''; });
+  updateStatSummary();
 };
 
 // ─── PLAYER STATS ──────────────────────────────────────────
