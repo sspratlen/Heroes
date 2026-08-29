@@ -296,12 +296,12 @@ function buildPhotoGallerySection(settings, data) {
   const tiles = allTiles.map((ph, i) => {
     const fa = floatAnims[i % floatAnims.length];
     return `<div style="flex-shrink:0;width:${TILE_W}px;height:${TILE_H}px;
-        border-radius:8px;overflow:hidden;position:relative;">
+        border-radius:8px;overflow:hidden;position:relative;background:#0a0a0a;">
       <img src="${ph.url}" alt="" loading="lazy"
-        style="width:100%;height:100%;object-fit:cover;display:block;transform-origin:center center;
+        style="width:100%;height:100%;object-fit:contain;display:block;transform-origin:center center;
           animation:${fa.name} ${fa.dur}s ease-in-out infinite;animation-delay:${fa.delay}s;">
       <div style="position:absolute;inset:0;pointer-events:none;
-        background:linear-gradient(to top,rgba(0,0,0,0.4) 0%,transparent 55%);"></div>
+        background:linear-gradient(to top,rgba(0,0,0,0.3) 0%,transparent 50%);"></div>
     </div>`;
   }).join('');
 
