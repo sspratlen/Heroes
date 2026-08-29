@@ -317,11 +317,10 @@ function buildPhotoGallerySection(settings, data) {
     <div style="flex-shrink:0;width:${TILE_W}px;display:flex;flex-direction:column;">
       <!-- Photo frame with cream film border -->
       <div style="height:${TILE_H}px;overflow:hidden;position:relative;
-          border:4px solid #e8dfc0;box-shadow:inset 0 0 0 1px #b8a878, 0 2px 8px rgba(0,0,0,0.7);">
+          border:4px solid #ccc;box-shadow:0 2px 8px rgba(0,0,0,0.15);">
         <img src="${ph.url}" alt="" loading="lazy"
           style="width:100%;height:100%;object-fit:contain;display:block;
-            background:#0e0b06;transform-origin:center center;
-            filter:sepia(0.35) contrast(1.12) brightness(0.85) saturate(0.9);
+            background:#f0f0f0;transform-origin:center center;
             animation:${fa.name} ${fa.dur}s ease-in-out infinite;animation-delay:${fa.delay}s;">
         <!-- Vignette -->
         <div style="position:absolute;inset:0;pointer-events:none;
@@ -329,8 +328,8 @@ function buildPhotoGallerySection(settings, data) {
       </div>
       <!-- Frame number strip -->
       <div style="height:${FRAME_N_H}px;display:flex;align-items:center;justify-content:center;
-          background:#0d0a06;color:#5a4a2a;font-size:7px;font-family:monospace;
-          letter-spacing:3px;font-weight:700;border-top:1px solid #1c1510;">
+          background:#F8F8F8;color:#aaa;font-size:7px;font-family:monospace;
+          letter-spacing:3px;font-weight:700;border-top:1px solid #ddd;">
         ${num}A &nbsp;▷&nbsp; ${num}A
       </div>
     </div>`;
@@ -341,14 +340,14 @@ function buildPhotoGallerySection(settings, data) {
   const sprocketStrip = (pos) =>
     `<div style="position:absolute;${pos}:0;left:0;right:0;height:${SPROCKET_H}px;z-index:10;
       pointer-events:none;
-      background-color:#100c07;
+      background-color:#F8F8F8;
       background-image:
-        radial-gradient(ellipse 10px 16px at center, #000 88%, transparent 89%),
-        repeating-linear-gradient(90deg,transparent 0px,transparent 20px,rgba(255,255,255,0.015) 20px,rgba(255,255,255,0.015) 22px);
+        radial-gradient(ellipse 10px 16px at center, #d0d0d0 88%, transparent 89%),
+        repeating-linear-gradient(90deg,transparent 0px,transparent 20px,rgba(0,0,0,0.03) 20px,rgba(0,0,0,0.03) 22px);
       background-size:26px 100%, 26px 100%;
       background-repeat:repeat-x;
       background-position:4px center, 4px center;
-      border-${pos}:2px solid #1e170d;"></div>`;
+      border-${pos}:2px solid #e0e0e0;"></div>`;
 
   return `
 <style id="${uid}-css">
@@ -362,27 +361,27 @@ function buildPhotoGallerySection(settings, data) {
   border-top:3px solid #C8102E;border-bottom:1px solid rgba(200,16,46,0.18);
   padding:20px 0;">
 
-  <!-- Film header — slate-style label bar -->
+  <!-- Film header — label bar -->
   <div style="padding:8px 18px;display:flex;align-items:center;justify-content:space-between;
-    background:#0a0804;border-top:1px solid #1e170d;border-bottom:2px solid #2a2010;margin:0 0 0 0;">
+    background:#F8F8F8;border-bottom:1px solid #e0e0e0;margin:0;">
     <div style="display:flex;align-items:center;gap:12px;">
-      <span style="color:#c8a060;font-size:11px;font-weight:900;letter-spacing:0.12em;
+      <span style="color:#C8102E;font-size:11px;font-weight:900;letter-spacing:0.12em;
         text-transform:uppercase;font-family:monospace;">🎞 ${title}</span>
-      ${meta ? `<span style="color:#3e3020;font-size:10px;font-family:monospace;letter-spacing:0.06em;">${meta}</span>` : ''}
+      ${meta ? `<span style="color:#aaa;font-size:10px;font-family:monospace;letter-spacing:0.06em;">${meta}</span>` : ''}
     </div>
     <div style="display:flex;align-items:center;gap:14px;">
-      <span style="color:#3a2e1a;font-size:9px;font-family:monospace;letter-spacing:0.1em;">
+      <span style="color:#bbb;font-size:9px;font-family:monospace;letter-spacing:0.1em;">
         ${photos.length} FRAMES
       </span>
-      <a data-route="/gallery" style="color:#a06830;font-size:9px;font-weight:900;
+      <a data-route="/gallery" style="color:#C8102E;font-size:9px;font-weight:900;
         letter-spacing:0.12em;text-decoration:none;text-transform:uppercase;font-family:monospace;">
         VIEW GALLERY ▶
       </a>
     </div>
   </div>
 
-  <!-- Film strip: dark film background behind the reel -->
-  <div style="background:#100c07;overflow:hidden;">
+  <!-- Film strip -->
+  <div style="background:#F8F8F8;overflow:hidden;">
     <!-- Film reel: pronounced sprocket strips top + bottom, frames scroll through -->
     <div style="position:relative;height:${TOTAL_H}px;overflow:hidden;
       -webkit-mask-image:linear-gradient(to right,transparent 0%,#000 6%,#000 94%,transparent 100%);
@@ -399,8 +398,8 @@ function buildPhotoGallerySection(settings, data) {
       </div>
     </div>
 
-    <!-- Bottom edge of film material -->
-    <div style="height:3px;background:#0a0804;border-top:1px solid #1a1408;"></div>
+    <!-- Bottom edge -->
+    <div style="height:1px;background:#e0e0e0;"></div>
   </div>
 </section>`;
 }
