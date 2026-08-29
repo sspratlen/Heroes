@@ -923,18 +923,55 @@ function editPlayer(id) {
   const data = loadData();
   const p = data.players.find(x => x.id === id);
   if (!p) return;
-  openModal('Edit Player', buildPlayerForm(p, data), 'Save Changes', () => {
+  openModal('Edit Player', buildPlayerForm(p, data), 'Save Changes', async () => {
     const d = loadData();
     const idx = d.players.findIndex(x => x.id === id);
+    const email = val('pf-email');
     d.players[idx] = { ...d.players[idx],
       firstName: val('pf-first'), lastName: val('pf-last'), number: val('pf-num'),
       position: val('pf-pos'), teams: Array.from(document.querySelectorAll('.pf-team:checked')).map(c=>c.value),
       bats: val('pf-bats'), throws: val('pf-throws'), joinYear: parseInt(val('pf-year')),
-      active: document.getElementById('pf-active').checked, email: val('pf-email'),
+      active: document.getElementById('pf-active').checked, email,
       photo: val('pf-photo')
-      // credentials intentionally not updated here — passwords managed via Supabase Auth
     };
-    saveData(d); closeModal(); renderPlayers(); toast('Player updated!');
+    saveData(d);
+
+    // Handle optional password set
+    const pw  = document.getElementById('pf-pw')?.value || '';
+    const pw2 = document.getElementById('pf-pw2')?.value || '';
+    const mustChange = document.getElementById('pf-must-change')?.checked || false;
+
+    if (pw || mustChange) {
+      if (!email) { toast('Add an email address to set a password.', 'warning'); closeModal(); renderPlayers(); return; }
+      if (pw && pw !== pw2) { toast('Passwords do not match — other changes saved.', 'warning'); closeModal(); renderPlayers(); return; }
+      if (pw && pw.length < 6) { toast('Password must be at least 6 characters — other changes saved.', 'warning'); closeModal(); renderPlayers(); return; }
+
+      try {
+        const sb = _getClient();
+        const { data: { session } } = await sb.auth.getSession();
+        if (!session?.access_token) throw new Error('Admin session expired. Sign in again.');
+
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/admin-set-password`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({ email, password: pw, mustChangePassword: mustChange }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+        toast(body.created ? 'Player updated & account created!' : 'Player updated & password set!', 'success');
+      } catch(e) {
+        toast('Player saved but password error: ' + (e.message || 'Unknown'), 'error');
+        closeModal(); renderPlayers(); return;
+      }
+    } else {
+      toast('Player updated!');
+    }
+
+    closeModal(); renderPlayers();
   });
 }
 
@@ -1163,18 +1200,23 @@ function buildPlayerForm(p, data, users = []) {
       <div class="form-hint" style="margin-top:8px">Upload a new photo or pick from this team's player gallery.</div>
     </div>
     <label class="form-check"><input type="checkbox" id="pf-active"${p?.active!==false?' checked':''}> Active player</label>
-    ${p?.email ? `
-    <div style="margin-top:16px;padding:12px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-      <div>
-        <div style="font-size:12px;font-weight:800;color:#15803d;margin-bottom:2px">PASSWORD RESET</div>
-        <div style="font-size:12px;color:#555">Send a reset link to <strong>${p.email}</strong></div>
+    <div style="margin-top:16px;padding:14px;background:#f8faff;border:1px solid #dbeafe;border-radius:8px">
+      <div style="font-size:12px;font-weight:800;color:#1d4ed8;margin-bottom:10px;letter-spacing:0.04em">SET PASSWORD</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">New Password</label>
+          <input type="password" id="pf-pw" class="form-input" placeholder="Leave blank to keep unchanged" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Confirm Password</label>
+          <input type="password" id="pf-pw2" class="form-input" placeholder="Repeat new password" autocomplete="new-password">
+        </div>
       </div>
-      <button type="button" class="btn btn-sm" style="background:#15803d;color:#fff;border:none;white-space:nowrap"
-        onclick="sendPlayerPasswordReset('${p.email}','${p.firstName}')">📧 Send Reset Email</button>
-    </div>` : `
-    <div style="margin-top:16px;padding:10px 14px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;color:#6b7280">
-      💡 Add an email address above to enable password reset for this player.
-    </div>`}
+      <label class="form-check" style="margin-top:4px">
+        <input type="checkbox" id="pf-must-change"> Must change password on next login
+      </label>
+      <div style="font-size:11px;color:#888;margin-top:6px">Requires the player to have an email address. Password must be at least 6 characters.</div>
+    </div>
   `;
 }
 
