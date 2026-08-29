@@ -249,11 +249,11 @@ window.carouselGoto = function() {};
 
 function buildPhotoGallerySection(settings, data) {
   const albumId   = settings?.albumId;
-  const maxPhotos = Math.max(4, Math.min(parseInt(settings?.count || 30), 60));
+  const maxPhotos = Math.max(4, Math.min(parseInt(settings?.count || 40), 60));
   const album     = albumId ? (data.albums || []).find(a => a.id === albumId) : null;
 
   if (!album) return `
-    <section style="background:#0d0d0d;padding:60px 24px;text-align:center">
+    <section style="background:#0d0d0d;padding:40px 24px;text-align:center">
       <div style="color:#444;font-size:14px">📷 Photo Gallery — no album selected.<br>
         <span style="font-size:12px;color:#333">Configure this section in the Page Builder.</span>
       </div>
@@ -261,7 +261,7 @@ function buildPhotoGallerySection(settings, data) {
 
   const photos = (data.photos || []).filter(p => p.albumId === albumId).slice(0, maxPhotos);
   if (!photos.length) return `
-    <section style="background:#0d0d0d;padding:60px 24px;text-align:center">
+    <section style="background:#0d0d0d;padding:40px 24px;text-align:center">
       <div style="color:#444;font-size:14px">📷 "${album.name}" has no photos yet.</div>
     </section>`;
 
@@ -271,84 +271,71 @@ function buildPhotoGallerySection(settings, data) {
   const dateStr  = album.date ? new Date(album.date+'T12:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}) : '';
   const meta     = [dateStr, teamName].filter(Boolean).join(' · ');
 
-  // How many slots to show (max 9 in a 3-col grid)
-  const slotCount   = Math.min(photos.length, 9);
-  const photoUrlsJson = JSON.stringify(photos.map(p => p.url));
-
-  // 6 float-animation variants — applied round-robin to slots
-  // Scale only (no translateY) so the whole photo stays in frame
+  // Ken Burns float variants for individual tiles
   const floatAnims = [
-    { name:'fg-a', kf:'0%,100%{transform:scale(1) rotate(0deg)} 50%{transform:scale(1.022) rotate(0.35deg)}',      dur:5.4, delay:0   },
-    { name:'fg-b', kf:'0%,100%{transform:scale(1.018) rotate(-0.25deg)} 50%{transform:scale(1.0) rotate(0.2deg)}', dur:4.9, delay:-1.2},
-    { name:'fg-c', kf:'0%,100%{transform:scale(1.01) rotate(0.15deg)} 50%{transform:scale(1.024) rotate(-0.3deg)}',dur:6.1, delay:-2.1},
-    { name:'fg-d', kf:'0%,100%{transform:scale(1) rotate(-0.2deg)} 33%{transform:scale(1.016) rotate(0.1deg)} 66%{transform:scale(1.006) rotate(-0.35deg)}', dur:5.7, delay:-0.8},
-    { name:'fg-e', kf:'0%,100%{transform:scale(1.014) rotate(0.3deg)} 50%{transform:scale(1.002) rotate(-0.15deg)}',dur:4.6, delay:-3.0},
-    { name:'fg-f', kf:'0%,100%{transform:scale(1.02) rotate(-0.1deg)} 50%{transform:scale(1.0) rotate(0.25deg)}',   dur:5.2, delay:-1.7},
+    { name:'fg-a', kf:'0%,100%{transform:scale(1) rotate(0deg)} 50%{transform:scale(1.06) rotate(0.4deg)}',       dur:7.0, delay:0   },
+    { name:'fg-b', kf:'0%,100%{transform:scale(1.05) rotate(-0.3deg)} 50%{transform:scale(1.0) rotate(0.25deg)}', dur:6.4, delay:-1.5},
+    { name:'fg-c', kf:'0%,100%{transform:scale(1.01) rotate(0.2deg)} 50%{transform:scale(1.065) rotate(-0.35deg)}',dur:7.8, delay:-2.8},
+    { name:'fg-d', kf:'0%,100%{transform:scale(1) rotate(-0.25deg)} 33%{transform:scale(1.05) rotate(0.15deg)} 66%{transform:scale(1.02) rotate(-0.4deg)}', dur:7.2, delay:-1.0},
+    { name:'fg-e', kf:'0%,100%{transform:scale(1.04) rotate(0.35deg)} 50%{transform:scale(1.0) rotate(-0.2deg)}', dur:6.0, delay:-3.5},
+    { name:'fg-f', kf:'0%,100%{transform:scale(1.06) rotate(-0.15deg)} 50%{transform:scale(1.0) rotate(0.3deg)}', dur:6.8, delay:-2.1},
   ];
+  const keyframes = floatAnims.map(a => `@keyframes ${a.name} { ${a.kf} }`).join('\n  ');
 
-  const keyframes = floatAnims.map(a =>
-    `@keyframes ${a.name} { ${a.kf} }`).join('\n  ');
+  // Filmstrip dimensions — compact height (~1/4 of old masonry)
+  const TILE_W = 260;
+  const TILE_H = 176;
+  const GAP    = 6;
 
-  // Each slot: clip wrapper with transition + floating img
-  const slots = photos.slice(0, slotCount).map((ph, i) => {
+  // Double the photos for a seamless CSS marquee loop
+  const allTiles = [...photos, ...photos];
+  const trackW   = allTiles.length * (TILE_W + GAP);
+  // ~90px/s scroll speed — slow, cinematic
+  const marqueeDur = Math.round(trackW / 90);
+
+  const tiles = allTiles.map((ph, i) => {
     const fa = floatAnims[i % floatAnims.length];
-    const safeAlt = (ph.caption || '').replace(/"/g, '&quot;');
-    return `
-    <div id="${uid}-slot-${i}"
-      style="break-inside:avoid;margin-bottom:8px;border-radius:10px;overflow:hidden;
-        background:#111;position:relative;cursor:pointer;transition:opacity 0.65s ease;">
-      <img src="${ph.url}" alt="${safeAlt}"
-        style="width:100%;height:auto;display:block;transform-origin:center center;
+    return `<div style="flex-shrink:0;width:${TILE_W}px;height:${TILE_H}px;
+        border-radius:8px;overflow:hidden;position:relative;">
+      <img src="${ph.url}" alt="" loading="lazy"
+        style="width:100%;height:100%;object-fit:cover;display:block;transform-origin:center center;
           animation:${fa.name} ${fa.dur}s ease-in-out infinite;animation-delay:${fa.delay}s;">
       <div style="position:absolute;inset:0;pointer-events:none;
-        background:linear-gradient(to top,rgba(0,0,0,0.55) 0%,rgba(0,0,0,0.08) 35%,transparent 60%);"></div>
-      ${ph.caption ? `<div style="position:absolute;bottom:8px;left:10px;right:10px;
-        color:rgba(255,255,255,0.9);font-size:11px;font-style:italic;
-        text-shadow:0 1px 5px rgba(0,0,0,0.9);line-height:1.3;">${ph.caption}</div>` : ''}
+        background:linear-gradient(to top,rgba(0,0,0,0.4) 0%,transparent 55%);"></div>
     </div>`;
   }).join('');
 
   return `
 <style id="${uid}-css">
   ${keyframes}
-  #${uid}-grid { columns: 3; column-gap: 8px; }
-  @media (max-width: 700px) { #${uid}-grid { columns: 2; } }
-  @media (max-width: 400px) { #${uid}-grid { columns: 1; } }
+  @keyframes ${uid}-mq { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+  #${uid}-track { animation:${uid}-mq ${marqueeDur}s linear infinite; }
+  #${uid}-track:hover { animation-play-state:paused; }
 </style>
 <section style="background:#0a0a0a;overflow:hidden;">
 
-  <!-- Header -->
-  <div style="padding:22px 22px 14px;display:flex;align-items:baseline;justify-content:space-between;gap:12px;">
-    <div>
-      <div style="color:#fff;font-size:20px;font-weight:900;letter-spacing:-0.02em;line-height:1.1;">${title}</div>
-      ${meta ? `<div style="color:#555;font-size:12px;margin-top:4px;letter-spacing:0.02em;">${meta}</div>` : ''}
+  <!-- Compact header -->
+  <div style="padding:10px 20px 8px;display:flex;align-items:center;justify-content:space-between;">
+    <div style="display:flex;align-items:baseline;gap:10px;">
+      <span style="color:#fff;font-size:13px;font-weight:900;letter-spacing:0.06em;text-transform:uppercase;">${title}</span>
+      ${meta ? `<span style="color:#444;font-size:11px;">${meta}</span>` : ''}
     </div>
-    <div style="color:#333;font-size:12px;white-space:nowrap;letter-spacing:0.03em;">${photos.length} photos</div>
+    <a data-route="/gallery" style="color:#e74c3c;font-size:10px;font-weight:800;
+      letter-spacing:0.08em;text-decoration:none;text-transform:uppercase;">View Gallery →</a>
   </div>
 
-  <!-- Masonry grid -->
-  <div id="${uid}-grid"
-    data-carousel="${uid}"
-    data-carousel-total="${photos.length}"
-    data-carousel-slots="${slotCount}"
-    data-carousel-photos='${photoUrlsJson}'
-    style="padding:0 8px 8px;">
-    ${slots}
+  <!-- Filmstrip: edges dissolve via CSS mask, photos drift left continuously -->
+  <div style="position:relative;height:${TILE_H}px;overflow:hidden;
+    -webkit-mask-image:linear-gradient(to right,transparent 0%,#000 10%,#000 90%,transparent 100%);
+    mask-image:linear-gradient(to right,transparent 0%,#000 10%,#000 90%,transparent 100%);">
+    <div id="${uid}-track"
+      style="display:flex;gap:${GAP}px;width:max-content;height:100%;align-items:center;">
+      ${tiles}
+    </div>
   </div>
 
-  <!-- Footer -->
-  <div style="padding:12px 22px 16px;display:flex;align-items:center;justify-content:space-between;
-    border-top:1px solid #161616;">
-    <div style="color:#2e2e2e;font-size:11px;letter-spacing:0.04em;text-transform:uppercase;">
-      ${photos.length > slotCount ? `Showing ${slotCount} of ${photos.length} · rotating every few seconds` : `${photos.length} photo${photos.length!==1?'s':''}`}
-    </div>
-    <a data-route="/gallery" style="color:#e74c3c;font-size:11px;font-weight:800;
-      letter-spacing:0.07em;text-decoration:none;text-transform:uppercase;">
-      View Full Gallery →
-    </a>
-  </div>
+  <div style="height:10px;"></div>
 </section>`;
-}
 
 // ─── HOME: SEASON LEADERS HELPERS ─────────────────────────────
 // Globally exposed so the inline <select onchange> handler can call it.
