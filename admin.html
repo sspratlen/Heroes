@@ -353,13 +353,13 @@ async function doLogin() {
   });
 }());
 
-function showAdminLayout(profile) {
+async function showAdminLayout(profile) {
   _adminProfile = profile;
   document.getElementById('admin-login').style.display = 'none';
   document.getElementById('admin-layout').style.display = 'flex';
-  // Show current user in sidebar footer if element exists
   const userEl = document.getElementById('admin-current-user');
   if (userEl) userEl.textContent = profile.display_name || profile.email;
+  await initData();
   showPage('dashboard');
 }
 
@@ -387,7 +387,7 @@ async function doLogout() {
     const { data: profile } = await sb
       .from('profiles').select('*').eq('id', session.user.id).single();
     if (profile && ADMIN_ROLES.includes(profile.role) && profile.approved) {
-      showAdminLayout(profile);
+      await showAdminLayout(profile);
     } else if (session) {
       // Has a session but no admin rights — sign out silently
       await sb.auth.signOut();
