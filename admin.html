@@ -1977,22 +1977,82 @@ window.savePlayerGameStat = function(gameId, playerId, btn) {
 };
 
 // ─── EVENTS ────────────────────────────────────────────────
+let _evType = '', _evTeam = '', _evStatus = '', _evYear = '', _evSort = 'date-desc';
+
 function renderEvents() {
   const data = loadData();
+  const all  = data.events || [];
+  const teams = data.teams || [];
+
+  // Distinct years and types for dropdowns
+  const years = [...new Set(all.map(ev=>(ev.date||'').slice(0,4)).filter(Boolean))].sort((a,b)=>b-a);
+  const types = [...new Set(all.map(ev=>ev.type).filter(Boolean))].sort();
+
+  // Apply filters
+  let list = all.filter(ev => {
+    if (_evYear   && (ev.date||'').slice(0,4) !== _evYear) return false;
+    if (_evType   && ev.type !== _evType) return false;
+    if (_evStatus && ev.status !== _evStatus) return false;
+    if (_evTeam   && !(ev.teams||[]).includes(_evTeam)) return false;
+    return true;
+  });
+
+  // Apply sort
+  list = [...list].sort((a,b) => {
+    switch (_evSort) {
+      case 'date-asc': return (a.date||'').localeCompare(b.date||'');
+      case 'name':     return (a.name||'').localeCompare(b.name||'');
+      case 'status':   return (a.status||'').localeCompare(b.status||'');
+      default:         return (b.date||'').localeCompare(a.date||'');
+    }
+  });
+
+  const hasFilter = _evYear || _evType || _evStatus || _evTeam;
+
   setContent(`
     <div class="admin-table-wrap">
-      <div class="admin-table-header"><h3>Events</h3><button class="btn btn-primary btn-sm" onclick="addEvent()">+ Add Event</button></div>
+      <div class="admin-table-header">
+        <h3>Events (${list.length}${list.length!==all.length?' of '+all.length:''})</h3>
+        <button class="btn btn-primary btn-sm" onclick="addEvent()">+ Add Event</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+        <select class="form-select" style="width:auto;min-width:90px" onchange="_evYear=this.value;renderEvents()">
+          <option value="">All Years</option>
+          ${years.map(y=>`<option value="${y}"${_evYear===y?' selected':''}>${y}</option>`).join('')}
+        </select>
+        <select class="form-select" style="width:auto;min-width:120px" onchange="_evType=this.value;renderEvents()">
+          <option value="">All Types</option>
+          ${types.map(tp=>`<option value="${tp}"${_evType===tp?' selected':''}>${tp.charAt(0).toUpperCase()+tp.slice(1)}</option>`).join('')}
+        </select>
+        <select class="form-select" style="width:auto;min-width:120px" onchange="_evTeam=this.value;renderEvents()">
+          <option value="">All Teams</option>
+          ${teams.map(tm=>`<option value="${tm.id}"${_evTeam===tm.id?' selected':''}>${tm.shortName||tm.name}</option>`).join('')}
+        </select>
+        <select class="form-select" style="width:auto;min-width:120px" onchange="_evStatus=this.value;renderEvents()">
+          <option value="">All Statuses</option>
+          <option value="upcoming"${_evStatus==='upcoming'?' selected':''}>Upcoming</option>
+          <option value="completed"${_evStatus==='completed'?' selected':''}>Completed</option>
+        </select>
+        <select class="form-select" style="width:auto;min-width:140px" onchange="_evSort=this.value;renderEvents()">
+          <option value="date-desc"${_evSort==='date-desc'?' selected':''}>Date (Newest)</option>
+          <option value="date-asc"${_evSort==='date-asc'?' selected':''}>Date (Oldest)</option>
+          <option value="name"${_evSort==='name'?' selected':''}>Name A–Z</option>
+          <option value="status"${_evSort==='status'?' selected':''}>Status</option>
+        </select>
+        ${hasFilter ? `<button class="btn btn-secondary btn-sm" onclick="_evYear='';_evType='';_evStatus='';_evTeam='';renderEvents()">Clear</button>` : ''}
+      </div>
+      ${list.length===0 ? `<div style="text-align:center;padding:48px;color:var(--gray)">${all.length===0?'No events yet.':'No events match the current filters.'}</div>` : `
       <table class="admin-table">
         <thead><tr><th>Date</th><th>Event</th><th>Type</th><th>Teams</th><th>Location</th><th>Status</th><th>Actions</th></tr></thead>
-        <tbody>${data.events.map(ev=>{
-          const teams = ev.teams.map(id=>data.teams.find(t=>t.id===id)?.shortName||id).join(', ');
+        <tbody>${list.map(ev=>{
+          const teamNames = (ev.teams||[]).map(id=>teams.find(t=>t.id===id)?.shortName||id).join(', ');
           return `<tr>
-            <td>${ev.date}</td>
+            <td>${ev.date||'—'}</td>
             <td><strong>${ev.name}</strong></td>
             <td><span style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--gray)">${ev.type}</span></td>
-            <td style="font-size:12px">${teams}</td>
-            <td style="font-size:12px;color:var(--gray)">${ev.location}</td>
-            <td><span style="padding:3px 8px;border-radius:20px;font-size:11px;font-weight:700;background:${ev.status==='upcoming'?'#fef9c3':'#f3f4f6'};color:${ev.status==='upcoming'?'#92400e':'#6b7280'}">${ev.status}</span></td>
+            <td style="font-size:12px">${teamNames}</td>
+            <td style="font-size:12px;color:var(--gray)">${ev.location||''}</td>
+            <td><span style="padding:3px 8px;border-radius:20px;font-size:11px;font-weight:700;background:${ev.status==='upcoming'?'#fef9c3':'#f3f4f6'};color:${ev.status==='upcoming'?'#92400e':'#6b7280'}">${ev.status||''}</span></td>
             <td style="display:flex;gap:4px">
               <button class="action-btn action-edit" onclick="editEvent('${ev.id}')">Edit</button>
               <button class="action-btn action-view" onclick="showPage('availability')">Avail.</button>
@@ -2000,7 +2060,7 @@ function renderEvents() {
             </td>
           </tr>`;
         }).join('')}</tbody>
-      </table>
+      </table>`}
     </div>
   `);
 }
