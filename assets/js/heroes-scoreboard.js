@@ -310,6 +310,92 @@
     if (typeof App !== 'undefined' && App.toast) App.toast('Password updated! ✓', 'success');
   };
 
+  // Edit Profile — position, bats, throws
+  window.showEditProfileModal = function() {
+    const player = getCurrentPlayer();
+    if (!player || player._loading || player._pendingApproval) return;
+
+    const positions = ['P','C','1B','2B','3B','SS','OF','LF','CF','RF','DH','UT'];
+    const posOpts = positions.map(p =>
+      `<option value="${p}"${player.position===p?' selected':''}>${p}</option>`).join('');
+
+    const sel = (id, cur, opts) =>
+      `<select id="${id}" style="width:100%;padding:11px 13px;border:1.5px solid #ddd;border-radius:7px;
+         font-size:14px;outline:none;box-sizing:border-box;font-family:inherit;background:#fff"
+         onfocus="this.style.borderColor='#C8102E'" onblur="this.style.borderColor='#ddd'">${opts}</select>`;
+
+    const existing = document.getElementById('mh-ep-overlay');
+    if (existing) existing.remove();
+
+    const el = document.createElement('div');
+    el.id = 'mh-ep-overlay';
+    el.innerHTML = `
+      <div id="mh-ep-backdrop" style="position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px">
+        <div style="background:#fff;border-radius:14px;padding:32px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+          <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#aaa;margin-bottom:8px">MY HEROES · PLAYER PORTAL</div>
+          <h2 style="font-size:20px;font-weight:900;margin:0 0 6px">Edit My Profile</h2>
+          <p style="font-size:13px;color:#666;margin:0 0 22px;line-height:1.5">Update your position and batting/throwing hand.</p>
+
+          <div style="margin-bottom:14px">
+            <label style="display:block;font-size:11px;font-weight:800;letter-spacing:0.5px;color:#555;margin-bottom:6px">POSITION</label>
+            ${sel('mh-ep-pos', player.position, `<option value="">— Select —</option>${posOpts}`)}
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px">
+            <div>
+              <label style="display:block;font-size:11px;font-weight:800;letter-spacing:0.5px;color:#555;margin-bottom:6px">BATS</label>
+              ${sel('mh-ep-bats', player.bats, `
+                <option value="">—</option>
+                <option value="R"${player.bats==='R'?' selected':''}>Right</option>
+                <option value="L"${player.bats==='L'?' selected':''}>Left</option>
+                <option value="S"${player.bats==='S'?' selected':''}>Switch</option>`)}
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:800;letter-spacing:0.5px;color:#555;margin-bottom:6px">THROWS</label>
+              ${sel('mh-ep-throws', player.throws, `
+                <option value="">—</option>
+                <option value="R"${player.throws==='R'?' selected':''}>Right</option>
+                <option value="L"${player.throws==='L'?' selected':''}>Left</option>`)}
+            </div>
+          </div>
+
+          <div id="mh-ep-err" style="min-height:18px;font-size:13px;color:#dc2626;margin-bottom:12px"></div>
+          <button onclick="submitEditProfileModal()"
+            style="width:100%;padding:13px;background:#C8102E;color:#fff;border:none;border-radius:7px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;margin-bottom:8px">
+            Save Changes
+          </button>
+          <button onclick="document.getElementById('mh-ep-overlay').remove()"
+            style="width:100%;padding:13px;background:transparent;color:#666;border:1.5px solid #ddd;border-radius:7px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">
+            Cancel
+          </button>
+        </div>
+      </div>`;
+    document.body.appendChild(el);
+    document.getElementById('mh-ep-backdrop').addEventListener('click', e => {
+      if (e.target.id === 'mh-ep-backdrop') el.remove();
+    });
+  };
+
+  window.submitEditProfileModal = function() {
+    const player = getCurrentPlayer();
+    if (!player) return;
+    const errEl = document.getElementById('mh-ep-err');
+
+    const position = document.getElementById('mh-ep-pos')?.value  || '';
+    const bats     = document.getElementById('mh-ep-bats')?.value || '';
+    const throws_  = document.getElementById('mh-ep-throws')?.value || '';
+
+    const d   = loadData();
+    const idx = d.players.findIndex(p => p.id === player.id);
+    if (idx < 0) { if (errEl) errEl.textContent = 'Could not find your player record.'; return; }
+
+    d.players[idx] = { ...d.players[idx], position, bats, throws: throws_ };
+    saveData(d);
+
+    document.getElementById('mh-ep-overlay')?.remove();
+    if (typeof App !== 'undefined' && App.toast) App.toast('Profile updated! ✓', 'success');
+  };
+
   // Open the shared photo picker for the current player
   window.myOpenPhotoPicker = function() {
     const player = getCurrentPlayer();
@@ -577,6 +663,7 @@
               <div class="mh-ev-meta">${upcomingAll.length} event${upcomingAll.length !== 1 ? 's' : ''} scheduled · Next: ${nextEv.name}</div>
               <div class="mh-hero-actions">
                 <button onclick="myOpenPhotoPicker()" class="mh-chpw-btn">📷 Change Photo</button>
+                <button onclick="showEditProfileModal()" class="mh-chpw-btn">✏️ Edit Profile</button>
                 <button onclick="showPasswordChangeModal()" class="mh-chpw-btn">🔒 Change Password</button>
               </div>
             </div>
