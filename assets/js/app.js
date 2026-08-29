@@ -296,44 +296,59 @@ function buildPhotoGallerySection(settings, data) {
   ];
   const keyframes = floatAnims.map(a => `@keyframes ${a.name} { ${a.kf} }`).join('\n  ');
 
-  // Filmstrip dimensions — compact height (~1/4 of old masonry)
-  const TILE_W = 260;
-  const TILE_H = 176;
-  const GAP    = 6;
+  // Filmstrip layout constants
+  const TILE_W     = 240;  // photo frame width
+  const TILE_H     = 152;  // photo frame height
+  const FRAME_N_H  = 16;   // frame-number strip below each photo
+  const GAP        = 14;   // wide inter-frame gap (dark celluloid showing through)
+  const SPROCKET_H = 30;   // tall sprocket strips — the key to the pronounced look
+  const TOTAL_H    = SPROCKET_H + TILE_H + FRAME_N_H + SPROCKET_H; // 228px
 
-  // Double the photos for a seamless CSS marquee loop
-  const allTiles = [...photos, ...photos];
-  const trackW   = allTiles.length * (TILE_W + GAP);
-  // ~90px/s scroll speed — slow, cinematic
-  const marqueeDur = Math.round(trackW / 90);
+  // Double photos for seamless loop; ~75px/s = slow cinematic drift
+  const allTiles   = [...photos, ...photos];
+  const trackW     = allTiles.length * (TILE_W + GAP);
+  const marqueeDur = Math.round(trackW / 75);
 
-  // Sprocket strip height — sits above and below the photo track
-  const SPROCKET_H = 18;
-  const TOTAL_H    = TILE_H + SPROCKET_H * 2;
-
+  // Each tile: cream film-frame border + photo + frame-number row
   const tiles = allTiles.map((ph, i) => {
-    const fa = floatAnims[i % floatAnims.length];
-    return `<div style="flex-shrink:0;width:${TILE_W}px;height:${TILE_H}px;
-        border-radius:3px;overflow:hidden;position:relative;background:#120e09;
-        border:1px solid #2a2218;box-shadow:0 0 0 1px #0a0806;">
-      <img src="${ph.url}" alt="" loading="lazy"
-        style="width:100%;height:100%;object-fit:contain;display:block;transform-origin:center center;
-          filter:sepia(0.18) contrast(1.06) brightness(0.9);
-          animation:${fa.name} ${fa.dur}s ease-in-out infinite;animation-delay:${fa.delay}s;">
-      <div style="position:absolute;inset:0;pointer-events:none;
-        background:linear-gradient(to top,rgba(0,0,0,0.35) 0%,transparent 50%);"></div>
+    const fa  = floatAnims[i % floatAnims.length];
+    const num = String((i % photos.length) + 1).padStart(2, '0');
+    return `
+    <div style="flex-shrink:0;width:${TILE_W}px;display:flex;flex-direction:column;">
+      <!-- Photo frame with cream film border -->
+      <div style="height:${TILE_H}px;overflow:hidden;position:relative;
+          border:4px solid #e8dfc0;box-shadow:inset 0 0 0 1px #b8a878, 0 2px 8px rgba(0,0,0,0.7);">
+        <img src="${ph.url}" alt="" loading="lazy"
+          style="width:100%;height:100%;object-fit:contain;display:block;
+            background:#0e0b06;transform-origin:center center;
+            filter:sepia(0.35) contrast(1.12) brightness(0.85) saturate(0.9);
+            animation:${fa.name} ${fa.dur}s ease-in-out infinite;animation-delay:${fa.delay}s;">
+        <!-- Vignette -->
+        <div style="position:absolute;inset:0;pointer-events:none;
+          background:radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,0.55) 100%);"></div>
+      </div>
+      <!-- Frame number strip -->
+      <div style="height:${FRAME_N_H}px;display:flex;align-items:center;justify-content:center;
+          background:#0d0a06;color:#5a4a2a;font-size:7px;font-family:monospace;
+          letter-spacing:3px;font-weight:700;border-top:1px solid #1c1510;">
+        ${num}A &nbsp;▷&nbsp; ${num}A
+      </div>
     </div>`;
   }).join('');
 
-  // Sprocket strip: dark film-colored bar with punched holes via radial-gradient repeat
+  // Sprocket strip: prominent rectangular-ish perforations via layered gradients
+  // Outer: dark film material. Inner: ellipse holes punched through.
   const sprocketStrip = (pos) =>
     `<div style="position:absolute;${pos}:0;left:0;right:0;height:${SPROCKET_H}px;z-index:10;
       pointer-events:none;
-      background-color:#0d0a06;
-      background-image:radial-gradient(circle,#000 42%,transparent 43%);
-      background-size:26px ${SPROCKET_H}px;
+      background-color:#100c07;
+      background-image:
+        radial-gradient(ellipse 10px 16px at center, #000 88%, transparent 89%),
+        repeating-linear-gradient(90deg,transparent 0px,transparent 20px,rgba(255,255,255,0.015) 20px,rgba(255,255,255,0.015) 22px);
+      background-size:26px 100%, 26px 100%;
       background-repeat:repeat-x;
-      background-position:6px center;"></div>`;
+      background-position:4px center, 4px center;
+      border-${pos}:2px solid #1e170d;"></div>`;
 
   return `
 <style id="${uid}-css">
@@ -342,35 +357,45 @@ function buildPhotoGallerySection(settings, data) {
   #${uid}-track { animation:${uid}-mq ${marqueeDur}s linear infinite; }
   #${uid}-track:hover { animation-play-state:paused; }
 </style>
-<section style="background:#0d0a06;overflow:hidden;">
+<section style="background:#100c07;overflow:hidden;">
 
-  <!-- Compact header — warm dark film tone -->
-  <div style="padding:10px 20px 8px;display:flex;align-items:center;justify-content:space-between;
-    border-bottom:1px solid #1e1810;">
-    <div style="display:flex;align-items:baseline;gap:10px;">
-      <span style="color:#d4b896;font-size:12px;font-weight:900;letter-spacing:0.08em;text-transform:uppercase;">🎞 ${title}</span>
-      ${meta ? `<span style="color:#4a3e2e;font-size:11px;">${meta}</span>` : ''}
+  <!-- Film header — slate-style label bar -->
+  <div style="padding:8px 18px;display:flex;align-items:center;justify-content:space-between;
+    background:#0a0804;border-bottom:2px solid #2a2010;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span style="color:#c8a060;font-size:11px;font-weight:900;letter-spacing:0.12em;
+        text-transform:uppercase;font-family:monospace;">🎞 ${title}</span>
+      ${meta ? `<span style="color:#3e3020;font-size:10px;font-family:monospace;letter-spacing:0.06em;">${meta}</span>` : ''}
     </div>
-    <a data-route="/gallery" style="color:#c0855a;font-size:10px;font-weight:800;
-      letter-spacing:0.08em;text-decoration:none;text-transform:uppercase;">View Gallery →</a>
+    <div style="display:flex;align-items:center;gap:14px;">
+      <span style="color:#3a2e1a;font-size:9px;font-family:monospace;letter-spacing:0.1em;">
+        ${photos.length} FRAMES
+      </span>
+      <a data-route="/gallery" style="color:#a06830;font-size:9px;font-weight:900;
+        letter-spacing:0.12em;text-decoration:none;text-transform:uppercase;font-family:monospace;">
+        VIEW GALLERY ▶
+      </a>
+    </div>
   </div>
 
-  <!-- Film reel strip: sprocket holes top + bottom, photos scroll through the middle -->
+  <!-- Film reel: pronounced sprocket strips top + bottom, frames scroll through -->
   <div style="position:relative;height:${TOTAL_H}px;overflow:hidden;
-    -webkit-mask-image:linear-gradient(to right,transparent 0%,#000 8%,#000 92%,transparent 100%);
-    mask-image:linear-gradient(to right,transparent 0%,#000 8%,#000 92%,transparent 100%);">
+    -webkit-mask-image:linear-gradient(to right,transparent 0%,#000 6%,#000 94%,transparent 100%);
+    mask-image:linear-gradient(to right,transparent 0%,#000 6%,#000 94%,transparent 100%);">
 
     ${sprocketStrip('top')}
     ${sprocketStrip('bottom')}
 
+    <!-- Scrolling film frames -->
     <div id="${uid}-track"
       style="display:flex;gap:${GAP}px;width:max-content;
-        height:${TILE_H}px;margin-top:${SPROCKET_H}px;align-items:center;">
+        margin-top:${SPROCKET_H}px;align-items:flex-start;">
       ${tiles}
     </div>
   </div>
 
-  <div style="height:4px;background:#0d0a06;"></div>
+  <!-- Bottom edge of film material -->
+  <div style="height:3px;background:#0a0804;border-top:1px solid #1a1408;"></div>
 </section>`;
 }
 
