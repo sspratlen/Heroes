@@ -357,8 +357,8 @@ function buildPhotoGallerySection(settings, data) {
   #${uid}-track { animation:${uid}-mq ${marqueeDur}s linear infinite; }
   #${uid}-track:hover { animation-play-state:paused; }
 </style>
-<!-- Outer wrapper: matches site dark widget sections -->
-<section style="background:#1C1C1C;
+<!-- Outer wrapper: matches site light widget/section background -->
+<section style="background:#F8F8F8;
   border-top:3px solid #C8102E;border-bottom:1px solid rgba(200,16,46,0.18);
   padding:20px 0;">
 
