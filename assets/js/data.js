@@ -362,7 +362,9 @@ function getPlayerStats(playerId, filters = {}) {
     const stat = game.playerStats?.find(ps => ps.playerId === playerId);
     if (stat) {
       totals.g++;
-      Object.keys(totals).forEach(k => { if (k !== 'g' && stat[k]) totals[k] += stat[k]; });
+      // Use != null so ab=0 is counted (falsy check was causing ab to be skipped
+      // for games with 0 official at-bats, inflating AVG above 1.000)
+      Object.keys(totals).forEach(k => { if (k !== 'g' && stat[k] != null) totals[k] += Number(stat[k]) || 0; });
     }
   });
   return {

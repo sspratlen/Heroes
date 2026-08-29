@@ -357,11 +357,14 @@ function buildPhotoGallerySection(settings, data) {
   #${uid}-track { animation:${uid}-mq ${marqueeDur}s linear infinite; }
   #${uid}-track:hover { animation-play-state:paused; }
 </style>
-<section style="background:#100c07;overflow:hidden;">
+<!-- Outer wrapper: heroes-consistent dark section with red accent -->
+<section style="background:linear-gradient(180deg,#0f1520 0%,#141b26 40%,#141b26 60%,#0f1520 100%);
+  border-top:3px solid #C8102E;border-bottom:1px solid rgba(200,16,46,0.18);
+  padding:20px 0;">
 
   <!-- Film header — slate-style label bar -->
   <div style="padding:8px 18px;display:flex;align-items:center;justify-content:space-between;
-    background:#0a0804;border-bottom:2px solid #2a2010;">
+    background:#0a0804;border-top:1px solid #1e170d;border-bottom:2px solid #2a2010;margin:0 0 0 0;">
     <div style="display:flex;align-items:center;gap:12px;">
       <span style="color:#c8a060;font-size:11px;font-weight:900;letter-spacing:0.12em;
         text-transform:uppercase;font-family:monospace;">🎞 ${title}</span>
@@ -378,24 +381,27 @@ function buildPhotoGallerySection(settings, data) {
     </div>
   </div>
 
-  <!-- Film reel: pronounced sprocket strips top + bottom, frames scroll through -->
-  <div style="position:relative;height:${TOTAL_H}px;overflow:hidden;
-    -webkit-mask-image:linear-gradient(to right,transparent 0%,#000 6%,#000 94%,transparent 100%);
-    mask-image:linear-gradient(to right,transparent 0%,#000 6%,#000 94%,transparent 100%);">
+  <!-- Film strip: dark film background behind the reel -->
+  <div style="background:#100c07;overflow:hidden;">
+    <!-- Film reel: pronounced sprocket strips top + bottom, frames scroll through -->
+    <div style="position:relative;height:${TOTAL_H}px;overflow:hidden;
+      -webkit-mask-image:linear-gradient(to right,transparent 0%,#000 6%,#000 94%,transparent 100%);
+      mask-image:linear-gradient(to right,transparent 0%,#000 6%,#000 94%,transparent 100%);">
 
-    ${sprocketStrip('top')}
-    ${sprocketStrip('bottom')}
+      ${sprocketStrip('top')}
+      ${sprocketStrip('bottom')}
 
-    <!-- Scrolling film frames -->
-    <div id="${uid}-track"
-      style="display:flex;gap:${GAP}px;width:max-content;
-        margin-top:${SPROCKET_H}px;align-items:flex-start;">
-      ${tiles}
+      <!-- Scrolling film frames -->
+      <div id="${uid}-track"
+        style="display:flex;gap:${GAP}px;width:max-content;
+          margin-top:${SPROCKET_H}px;align-items:flex-start;">
+        ${tiles}
+      </div>
     </div>
-  </div>
 
-  <!-- Bottom edge of film material -->
-  <div style="height:3px;background:#0a0804;border-top:1px solid #1a1408;"></div>
+    <!-- Bottom edge of film material -->
+    <div style="height:3px;background:#0a0804;border-top:1px solid #1a1408;"></div>
+  </div>
 </section>`;
 }
 
