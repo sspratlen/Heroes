@@ -316,7 +316,8 @@ function buildPhotoGallerySection(settings, data) {
     return `
     <div style="flex-shrink:0;width:${TILE_W}px;display:flex;flex-direction:column;">
       <!-- Photo frame with cream film border -->
-      <div style="height:${TILE_H}px;overflow:hidden;position:relative;
+      <div onclick="openFilmPhoto('${ph.albumId}','${ph.url.replace(/'/g,"\\'")}')"
+          style="height:${TILE_H}px;overflow:hidden;position:relative;cursor:pointer;
           border:4px solid #ccc;box-shadow:0 2px 8px rgba(0,0,0,0.15);">
         <img src="${ph.url}" alt="" loading="lazy"
           style="width:100%;height:100%;object-fit:contain;display:block;
@@ -2676,6 +2677,16 @@ window.openAlbum = function(albumId) {
   _lightboxPhotos = (data.photos||[]).filter(p => p.albumId === albumId);
   if (!_lightboxPhotos.length) { App.toast('No photos in this album yet', 'info'); return; }
   _lightboxIdx = 0;
+  _buildLightbox(album.name);
+};
+
+window.openFilmPhoto = function(albumId, photoUrl) {
+  const data = loadData();
+  const album = (data.albums||[]).find(a => a.id === albumId);
+  if (!album) return;
+  _lightboxPhotos = (data.photos||[]).filter(p => p.albumId === albumId);
+  if (!_lightboxPhotos.length) { App.toast('No photos in this album yet', 'info'); return; }
+  _lightboxIdx = Math.max(0, _lightboxPhotos.findIndex(p => p.url === photoUrl));
   _buildLightbox(album.name);
 };
 
