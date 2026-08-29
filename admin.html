@@ -1042,14 +1042,26 @@ window.sendOneInvite = async function(playerId, email, hasAccount) {
     const sb = _getClient();
     const redirectTo = window.location.origin + window.location.pathname.replace(/admin\.html$/, '') + 'index.html';
 
-    // Always use OTP magic link — works for new accounts, unconfirmed accounts,
-    // and confirmed accounts alike. resetPasswordForEmail fails on unconfirmed
-    // auth.users rows (e.g. from a prior failed invite attempt).
-    const { error } = await sb.auth.signInWithOtp({
+    // Try OTP magic link first (works for all account states).
+    // Fall back to signUp if OTP is disabled in the Supabase project.
+    const { error: otpErr } = await sb.auth.signInWithOtp({
       email,
       options: { shouldCreateUser: true, emailRedirectTo: redirectTo }
     });
-    if (error) throw error;
+
+    if (otpErr) {
+      // OTP may be disabled — fall back to signUp which sends a confirmation
+      // email the player clicks to set their password and gain access.
+      const player = loadData().players.find(p => p.id === playerId);
+      const displayName = player ? `${player.firstName} ${player.lastName}` : email.split('@')[0];
+      const tempPw = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2).toUpperCase() + '!1';
+      const { error: signUpErr } = await sb.auth.signUp({
+        email,
+        password: tempPw,
+        options: { data: { display_name: displayName, role: 'player' }, emailRedirectTo: redirectTo }
+      });
+      if (signUpErr && !signUpErr.message.toLowerCase().includes('already registered')) throw signUpErr;
+    }
 
     if (statusCell) statusCell.innerHTML = '<span style="font-size:11px;font-weight:700;color:#16a34a">✓ Sent</span>';
   } catch(e) {
