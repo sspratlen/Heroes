@@ -403,12 +403,18 @@ function openModal(title, body, saveLabel, onSave) {
   document.getElementById('modal-title').textContent = title;
   document.getElementById('modal-body').innerHTML = body;
   const saveBtn = document.getElementById('modal-save-btn');
-  if (onSave) { saveBtn.style.display = 'inline-flex'; saveBtn.textContent = saveLabel || 'Save'; modalSaveCallback = onSave; }
+  if (onSave) { saveBtn.style.display = 'inline-flex'; saveBtn.textContent = saveLabel || 'Save'; saveBtn.dataset.label = saveLabel || 'Save'; modalSaveCallback = onSave; }
   else { saveBtn.style.display = 'none'; }
   document.getElementById('main-modal').classList.add('open');
 }
 function closeModal() { document.getElementById('main-modal').classList.remove('open'); }
-function modalSave() { if (modalSaveCallback) modalSaveCallback(); }
+async function modalSave() {
+  if (!modalSaveCallback) return;
+  const btn = document.getElementById('modal-save-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try { await modalSaveCallback(); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label || 'Save'; } }
+}
 
 // ─── NAVIGATION ───────────────────────────────────────────
 let currentPage = 'dashboard';
@@ -2379,18 +2385,42 @@ function renderNews() {
     </div>
   `);
 }
+async function _resolveNewsImage() {
+  const file = document.getElementById('nf-file')?.files?.[0];
+  if (file) {
+    toast('Uploading image…', 'info');
+    try {
+      const sb = _getClient();
+      if (sb) {
+        const ext  = file.name.split('.').pop() || 'jpg';
+        const path = `news/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error } = await sb.storage.from('team-photos').upload(path, file, { upsert: false, contentType: file.type || 'image/jpeg' });
+        if (!error) {
+          const { data: { publicUrl } } = sb.storage.from('team-photos').getPublicUrl(path);
+          return publicUrl;
+        }
+        console.error('News image upload error:', error);
+        toast('Upload failed — saving URL instead', 'warning');
+      }
+    } catch(e) { console.error(e); }
+  }
+  return val('nf-image') || '';
+}
+
 function addNews() {
-  openModal('Add Article', buildNewsForm(null), 'Publish', () => {
-    const d=loadData();
-    d.news.unshift({ id:'n'+Date.now(), title:val('nf-title'), category:val('nf-cat'), date:val('nf-date'), season:new Date().getFullYear().toString(), excerpt:val('nf-excerpt'), content:val('nf-content'), image:val('nf-image'), author:val('nf-author'), pinned:document.getElementById('nf-pinned').checked });
+  openModal('Add Article', buildNewsForm(null), 'Publish', async () => {
+    const image = await _resolveNewsImage();
+    const d = loadData();
+    d.news.unshift({ id:'n'+Date.now(), title:val('nf-title'), category:val('nf-cat'), date:val('nf-date'), season:new Date().getFullYear().toString(), excerpt:val('nf-excerpt'), content:val('nf-content'), image, author:val('nf-author'), pinned:document.getElementById('nf-pinned').checked });
     saveData(d); closeModal(); renderNews(); toast('Article published!');
   });
 }
 function editNews(id) {
   const data=loadData(); const n=data.news.find(x=>x.id===id);
-  openModal('Edit Article', buildNewsForm(n), 'Save', () => {
+  openModal('Edit Article', buildNewsForm(n), 'Save', async () => {
+    const image = await _resolveNewsImage();
     const d=loadData(); const idx=d.news.findIndex(x=>x.id===id);
-    d.news[idx]={...d.news[idx],title:val('nf-title'),category:val('nf-cat'),date:val('nf-date'),excerpt:val('nf-excerpt'),content:val('nf-content'),image:val('nf-image'),author:val('nf-author'),pinned:document.getElementById('nf-pinned').checked};
+    d.news[idx]={...d.news[idx],title:val('nf-title'),category:val('nf-cat'),date:val('nf-date'),excerpt:val('nf-excerpt'),content:val('nf-content'),image,author:val('nf-author'),pinned:document.getElementById('nf-pinned').checked};
     saveData(d); closeModal(); renderNews(); toast('Article updated!');
   });
 }
@@ -2400,21 +2430,60 @@ function deleteNews(id) {
 }
 function buildNewsForm(n) {
   const cats = ['Announcement','Tournament','Game Recap','Season Update','Team News','Community'];
+  const existingImg = n?.image || '';
   return `
-    <div class="form-group"><label class="form-label">Title*</label><input id="nf-title" class="form-input" value="${n?.title||''}"></div>
+    <div class="form-group"><label class="form-label">Title*</label><input id="nf-title" class="form-input" value="${(n?.title||'').replace(/"/g,'&quot;')}"></div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Category</label>
         <select id="nf-cat" class="form-select">${cats.map(c=>`<option${n?.category===c?' selected':''}>${c}</option>`).join('')}</select>
       </div>
       <div class="form-group"><label class="form-label">Date</label><input type="date" id="nf-date" class="form-input" value="${n?.date||new Date().toISOString().slice(0,10)}"></div>
     </div>
-    <div class="form-group"><label class="form-label">Author</label><input id="nf-author" class="form-input" value="${n?.author||''}"></div>
+    <div class="form-group"><label class="form-label">Author</label><input id="nf-author" class="form-input" value="${(n?.author||'').replace(/"/g,'&quot;')}"></div>
     <div class="form-group"><label class="form-label">Excerpt (short preview)</label><textarea id="nf-excerpt" class="form-textarea" rows="2">${n?.excerpt||''}</textarea></div>
     <div class="form-group"><label class="form-label">Full Content</label><textarea id="nf-content" class="form-textarea" rows="6">${n?.content||''}</textarea></div>
-    <div class="form-group"><label class="form-label">Image URL</label><input id="nf-image" class="form-input" value="${n?.image||''}" placeholder="https://..."></div>
+    <div class="form-group">
+      <label class="form-label">Article Image</label>
+      <div class="form-row" style="gap:12px;align-items:flex-start">
+        <div style="flex:1;min-width:180px">
+          <div style="font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;margin-bottom:4px">Upload file</div>
+          <input type="file" id="nf-file" accept="image/*" style="font-size:13px;width:100%;padding:4px 0" onchange="nfFilePreview(this)">
+        </div>
+        <div style="display:flex;align-items:center;padding-top:22px;color:var(--gray);font-size:12px;font-weight:700">OR</div>
+        <div style="flex:1;min-width:180px">
+          <div style="font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;margin-bottom:4px">Paste URL</div>
+          <input id="nf-image" class="form-input" value="${existingImg.replace(/"/g,'&quot;')}" placeholder="https://…" oninput="nfUrlPreview(this.value)">
+        </div>
+      </div>
+      <div id="nf-img-preview" style="margin-top:10px">
+        ${existingImg ? `<div style="position:relative;display:inline-block"><img src="${existingImg}" style="max-height:110px;max-width:100%;border-radius:6px;border:1px solid var(--border)"><button type="button" onclick="document.getElementById('nf-image').value='';document.getElementById('nf-img-preview').innerHTML=''" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:none;background:#ef4444;color:#fff;font-size:12px;line-height:20px;cursor:pointer;padding:0">✕</button></div>` : ''}
+      </div>
+    </div>
     <label class="form-check"><input type="checkbox" id="nf-pinned"${n?.pinned?' checked':''}> Pin to top of news</label>
   `;
 }
+
+window.nfFilePreview = function(input) {
+  const file = input.files?.[0];
+  if (!file) return;
+  document.getElementById('nf-image').value = '';
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('nf-img-preview').innerHTML =
+      `<div style="position:relative;display:inline-block"><img src="${e.target.result}" style="max-height:110px;max-width:100%;border-radius:6px;border:1px solid var(--border)"><button type="button" onclick="this.closest('div').remove();document.getElementById('nf-file').value=''" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:none;background:#ef4444;color:#fff;font-size:12px;line-height:20px;cursor:pointer;padding:0">✕</button></div>`;
+  };
+  reader.readAsDataURL(file);
+};
+
+window.nfUrlPreview = function(url) {
+  const preview = document.getElementById('nf-img-preview');
+  if (!preview) return;
+  if (url) {
+    preview.innerHTML = `<div style="position:relative;display:inline-block"><img src="${url}" style="max-height:110px;max-width:100%;border-radius:6px;border:1px solid var(--border)" onerror="this.style.opacity=0.3"><button type="button" onclick="document.getElementById('nf-image').value='';document.getElementById('nf-img-preview').innerHTML=''" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:none;background:#ef4444;color:#fff;font-size:12px;line-height:20px;cursor:pointer;padding:0">✕</button></div>`;
+  } else {
+    preview.innerHTML = '';
+  }
+};
 
 // ─── AWARDS ────────────────────────────────────────────────
 let _awTeam = '', _awYear = '', _awSort = 'year-desc';
