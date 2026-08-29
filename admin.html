@@ -2916,6 +2916,21 @@ function renderPageBuilder() {
     { type:'upcoming-events', icon:'📅', name:'Upcoming Events', desc:'Event schedule list' },
   ];
 
+  // Build per-section config summary
+  function pbRowSummary(section) {
+    const d = loadData();
+    if (section.type === 'photo-gallery') {
+      if (!section.settings?.albumId) return { text: '⚠ No album selected', color: '#c0860a', warn: true };
+      const album = (d.albums||[]).find(a => a.id === section.settings.albumId);
+      if (!album) return { text: '⚠ Album not found', color: '#e74c3c', warn: true };
+      const ct = (d.photos||[]).filter(p => p.albumId === album.id).length;
+      const title = section.settings.title ? ` · "${section.settings.title}"` : '';
+      return { text: `📷 ${album.name}${title} · ${ct} photo${ct!==1?'s':''}`, color: '#27ae60', warn: false };
+    }
+    if (section.settings?.count) return { text: `Shows ${section.settings.count} items`, color: 'var(--gray)', warn: false };
+    return { text: '', color: '', warn: false };
+  }
+
   setContent(`
     <div style="display:grid;grid-template-columns:1fr 320px;gap:20px">
       <div>
@@ -2925,22 +2940,30 @@ function renderPageBuilder() {
             <button class="btn btn-success btn-sm" onclick="savePageLayout()">💾 Save Layout</button>
           </div>
           <div style="padding:16px" id="page-layout-list">
-            <p style="font-size:12px;color:var(--gray);margin-bottom:12px">Drag to reorder · Toggle to show/hide · Click settings to configure</p>
+            <p style="font-size:12px;color:var(--gray);margin-bottom:14px">Drag to reorder · Toggle visibility · Click ⚙ Configure to edit settings</p>
             ${layout.map((section,i) => {
               const comp = components.find(c=>c.type===section.type);
+              const summary = pbRowSummary(section);
+              const hasConfig = ['photo-gallery','news-feed','latest-results','upcoming-events','stat-leaders','awards','sponsors','team-cards'].includes(section.type);
+              const btnStyle = summary.warn
+                ? 'background:#fff8e6;color:#c0860a;border:1px solid #f0c04a;font-weight:700'
+                : 'background:var(--gray-light);color:var(--dark);border:1px solid var(--border)';
+              const btnLabel = summary.warn ? '⚙ Configure !' : '⚙ Configure';
               return `<div class="pb-page-section" draggable="true" data-idx="${i}" id="pbs-${i}"
-                ondragstart="pbDragStart(event,${i})" ondragover="pbDragOver(event)" ondrop="pbDrop(event,${i})">
-                <div class="pb-section-drag">⠿</div>
-                <div class="pb-section-info">
-                  <div class="pb-section-type">${comp?.icon||'📄'} ${section.type}</div>
-                  <div class="pb-section-name">${comp?.name||section.id}</div>
+                ondragstart="pbDragStart(event,${i})" ondragover="pbDragOver(event)" ondrop="pbDrop(event,${i})"
+                style="background:#fff;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;padding:12px 14px;display:flex;align-items:center;gap:12px;cursor:grab;${!section.visible?'opacity:0.5':''}">
+                <div style="color:#bbb;font-size:18px;cursor:grab;flex-shrink:0">⠿</div>
+                <div style="font-size:22px;flex-shrink:0">${comp?.icon||'📄'}</div>
+                <div style="flex:1;min-width:0">
+                  <div style="font-weight:700;font-size:14px;color:var(--dark)">${comp?.name||section.type}</div>
+                  ${summary.text ? `<div style="font-size:12px;color:${summary.color};margin-top:2px">${summary.text}</div>` : ''}
                 </div>
-                <div class="pb-section-actions">
-                  <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+                <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+                  ${hasConfig ? `<button onclick="pbEditSection(${i})" style="padding:5px 12px;border-radius:6px;font-size:12px;cursor:pointer;white-space:nowrap;${btnStyle}">${btnLabel}</button>` : ''}
+                  <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;white-space:nowrap;user-select:none">
                     <input type="checkbox" ${section.visible?'checked':''} onchange="pbToggleVisible(${i},this.checked)"> Visible
                   </label>
-                  <button class="btn btn-xs btn-secondary" onclick="pbEditSection(${i})">⚙</button>
-                  <button class="btn btn-xs btn-danger" onclick="pbRemoveSection(${i})">✕</button>
+                  <button onclick="pbRemoveSection(${i})" style="width:28px;height:28px;border-radius:50%;background:var(--danger);color:#fff;border:none;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0">✕</button>
                 </div>
               </div>`;
             }).join('')}
@@ -2950,12 +2973,15 @@ function renderPageBuilder() {
       <div>
         <div class="admin-table-wrap">
           <div class="admin-table-header"><h3>Add Component</h3></div>
-          <div style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div style="padding:10px;display:flex;flex-direction:column;gap:6px">
             ${components.map(c=>`
-              <div onclick="pbAddSection('${c.type}')" style="background:var(--gray-light);border-radius:6px;padding:12px;cursor:pointer;text-align:center;transition:all 0.15s;border:1px solid transparent" onmouseover="this.style.borderColor='var(--red)';this.style.background='#fff5f5'" onmouseout="this.style.borderColor='transparent';this.style.background='var(--gray-light)'">
-                <div style="font-size:20px;margin-bottom:4px">${c.icon}</div>
-                <div style="font-size:12px;font-weight:700">${c.name}</div>
-                <div style="font-size:10px;color:var(--gray);margin-top:2px">${c.desc}</div>
+              <div onclick="pbAddSection('${c.type}')" style="background:var(--gray-light);border-radius:7px;padding:10px 12px;cursor:pointer;display:flex;align-items:center;gap:10px;transition:all 0.15s;border:1px solid transparent" onmouseover="this.style.borderColor='var(--red)';this.style.background='#fff5f5'" onmouseout="this.style.borderColor='transparent';this.style.background='var(--gray-light)'">
+                <div style="font-size:22px;flex-shrink:0">${c.icon}</div>
+                <div>
+                  <div style="font-size:13px;font-weight:700;line-height:1.2">${c.name}</div>
+                  <div style="font-size:11px;color:var(--gray);margin-top:1px">${c.desc}</div>
+                </div>
+                <div style="margin-left:auto;color:var(--gray);font-size:18px;flex-shrink:0">+</div>
               </div>`).join('')}
           </div>
         </div>
@@ -2963,6 +2989,27 @@ function renderPageBuilder() {
     </div>
   `);
 }
+
+window.pbPickAlbum = function(albumId, card) {
+  document.getElementById('pbs-album').value = albumId;
+  // Update card visuals
+  document.querySelectorAll('#pb-album-grid > div').forEach(c => {
+    const isMe = c.dataset.albumId === albumId;
+    c.style.borderColor = isMe ? 'var(--red)' : 'var(--border)';
+    c.style.background = isMe ? '#fff5f5' : '#fff';
+    const nameEl = c.querySelector('div[style*="font-weight:700"]');
+    if (nameEl) nameEl.style.color = isMe ? 'var(--red)' : 'var(--dark)';
+    // Add/remove checkmark
+    let ck = c.querySelector('.pb-album-ck');
+    if (isMe && !ck) {
+      ck = document.createElement('div');
+      ck.className = 'pb-album-ck';
+      ck.style.cssText = 'position:absolute;top:6px;right:6px;background:var(--red);color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900';
+      ck.textContent = '✓';
+      c.querySelector('div[style*="position:relative"]').appendChild(ck);
+    } else if (!isMe && ck) ck.remove();
+  });
+};
 
 let pbDragIdx = null;
 window.pbDragStart = function(e, idx) { pbDragIdx = idx; e.dataTransfer.effectAllowed = 'move'; };
@@ -2987,7 +3034,16 @@ window.pbAddSection = function(type) {
   const d = loadData();
   if (!d.pageLayouts) d.pageLayouts = { home: [] };
   d.pageLayouts.home.push({ id: type+'-'+Date.now(), type, visible: true, settings: {} });
-  saveData(d); renderPageBuilder(); toast(`${type} section added!`);
+  saveData(d);
+  renderPageBuilder();
+  // For configurable types, immediately open settings so user can configure right away
+  const needsConfig = ['photo-gallery'];
+  if (needsConfig.includes(type)) {
+    const newIdx = loadData().pageLayouts.home.length - 1;
+    setTimeout(() => window.pbEditSection(newIdx), 50);
+  } else {
+    toast(`${type} section added!`);
+  }
 };
 window.pbEditSection = function(idx) {
   const data = loadData();
@@ -2996,28 +3052,42 @@ window.pbEditSection = function(idx) {
 
   if (section.type === 'photo-gallery') {
     const albums = (data.albums || []).sort((a,b) => (b.date||'').localeCompare(a.date||''));
-    const albumOptions = albums.map(al => {
-      const ct = (data.photos||[]).filter(p=>p.albumId===al.id).length;
-      return `<option value="${al.id}"${section.settings?.albumId===al.id?' selected':''}>${al.name} (${ct} photo${ct!==1?'s':''})</option>`;
+    const selectedId = section.settings?.albumId || '';
+    const albumCards = albums.map(al => {
+      const photos = (data.photos||[]).filter(p=>p.albumId===al.id);
+      const cover = al.coverUrl || photos[0]?.url || '';
+      const ct = photos.length;
+      const isSelected = al.id === selectedId;
+      return `<div onclick="pbPickAlbum('${al.id}',this)" data-album-id="${al.id}"
+        style="border:2px solid ${isSelected?'var(--red)':'var(--border)'};border-radius:8px;overflow:hidden;cursor:pointer;transition:all 0.15s;background:${isSelected?'#fff5f5':'#fff'}">
+        <div style="height:80px;overflow:hidden;background:#eee;position:relative">
+          ${cover ? `<img src="${cover}" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.parentElement.innerHTML='<div style=text-align:center;padding:24px;color:#aaa>📷</div>'">` : '<div style="text-align:center;padding:24px;color:#aaa;font-size:22px">📷</div>'}
+          ${isSelected ? '<div style="position:absolute;top:6px;right:6px;background:var(--red);color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900">✓</div>' : ''}
+        </div>
+        <div style="padding:8px 10px">
+          <div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${isSelected?'var(--red)':'var(--dark)'}">${al.name}</div>
+          <div style="font-size:11px;color:var(--gray)">${ct} photo${ct!==1?'s':''}${al.date?' · '+new Date(al.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',year:'numeric'}):''}</div>
+        </div>
+      </div>`;
     }).join('');
     formHtml = `
+      <input type="hidden" id="pbs-album" value="${selectedId}">
       <div class="form-group">
-        <label class="form-label">Album</label>
-        <select id="pbs-album" class="form-select">
-          <option value="">— pick an album —</option>
-          ${albumOptions}
-        </select>
-        ${!albums.length ? '<p style="color:var(--gray);font-size:12px;margin-top:6px">No albums yet — create albums in the Gallery section first.</p>' : ''}
+        <label class="form-label">Select Album</label>
+        ${!albums.length
+          ? '<div style="padding:20px;text-align:center;color:var(--gray);border:1px dashed var(--border);border-radius:8px">No albums yet — create albums in the Gallery section first.</div>'
+          : `<div id="pb-album-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-height:280px;overflow-y:auto;padding:2px">${albumCards}</div>`}
       </div>
       <div class="form-group">
-        <label class="form-label">Title override <span style="color:var(--gray);font-weight:400">(leave blank to use album name)</span></label>
+        <label class="form-label">Display title <span style="color:var(--gray);font-weight:400">(leave blank to use album name)</span></label>
         <input id="pbs-title" class="form-input" placeholder="e.g. Season Highlights" value="${section.settings?.title||''}">
       </div>
-      <div class="form-group">
-        <label class="form-label">Max photos to show</label>
-        <input type="number" id="pbs-count" class="form-input" value="${section.settings?.count||20}" min="3" max="50">
+      <div class="form-group" style="display:flex;gap:16px;align-items:flex-end">
+        <div style="flex:1"><label class="form-label">Max photos</label>
+          <input type="number" id="pbs-count" class="form-input" value="${section.settings?.count||20}" min="3" max="50"></div>
+        <div style="flex:1"></div>
       </div>
-      <label class="form-check" style="margin-top:8px"><input type="checkbox" id="pbs-visible"${section.visible?' checked':''}> Section visible</label>`;
+      <label class="form-check" style="margin-top:4px"><input type="checkbox" id="pbs-visible"${section.visible?' checked':''}> Section visible on home page</label>`;
   } else {
     formHtml = `
       <div class="form-group"><label class="form-label">Section Title</label><input id="pbs-title" class="form-input" value="${section.settings?.title||''}"></div>
