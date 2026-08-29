@@ -1201,37 +1201,90 @@ function buildTeamForm(t) {
 }
 
 // ─── GAMES ────────────────────────────────────────────────
+let _gTeam = '', _gSeason = '', _gResult = '', _gTournament = '', _gSort = 'date-desc';
+
 function renderGames() {
-  const data = loadData();
-  const games = [...data.games].sort((a,b)=>b.date.localeCompare(a.date));
+  const data  = loadData();
+  const all   = data.games || [];
+  const teams = data.teams || [];
+  const tournaments = data.tournaments || [];
+
+  const seasons = [...new Set(all.map(g=>g.season).filter(Boolean))].sort((a,b)=>b-a);
+  const tourneyOpts = [...new Set(all.map(g=>g.tournamentId).filter(Boolean))];
+
+  let list = all.filter(g => {
+    if (_gTeam       && g.teamId !== _gTeam) return false;
+    if (_gSeason     && String(g.season) !== String(_gSeason)) return false;
+    if (_gResult     && gameResult(g) !== _gResult) return false;
+    if (_gTournament && g.tournamentId !== _gTournament) return false;
+    return true;
+  });
+
+  list = [...list].sort((a,b) => {
+    switch (_gSort) {
+      case 'date-asc':  return (a.date||'').localeCompare(b.date||'');
+      case 'opponent':  return (a.opponent||'').localeCompare(b.opponent||'');
+      default:          return (b.date||'').localeCompare(a.date||'');
+    }
+  });
+
+  const hasFilter = _gTeam || _gSeason || _gResult || _gTournament;
+
   setContent(`
     <div class="admin-table-wrap">
       <div class="admin-table-header">
-        <h3>Games (${games.length})</h3>
-        <div style="display:flex;gap:8px">
-          <select class="form-select" style="font-size:12px" onchange="filterGamesByTeam(this.value)">
-            <option value="">All Teams</option>
-            ${data.teams.map(t=>`<option value="${t.id}">${t.name}</option>`).join('')}
-          </select>
-          <button class="btn btn-primary btn-sm" onclick="addGame()">+ Add Game</button>
-        </div>
+        <h3>Games (${list.length}${list.length!==all.length?' of '+all.length:''})</h3>
+        <button class="btn btn-primary btn-sm" onclick="addGame()">+ Add Game</button>
       </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+        <select class="form-select" style="width:auto;min-width:100px" onchange="_gSeason=this.value;renderGames()">
+          <option value="">All Years</option>
+          ${seasons.map(s=>`<option value="${s}"${String(_gSeason)===String(s)?' selected':''}>${s}</option>`).join('')}
+        </select>
+        <select class="form-select" style="width:auto;min-width:110px" onchange="_gTeam=this.value;renderGames()">
+          <option value="">All Teams</option>
+          ${teams.map(t=>`<option value="${t.id}"${_gTeam===t.id?' selected':''}>${t.shortName||t.name}</option>`).join('')}
+        </select>
+        <select class="form-select" style="width:auto;min-width:100px" onchange="_gResult=this.value;renderGames()">
+          <option value="">All Results</option>
+          <option value="W"${_gResult==='W'?' selected':''}>Win</option>
+          <option value="L"${_gResult==='L'?' selected':''}>Loss</option>
+          <option value="T"${_gResult==='T'?' selected':''}>Tie</option>
+        </select>
+        <select class="form-select" style="width:auto;min-width:130px" onchange="_gTournament=this.value;renderGames()">
+          <option value="">All Games</option>
+          <option value="__tourney__"${_gTournament==='__tourney__'?' selected':''}>Tournament only</option>
+          <option value="__regular__"${_gTournament==='__regular__'?' selected':''}>Regular only</option>
+        </select>
+        <select class="form-select" style="width:auto;min-width:140px" onchange="_gSort=this.value;renderGames()">
+          <option value="date-desc"${_gSort==='date-desc'?' selected':''}>Date (Newest)</option>
+          <option value="date-asc"${_gSort==='date-asc'?' selected':''}>Date (Oldest)</option>
+          <option value="opponent"${_gSort==='opponent'?' selected':''}>Opponent A–Z</option>
+        </select>
+        ${hasFilter?`<button class="btn btn-secondary btn-sm" onclick="_gTeam='';_gSeason='';_gResult='';_gTournament='';renderGames()">Clear</button>`:''}
+      </div>
+      ${list.length===0?`<div style="text-align:center;padding:48px;color:var(--gray)">${all.length===0?'No games yet.':'No games match the current filters.'}</div>`:`
       <table class="admin-table" id="games-table">
         <thead><tr><th>Date</th><th>Team</th><th>Opponent</th><th>Tournament</th><th>Score</th><th>Result</th><th>Stats</th><th>Actions</th></tr></thead>
-        <tbody>${games.map(g=>{
-          const team = data.teams.find(t=>t.id===g.teamId);
+        <tbody>${list.filter(g => {
+          if (_gTournament === '__tourney__') return !!g.tournamentId;
+          if (_gTournament === '__regular__') return !g.tournamentId;
+          return true;
+        }).map(g=>{
+          const team = teams.find(t=>t.id===g.teamId);
           const statCount = g.playerStats?.reduce((s,ps)=>s+(ps.ab>0?1:0),0)||0;
-          const tourney = g.tournamentId ? (data.tournaments||[]).find(t=>t.id===g.tournamentId) : null;
+          const tourney = g.tournamentId ? tournaments.find(t=>t.id===g.tournamentId) : null;
           const tourneyCell = tourney
             ? `<span style="font-size:11px;color:var(--text)">${tourneyTrophy(tourney.placement)}${tourney.name}</span>`
             : `<span style="font-size:11px;color:var(--gray)">—</span>`;
-          return `<tr data-team="${g.teamId}">
+          const res = gameResult(g);
+          return `<tr>
             <td>${g.date}</td>
             <td><span style="font-size:11px;font-weight:700;color:var(--red)">${team?.shortName||''}</span></td>
             <td><strong>${g.opponent}</strong></td>
             <td>${tourneyCell}</td>
             <td>${g.heroScore??'–'} - ${g.oppScore??'–'}</td>
-            <td><span style="padding:3px 8px;border-radius:20px;font-size:11px;font-weight:800;background:${gameResult(g)==='W'?'#dcfce7':gameResult(g)==='L'?'#fee2e2':'#fef9c3'};color:${gameResult(g)==='W'?'#15803d':gameResult(g)==='L'?'#dc2626':'#92400e'}">${gameResult(g)||'TBD'}</span></td>
+            <td><span style="padding:3px 8px;border-radius:20px;font-size:11px;font-weight:800;background:${res==='W'?'#dcfce7':res==='L'?'#fee2e2':'#fef9c3'};color:${res==='W'?'#15803d':res==='L'?'#dc2626':'#92400e'}">${res||'TBD'}</span></td>
             <td><span style="font-size:12px;color:${statCount?'#15803d':'var(--gray)'}">${statCount?`✓ ${statCount} players`:'No stats'}</span></td>
             <td style="display:flex;gap:4px;flex-wrap:wrap">
               <button class="action-btn action-edit" onclick="editGame('${g.id}')">Edit</button>
@@ -1240,16 +1293,10 @@ function renderGames() {
             </td>
           </tr>`;
         }).join('')}</tbody>
-      </table>
+      </table>`}
     </div>
   `);
 }
-
-window.filterGamesByTeam = function(teamId) {
-  document.querySelectorAll('#games-table tbody tr').forEach(row => {
-    row.style.display = teamId && row.dataset.team !== teamId ? 'none' : '';
-  });
-};
 
 function addGame() {
   const data = loadData();
@@ -2252,25 +2299,67 @@ window.setAvailability = function(eventId, playerId, status) {
 };
 
 // ─── NEWS ──────────────────────────────────────────────────
+let _nCat = '', _nPinned = '', _nSort = 'date-desc';
+
 function renderNews() {
   const data = loadData();
+  const all  = data.news || [];
+
+  const cats = [...new Set(all.map(n=>n.category).filter(Boolean))].sort();
+
+  let list = all.filter(n => {
+    if (_nCat    && n.category !== _nCat) return false;
+    if (_nPinned && !n.pinned) return false;
+    return true;
+  });
+
+  list = [...list].sort((a,b) => {
+    switch (_nSort) {
+      case 'date-asc': return (a.date||'').localeCompare(b.date||'');
+      case 'title':    return (a.title||'').localeCompare(b.title||'');
+      default:         return (b.date||'').localeCompare(a.date||'');
+    }
+  });
+
+  const hasFilter = _nCat || _nPinned;
+
   setContent(`
     <div class="admin-table-wrap">
-      <div class="admin-table-header"><h3>News & Announcements</h3><button class="btn btn-primary btn-sm" onclick="addNews()">+ Add Article</button></div>
+      <div class="admin-table-header">
+        <h3>News & Announcements (${list.length}${list.length!==all.length?' of '+all.length:''})</h3>
+        <button class="btn btn-primary btn-sm" onclick="addNews()">+ Add Article</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+        <select class="form-select" style="width:auto;min-width:140px" onchange="_nCat=this.value;renderNews()">
+          <option value="">All Categories</option>
+          ${cats.map(c=>`<option value="${c}"${_nCat===c?' selected':''}>${c}</option>`).join('')}
+        </select>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+          <input type="checkbox" ${_nPinned?'checked':''} onchange="_nPinned=this.checked?'1':'';renderNews()">
+          Pinned only
+        </label>
+        <select class="form-select" style="width:auto;min-width:140px" onchange="_nSort=this.value;renderNews()">
+          <option value="date-desc"${_nSort==='date-desc'?' selected':''}>Date (Newest)</option>
+          <option value="date-asc"${_nSort==='date-asc'?' selected':''}>Date (Oldest)</option>
+          <option value="title"${_nSort==='title'?' selected':''}>Title A–Z</option>
+        </select>
+        ${hasFilter?`<button class="btn btn-secondary btn-sm" onclick="_nCat='';_nPinned='';renderNews()">Clear</button>`:''}
+      </div>
+      ${list.length===0?`<div style="text-align:center;padding:48px;color:var(--gray)">${all.length===0?'No articles yet.':'No articles match the current filters.'}</div>`:`
       <table class="admin-table">
         <thead><tr><th>Date</th><th>Title</th><th>Category</th><th>Author</th><th>Pinned</th><th>Actions</th></tr></thead>
-        <tbody>${data.news.map(n=>`<tr>
+        <tbody>${list.map(n=>`<tr>
           <td style="font-size:12px">${n.date}</td>
           <td><strong>${n.title}</strong></td>
           <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:#fee2e2;color:#dc2626">${n.category}</span></td>
-          <td>${n.author}</td>
+          <td>${n.author||'—'}</td>
           <td>${n.pinned?'📌':''}</td>
           <td style="display:flex;gap:4px">
             <button class="action-btn action-edit" onclick="editNews('${n.id}')">Edit</button>
             <button class="action-btn action-delete" onclick="deleteNews('${n.id}')">Delete</button>
           </td>
         </tr>`).join('')}</tbody>
-      </table>
+      </table>`}
     </div>
   `);
 }
@@ -2312,24 +2401,67 @@ function buildNewsForm(n) {
 }
 
 // ─── AWARDS ────────────────────────────────────────────────
+let _awTeam = '', _awYear = '', _awSort = 'year-desc';
+
 function renderAwards() {
-  const data = loadData();
+  const data  = loadData();
+  const all   = data.awards || [];
+  const teams = data.teams  || [];
+
+  const years = [...new Set(all.map(a=>String(a.year)).filter(Boolean))].sort((a,b)=>b-a);
+
+  let list = all.filter(a => {
+    if (_awTeam && a.team !== _awTeam) return false;
+    if (_awYear && String(a.year) !== _awYear) return false;
+    return true;
+  });
+
+  list = [...list].sort((a,b) => {
+    switch (_awSort) {
+      case 'year-asc': return String(a.year||'').localeCompare(String(b.year||''));
+      case 'title':    return (a.title||'').localeCompare(b.title||'');
+      default:         return String(b.year||'').localeCompare(String(a.year||''));
+    }
+  });
+
+  const hasFilter = _awTeam || _awYear;
+
   setContent(`
     <div class="admin-table-wrap">
-      <div class="admin-table-header"><h3>Awards & Achievements</h3><button class="btn btn-primary btn-sm" onclick="addAward()">+ Add Award</button></div>
+      <div class="admin-table-header">
+        <h3>Awards & Achievements (${list.length}${list.length!==all.length?' of '+all.length:''})</h3>
+        <button class="btn btn-primary btn-sm" onclick="addAward()">+ Add Award</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+        <select class="form-select" style="width:auto;min-width:90px" onchange="_awYear=this.value;renderAwards()">
+          <option value="">All Years</option>
+          ${years.map(y=>`<option value="${y}"${_awYear===y?' selected':''}>${y}</option>`).join('')}
+        </select>
+        <select class="form-select" style="width:auto;min-width:120px" onchange="_awTeam=this.value;renderAwards()">
+          <option value="">All Teams</option>
+          ${teams.map(t=>`<option value="${t.id}"${_awTeam===t.id?' selected':''}>${t.shortName||t.name}</option>`).join('')}
+        </select>
+        <select class="form-select" style="width:auto;min-width:140px" onchange="_awSort=this.value;renderAwards()">
+          <option value="year-desc"${_awSort==='year-desc'?' selected':''}>Year (Newest)</option>
+          <option value="year-asc"${_awSort==='year-asc'?' selected':''}>Year (Oldest)</option>
+          <option value="title"${_awSort==='title'?' selected':''}>Title A–Z</option>
+        </select>
+        ${hasFilter?`<button class="btn btn-secondary btn-sm" onclick="_awTeam='';_awYear='';renderAwards()">Clear</button>`:''}
+      </div>
+      ${list.length===0?`<div style="text-align:center;padding:48px;color:var(--gray)">${all.length===0?'No awards yet.':'No awards match the current filters.'}</div>`:`
       <table class="admin-table">
         <thead><tr><th>Icon</th><th>Year</th><th>Title</th><th>Team</th><th>Actions</th></tr></thead>
-        <tbody>${data.awards.map(a=>`<tr>
-          <td style="font-size:20px">${a.icon}</td>
+        <tbody>${list.map(a=>`<tr>
+          <td style="font-size:20px">${a.icon||'🏆'}</td>
           <td>${a.year}</td>
-          <td><strong>${a.title}</strong><br><span style="font-size:12px;color:var(--gray)">${a.description}</span></td>
-          <td>${data.teams.find(t=>t.id===a.team)?.name||'All Teams'}</td>
+          <td><strong>${a.title}</strong><br><span style="font-size:12px;color:var(--gray)">${a.description||''}</span></td>
+          <td>${teams.find(t=>t.id===a.team)?.name||'All Teams'}</td>
           <td style="display:flex;gap:4px">
             <button class="action-btn action-edit" onclick="editAward('${a.id}')">Edit</button>
             <button class="action-btn action-delete" onclick="deleteAward('${a.id}')">Del</button>
           </td>
         </tr>`).join('')}</tbody>
-      </table>
+      </table>`}
     </div>
   `);
 }
@@ -2370,18 +2502,66 @@ function buildAwardForm(a, data) {
 }
 
 // ─── GALLERY ──────────────────────────────────────────────
+let _galCat = '', _galTeam = '', _galSort = 'date-desc';
+
 function renderGalleryAdmin() {
-  const data = loadData();
-  const albums = (data.albums || []).sort((a,b) => b.date?.localeCompare(a.date||''));
+  const data  = loadData();
+  const all   = data.albums || [];
+  const teams = data.teams  || [];
+  const catColors = { site:'#0F766E', team:'#1C6EA4', individual:'#7C3AED', scorebook:'#6b7280' };
+
+  const cats = [...new Set(all.map(al=>al.category).filter(Boolean))].sort();
+
+  let list = all.filter(al => {
+    if (_galCat  && al.category !== _galCat) return false;
+    if (_galTeam && al.teamId   !== _galTeam) return false;
+    return true;
+  });
+
+  list = [...list].sort((a,b) => {
+    switch (_galSort) {
+      case 'date-asc': return (a.date||'').localeCompare(b.date||'');
+      case 'name':     return (a.name||'').localeCompare(b.name||'');
+      case 'photos': {
+        const pa = (data.photos||[]).filter(p=>p.albumId===a.id).length;
+        const pb = (data.photos||[]).filter(p=>p.albumId===b.id).length;
+        return pb - pa;
+      }
+      default: return (b.date||'').localeCompare(a.date||'');
+    }
+  });
+
+  const hasFilter = _galCat || _galTeam;
+
   setContent(`
     <div class="admin-table-wrap">
-      <div class="admin-table-header"><h3>Albums</h3><button class="btn btn-primary btn-sm" onclick="addAlbum()">+ Add Album</button></div>
+      <div class="admin-table-header">
+        <h3>Albums (${list.length}${list.length!==all.length?' of '+all.length:''})</h3>
+        <button class="btn btn-primary btn-sm" onclick="addAlbum()">+ Add Album</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+        <select class="form-select" style="width:auto;min-width:120px" onchange="_galCat=this.value;renderGalleryAdmin()">
+          <option value="">All Categories</option>
+          ${cats.map(c=>`<option value="${c}"${_galCat===c?' selected':''}>${c.charAt(0).toUpperCase()+c.slice(1)}</option>`).join('')}
+        </select>
+        <select class="form-select" style="width:auto;min-width:110px" onchange="_galTeam=this.value;renderGalleryAdmin()">
+          <option value="">All Teams</option>
+          ${teams.map(t=>`<option value="${t.id}"${_galTeam===t.id?' selected':''}>${t.shortName||t.name}</option>`).join('')}
+        </select>
+        <select class="form-select" style="width:auto;min-width:140px" onchange="_galSort=this.value;renderGalleryAdmin()">
+          <option value="date-desc"${_galSort==='date-desc'?' selected':''}>Date (Newest)</option>
+          <option value="date-asc"${_galSort==='date-asc'?' selected':''}>Date (Oldest)</option>
+          <option value="name"${_galSort==='name'?' selected':''}>Name A–Z</option>
+          <option value="photos"${_galSort==='photos'?' selected':''}>Most Photos</option>
+        </select>
+        ${hasFilter?`<button class="btn btn-secondary btn-sm" onclick="_galCat='';_galTeam='';renderGalleryAdmin()">Clear</button>`:''}
+      </div>
+      ${list.length===0?`<div style="text-align:center;padding:48px;color:var(--gray)">${all.length===0?'No albums yet.':'No albums match the current filters.'}</div>`:`
       <table class="admin-table">
         <thead><tr><th>Name</th><th>Category</th><th>Date</th><th>Team</th><th>Photos</th><th>Actions</th></tr></thead>
-        <tbody>${albums.length ? albums.map(al => {
+        <tbody>${list.map(al => {
           const photoCount = (data.photos||[]).filter(p=>p.albumId===al.id).length;
-          const team = data.teams.find(t=>t.id===al.teamId);
-          const catColors = { site:'#0F766E', team:'#1C6EA4', individual:'#7C3AED' };
+          const team = teams.find(t=>t.id===al.teamId);
           const catLabel = al.category ? al.category.charAt(0).toUpperCase()+al.category.slice(1) : '—';
           return `<tr>
             <td><strong>${al.name}</strong>${al.description?`<div style="font-size:11px;color:var(--gray)">${al.description}</div>`:''}
@@ -2396,8 +2576,8 @@ function renderGalleryAdmin() {
               <button class="action-btn action-delete" onclick="deleteAlbum('${al.id}')">Del</button>
             </td>
           </tr>`;
-        }).join('') : '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--gray)">No albums yet</td></tr>'}</tbody>
-      </table>
+        }).join('')}</tbody>
+      </table>`}
     </div>
   `);
 }
@@ -2533,23 +2713,56 @@ async function uploadGalleryPhoto(file, albumId) {
 }
 
 // ─── SPONSORS ─────────────────────────────────────────────
+let _spTier = '', _spSort = 'tier';
+
 function renderSponsors() {
   const data = loadData();
+  const all  = data.sponsors || [];
+
+  const tierRank = {gold:1, silver:2, bronze:3};
+  const tierBg   = {gold:'#fef9c3', silver:'#f3f4f6', bronze:'#fff7ed'};
+
+  let list = all.filter(s => !_spTier || s.tier === _spTier);
+
+  list = [...list].sort((a,b) => {
+    switch (_spSort) {
+      case 'name': return (a.name||'').localeCompare(b.name||'');
+      default:     return (tierRank[a.tier]||9) - (tierRank[b.tier]||9) || (a.name||'').localeCompare(b.name||'');
+    }
+  });
+
   setContent(`
     <div class="admin-table-wrap">
-      <div class="admin-table-header"><h3>Sponsors</h3><button class="btn btn-primary btn-sm" onclick="addSponsor()">+ Add Sponsor</button></div>
+      <div class="admin-table-header">
+        <h3>Sponsors (${list.length}${list.length!==all.length?' of '+all.length:''})</h3>
+        <button class="btn btn-primary btn-sm" onclick="addSponsor()">+ Add Sponsor</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+        <select class="form-select" style="width:auto;min-width:110px" onchange="_spTier=this.value;renderSponsors()">
+          <option value="">All Tiers</option>
+          <option value="gold"${_spTier==='gold'?' selected':''}>Gold</option>
+          <option value="silver"${_spTier==='silver'?' selected':''}>Silver</option>
+          <option value="bronze"${_spTier==='bronze'?' selected':''}>Bronze</option>
+        </select>
+        <select class="form-select" style="width:auto;min-width:120px" onchange="_spSort=this.value;renderSponsors()">
+          <option value="tier"${_spSort==='tier'?' selected':''}>Tier (Gold first)</option>
+          <option value="name"${_spSort==='name'?' selected':''}>Name A–Z</option>
+        </select>
+        ${_spTier?`<button class="btn btn-secondary btn-sm" onclick="_spTier='';renderSponsors()">Clear</button>`:''}
+      </div>
+      ${list.length===0?`<div style="text-align:center;padding:48px;color:var(--gray)">${all.length===0?'No sponsors yet.':'No sponsors match the current filters.'}</div>`:`
       <table class="admin-table">
         <thead><tr><th>Name</th><th>Tier</th><th>URL</th><th>Actions</th></tr></thead>
-        <tbody>${data.sponsors.map(s=>`<tr>
+        <tbody>${list.map(s=>`<tr>
           <td><strong>${s.name}</strong></td>
-          <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:${s.tier==='gold'?'#fef9c3':s.tier==='silver'?'#f3f4f6':'#fff7ed'};color:#92400e">${s.tier}</span></td>
-          <td style="font-size:12px;color:var(--gray)">${s.url}</td>
+          <td><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:${tierBg[s.tier]||'#f3f4f6'};color:#92400e">${s.tier||'—'}</span></td>
+          <td style="font-size:12px;color:var(--gray)">${s.url||''}</td>
           <td style="display:flex;gap:4px">
             <button class="action-btn action-edit" onclick="editSponsor('${s.id}')">Edit</button>
             <button class="action-btn action-delete" onclick="deleteSponsor('${s.id}')">Del</button>
           </td>
         </tr>`).join('')}</tbody>
-      </table>
+      </table>`}
     </div>
   `);
 }
