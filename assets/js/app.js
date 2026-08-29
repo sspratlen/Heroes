@@ -198,6 +198,7 @@ const App = {
 
 // ─── PHOTO CAROUSEL ────────────────────────────────────────────
 const _carouselState = {};
+const _kbAnims = ['kb-zoom-in','kb-pan-right','kb-pan-left','kb-drift-ul','kb-drift-br'];
 
 window.carouselGoto = function(uid, idx) {
   const state = _carouselState[uid];
@@ -205,25 +206,63 @@ window.carouselGoto = function(uid, idx) {
   const prev = state.idx;
   if (prev === idx) return;
 
+  // Outgoing slide: fade out, stop Ken Burns
   const prevSlide = document.getElementById(`${uid}-slide-${prev}`);
+  if (prevSlide) { prevSlide.style.opacity = '0'; prevSlide.style.zIndex = '1'; }
+  const prevKb = document.getElementById(`${uid}-kb-${prev}`);
+  if (prevKb) prevKb.style.animationName = 'none';
+
+  // Outgoing thumb: dim
   const prevThumb = document.getElementById(`${uid}-thumb-${prev}`);
-  if (prevSlide) { prevSlide.style.opacity = '0'; prevSlide.style.pointerEvents = 'none'; }
-  if (prevThumb) { prevThumb.style.opacity = '0.45'; prevThumb.style.outline = 'none'; prevThumb.style.transform = 'scale(1)'; }
+  if (prevThumb) { prevThumb.style.filter = 'brightness(0.38) saturate(0.6)'; prevThumb.style.outline = 'none'; prevThumb.style.transform = 'scale(1)'; }
 
+  // Incoming slide: fade in, restart Ken Burns
   const nextSlide = document.getElementById(`${uid}-slide-${idx}`);
-  const nextThumb = document.getElementById(`${uid}-thumb-${idx}`);
-  if (nextSlide) { nextSlide.style.opacity = '1'; nextSlide.style.pointerEvents = 'all'; }
-  if (nextThumb) { nextThumb.style.opacity = '1'; nextThumb.style.outline = '2px solid #fff'; nextThumb.style.transform = 'scale(1.08)'; }
+  if (nextSlide) { nextSlide.style.opacity = '1'; nextSlide.style.zIndex = '2'; }
+  const nextKb = document.getElementById(`${uid}-kb-${idx}`);
+  if (nextKb) {
+    nextKb.style.animationName = 'none';
+    nextKb.offsetHeight; // force reflow to restart animation
+    nextKb.style.animationName = _kbAnims[idx % _kbAnims.length];
+    nextKb.style.animationDuration = '9s';
+    nextKb.style.animationTimingFunction = 'ease-in-out';
+    nextKb.style.animationFillMode = 'forwards';
+  }
 
+  // Incoming thumb: highlight
+  const nextThumb = document.getElementById(`${uid}-thumb-${idx}`);
+  if (nextThumb) {
+    nextThumb.style.filter = 'brightness(1) saturate(1)';
+    nextThumb.style.outline = '2px solid rgba(255,255,255,0.9)';
+    nextThumb.style.transform = 'scale(1.06)';
+    nextThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }
+
+  // Counter
   const counter = document.getElementById(`${uid}-counter`);
   if (counter) counter.textContent = `${idx + 1} / ${state.total}`;
 
-  const strip = document.getElementById(`${uid}-strip`);
-  if (strip && nextThumb) nextThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  // Caption
+  const caption = document.getElementById(`${uid}-caption`);
+  if (caption) {
+    caption.style.opacity = '0';
+    const newText = nextKb?.getAttribute('data-caption') || '';
+    setTimeout(() => { caption.textContent = newText; caption.style.opacity = '1'; }, 400);
+  }
+
+  // Progress bar — reset and re-animate
+  const prog = document.getElementById(`${uid}-prog`);
+  if (prog) {
+    prog.style.transition = 'none';
+    prog.style.width = '0%';
+    prog.offsetHeight;
+    prog.style.transition = 'width 6s linear';
+    prog.style.width = '100%';
+  }
 
   state.idx = idx;
   clearInterval(state.timer);
-  state.timer = setInterval(() => window.carouselNav(uid, 1), 5000);
+  state.timer = setInterval(() => window.carouselNav(uid, 1), 6000);
 };
 
 window.carouselNav = function(uid, dir) {
@@ -234,7 +273,22 @@ window.carouselNav = function(uid, dir) {
 
 window.carouselStart = function(uid, total) {
   if (_carouselState[uid]) clearInterval(_carouselState[uid].timer);
-  _carouselState[uid] = { idx: 0, total, timer: setInterval(() => window.carouselNav(uid, 1), 5000) };
+  _carouselState[uid] = { idx: 0, total, timer: setInterval(() => window.carouselNav(uid, 1), 6000) };
+  // Kick off progress bar for slide 0
+  const prog = document.getElementById(`${uid}-prog`);
+  if (prog) {
+    prog.offsetHeight;
+    prog.style.transition = 'width 6s linear';
+    prog.style.width = '100%';
+  }
+  // Start Ken Burns on slide 0
+  const kb0 = document.getElementById(`${uid}-kb-0`);
+  if (kb0) {
+    kb0.style.animationName = _kbAnims[0];
+    kb0.style.animationDuration = '9s';
+    kb0.style.animationTimingFunction = 'ease-in-out';
+    kb0.style.animationFillMode = 'forwards';
+  }
 };
 
 function buildPhotoGallerySection(settings, data) {
@@ -244,15 +298,14 @@ function buildPhotoGallerySection(settings, data) {
 
   if (!album) {
     return `<section style="background:#0d0d0d;padding:60px 24px;text-align:center">
-      <div style="color:#555;font-size:14px">📷 Photo Gallery — no album selected.<br><span style="font-size:12px">Configure this section in the Page Builder to pick an album.</span></div>
+      <div style="color:#444;font-size:14px">📷 Photo Gallery — no album selected.<br><span style="font-size:12px;color:#333">Configure this section in the Page Builder to pick an album.</span></div>
     </section>`;
   }
 
   const photos = (data.photos || []).filter(p => p.albumId === albumId).slice(0, maxPhotos);
-
   if (!photos.length) {
     return `<section style="background:#0d0d0d;padding:60px 24px;text-align:center">
-      <div style="color:#555;font-size:14px">📷 "${album.name}" has no photos yet.</div>
+      <div style="color:#444;font-size:14px">📷 "${album.name}" has no photos yet.</div>
     </section>`;
   }
 
@@ -261,47 +314,111 @@ function buildPhotoGallerySection(settings, data) {
   const teamName = album.teamId ? (data.teams||[]).find(t=>t.id===album.teamId)?.shortName : null;
   const dateLabel = album.date ? new Date(album.date+'T12:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}) : '';
   const metaParts = [dateLabel, teamName].filter(Boolean);
+  const firstCaption = photos[0]?.caption || '';
+
+  // KB animation keyframes injected once per uid (browser dedupes by style id)
+  const styles = `<style id="${uid}-css">
+    @keyframes kb-zoom-in   { from{transform:scale(1.0)translate(0,0)}   to{transform:scale(1.14)translate(0,0)} }
+    @keyframes kb-pan-right { from{transform:scale(1.08)translateX(-3%)} to{transform:scale(1.13)translateX(3%)} }
+    @keyframes kb-pan-left  { from{transform:scale(1.08)translateX(3%)}  to{transform:scale(1.13)translateX(-3%)} }
+    @keyframes kb-drift-ul  { from{transform:scale(1.06)translate(-2%,-1%)} to{transform:scale(1.13)translate(2%,1%)} }
+    @keyframes kb-drift-br  { from{transform:scale(1.06)translate(2%,1%)}  to{transform:scale(1.13)translate(-2%,-1%)} }
+    #${uid}-strip::-webkit-scrollbar { display:none }
+    #${uid}-caption { transition:opacity 0.4s ease; }
+  </style>`;
 
   const slides = photos.map((ph, i) => `
-    <div id="${uid}-slide-${i}" style="position:absolute;inset:0;opacity:${i===0?'1':'0'};transition:opacity 0.9s ease;pointer-events:${i===0?'all':'none'};will-change:opacity;">
-      <img src="${ph.url}" alt="${ph.caption||''}" style="width:100%;height:100%;object-fit:cover;display:block;">
-      <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,0.72) 0%,rgba(0,0,0,0.18) 40%,transparent 65%);"></div>
-      ${ph.caption ? `<div style="position:absolute;bottom:72px;left:0;right:0;padding:0 80px;color:#fff;font-size:15px;font-weight:500;text-shadow:0 1px 6px rgba(0,0,0,0.9);line-height:1.4">${ph.caption}</div>` : ''}
+    <div id="${uid}-slide-${i}" style="position:absolute;inset:0;opacity:${i===0?'1':'0'};z-index:${i===0?'2':'1'};transition:opacity 1.3s ease;">
+      <div style="position:absolute;inset:-8%;overflow:hidden;">
+        <img id="${uid}-kb-${i}" src="${ph.url}" data-caption="${(ph.caption||'').replace(/"/g,'&quot;')}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;will-change:transform;transform-origin:center center;">
+      </div>
+      <!-- Gradient overlays -->
+      <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,0.82) 0%,rgba(0,0,0,0.3) 38%,rgba(0,0,0,0.04) 65%);"></div>
+      <div style="position:absolute;inset:0;background:linear-gradient(105deg,rgba(0,0,0,0.38) 0%,transparent 55%);"></div>
     </div>`).join('');
 
   const thumbs = photos.map((ph, i) => `
-    <div id="${uid}-thumb-${i}" onclick="carouselGoto('${uid}',${i})" style="flex-shrink:0;width:64px;height:48px;border-radius:5px;overflow:hidden;cursor:pointer;opacity:${i===0?'1':'0.45'};outline:${i===0?'2px solid #fff':'none'};outline-offset:2px;transform:${i===0?'scale(1.08)':'scale(1)'};transition:all 0.3s ease;">
+    <div id="${uid}-thumb-${i}" onclick="carouselGoto('${uid}',${i})"
+      style="flex-shrink:0;width:80px;height:58px;border-radius:5px;overflow:hidden;cursor:pointer;
+        filter:${i===0?'brightness(1) saturate(1)':'brightness(0.38) saturate(0.6)'};
+        outline:${i===0?'2px solid rgba(255,255,255,0.9)':'none'};outline-offset:2px;
+        transform:${i===0?'scale(1.06)':'scale(1)'};transition:filter 0.4s ease,outline 0.3s,transform 0.3s ease;">
       <img src="${ph.url}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;">
     </div>`).join('');
 
-  return `
-    <section style="background:#0a0a0a;overflow:hidden;">
-      <!-- Main slide area -->
-      <div data-carousel="${uid}" data-carousel-total="${photos.length}" style="position:relative;width:100%;aspect-ratio:16/9;max-height:580px;overflow:hidden;background:#111;cursor:pointer;" onclick="if(event.target===this||event.target.tagName==='IMG')carouselNav('${uid}',1)">
-        ${slides}
+  const arrowBtn = (dir, icon) =>
+    `<button onclick="event.stopPropagation();carouselNav('${uid}',${dir})"
+      style="position:absolute;${dir===-1?'left:20px':'right:20px'};top:50%;transform:translateY(-50%);z-index:20;
+        width:52px;height:52px;border-radius:50%;border:1px solid rgba(255,255,255,0.22);
+        background:rgba(10,10,10,0.55);backdrop-filter:blur(10px);color:#fff;
+        font-size:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+        transition:background 0.2s,border-color 0.2s;"
+      onmouseover="this.style.background='rgba(0,0,0,0.85)';this.style.borderColor='rgba(255,255,255,0.5)'"
+      onmouseout="this.style.background='rgba(10,10,10,0.55)';this.style.borderColor='rgba(255,255,255,0.22)'">${icon}</button>`;
 
-        <!-- Arrows -->
-        <button onclick="event.stopPropagation();carouselNav('${uid}',-1)" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);z-index:20;background:rgba(0,0,0,0.52);backdrop-filter:blur(6px);color:#fff;border:1px solid rgba(255,255,255,0.18);border-radius:50%;width:46px;height:46px;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" onmouseover="this.style.background='rgba(0,0,0,0.82)'" onmouseout="this.style.background='rgba(0,0,0,0.52)'">‹</button>
-        <button onclick="event.stopPropagation();carouselNav('${uid}',1)"  style="position:absolute;right:14px;top:50%;transform:translateY(-50%);z-index:20;background:rgba(0,0,0,0.52);backdrop-filter:blur(6px);color:#fff;border:1px solid rgba(255,255,255,0.18);border-radius:50%;width:46px;height:46px;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" onmouseover="this.style.background='rgba(0,0,0,0.82)'" onmouseout="this.style.background='rgba(0,0,0,0.52)'">›</button>
+  return `${styles}
+<section style="background:#090909;overflow:hidden;position:relative;">
 
-        <!-- Top bar -->
-        <div style="position:absolute;top:0;left:0;right:0;z-index:15;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(to bottom,rgba(0,0,0,0.55) 0%,transparent 100%);pointer-events:none;">
-          <div style="color:#fff;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;text-shadow:0 1px 4px rgba(0,0,0,0.8)">📷 ${title}</div>
-          <div id="${uid}-counter" style="color:#fff;font-size:12px;background:rgba(0,0,0,0.42);backdrop-filter:blur(4px);padding:4px 10px;border-radius:20px;border:1px solid rgba(255,255,255,0.15)">1 / ${photos.length}</div>
-        </div>
+  <!-- ── SLIDE STAGE ── -->
+  <div data-carousel="${uid}" data-carousel-total="${photos.length}"
+    style="position:relative;width:100%;height:clamp(340px,52vw,620px);overflow:hidden;background:#111;">
+
+    ${slides}
+
+    <!-- Vignette -->
+    <div style="position:absolute;inset:0;pointer-events:none;z-index:8;
+      background:radial-gradient(ellipse at 48% 52%,transparent 52%,rgba(0,0,0,0.42) 100%);"></div>
+
+    <!-- Arrows -->
+    ${arrowBtn(-1,'‹')}
+    ${arrowBtn(1,'›')}
+
+    <!-- Top gradient bar + counter -->
+    <div style="position:absolute;top:0;left:0;right:0;z-index:15;pointer-events:none;
+      background:linear-gradient(to bottom,rgba(0,0,0,0.58) 0%,transparent 100%);
+      padding:18px 22px;display:flex;justify-content:flex-end;">
+      <div id="${uid}-counter" style="color:#fff;font-size:12px;font-weight:600;letter-spacing:0.04em;
+        background:rgba(0,0,0,0.48);backdrop-filter:blur(8px);
+        padding:5px 13px;border-radius:20px;border:1px solid rgba(255,255,255,0.16);">
+        1 / ${photos.length}
       </div>
+    </div>
 
-      <!-- Thumbnail strip -->
-      <div id="${uid}-strip" style="background:#111;padding:10px 20px;display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;align-items:center;justify-content:${photos.length<=8?'center':'flex-start'};">
-        ${thumbs}
-      </div>
+    <!-- Bottom info overlay -->
+    <div style="position:absolute;bottom:10px;left:0;right:0;z-index:15;pointer-events:none;padding:0 28px 18px;">
+      <div style="color:#fff;font-size:clamp(18px,3vw,28px);font-weight:900;letter-spacing:-0.02em;
+        text-shadow:0 2px 16px rgba(0,0,0,0.95);line-height:1.1;margin-bottom:6px;">${title}</div>
+      ${metaParts.length ? `<div style="color:rgba(255,255,255,0.58);font-size:13px;letter-spacing:0.03em;">${metaParts.join(' · ')}</div>` : ''}
+      <div id="${uid}-caption" style="color:rgba(255,255,255,0.78);font-size:14px;font-style:italic;
+        margin-top:5px;text-shadow:0 1px 8px rgba(0,0,0,0.9);min-height:18px;opacity:1;">${firstCaption}</div>
+    </div>
 
-      <!-- Footer -->
-      <div style="background:#0a0a0a;border-top:1px solid #1c1c1c;padding:13px 24px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="color:#666;font-size:13px;">${[title, ...metaParts].join(' · ')} <span style="color:#444">· ${photos.length} photo${photos.length!==1?'s':''}</span></div>
-        <a data-route="/gallery" style="color:#e74c3c;font-size:12px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;text-decoration:none;">View Gallery →</a>
-      </div>
-    </section>`;
+    <!-- Progress bar -->
+    <div style="position:absolute;bottom:0;left:0;right:0;height:3px;background:rgba(255,255,255,0.08);z-index:20;">
+      <div id="${uid}-prog" style="height:100%;width:0%;background:linear-gradient(to right,#e74c3c,#ff7675);transition:none;"></div>
+    </div>
+  </div>
+
+  <!-- ── THUMBNAIL STRIP ── -->
+  <div id="${uid}-strip"
+    style="background:#0e0e0e;padding:10px 18px;display:flex;gap:6px;overflow-x:auto;
+      align-items:center;justify-content:${photos.length<=9?'center':'flex-start'};">
+    ${thumbs}
+  </div>
+
+  <!-- ── FOOTER ── -->
+  <div style="background:#090909;border-top:1px solid #181818;padding:12px 24px;
+    display:flex;align-items:center;justify-content:space-between;">
+    <div style="color:#484848;font-size:12px;letter-spacing:0.02em;">
+      ${[title,...metaParts].join(' · ')}
+      <span style="color:#2e2e2e"> · ${photos.length} photo${photos.length!==1?'s':''}</span>
+    </div>
+    <a data-route="/gallery" style="color:#e74c3c;font-size:11px;font-weight:800;
+      letter-spacing:0.07em;text-decoration:none;text-transform:uppercase;">
+      View Full Gallery →
+    </a>
+  </div>
+</section>`;
 }
 
 // ─── HOME: SEASON LEADERS HELPERS ─────────────────────────────
