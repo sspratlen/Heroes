@@ -360,10 +360,10 @@ function getPlayerStats(playerId, filters = {}) {
   const totals = { g: 0, ab: 0, h: 0, s: 0, d: 0, t: 0, hr: 0, hbp: 0, k: 0, bb: 0, sf: 0, rbi: 0, r: 0 };
   games.forEach(game => {
     const stat = game.playerStats?.find(ps => ps.playerId === playerId);
-    if (stat) {
+    // Only count games where the player had at least one official AB.
+    // This excludes bad-import entries (ab=0, h>0) and prevents AVG > 1.000.
+    if (stat && (Number(stat.ab) || 0) > 0) {
       totals.g++;
-      // Use != null so ab=0 is counted (falsy check was causing ab to be skipped
-      // for games with 0 official at-bats, inflating AVG above 1.000)
       Object.keys(totals).forEach(k => { if (k !== 'g' && stat[k] != null) totals[k] += Number(stat[k]) || 0; });
     }
   });

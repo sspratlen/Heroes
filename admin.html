@@ -2030,8 +2030,13 @@ window.savePlayerGameStat = function(gameId, playerId, btn) {
 
   const ps = d.games[gameIdx].playerStats ? [...d.games[gameIdx].playerStats] : [];
   const idx = ps.findIndex(s => s.playerId === playerId);
-  if (idx >= 0) ps[idx] = statObj;
-  else ps.push(statObj);
+  // Don't save entries with no official at-bats — they cause AVG inflation
+  if (statObj.ab > 0) {
+    if (idx >= 0) ps[idx] = statObj;
+    else ps.push(statObj);
+  } else if (idx >= 0) {
+    ps.splice(idx, 1); // remove existing entry if cleared to 0
+  }
   d.games[gameIdx].playerStats = ps;
 
   saveCollection('games', d.games);
