@@ -1043,23 +1043,23 @@ window.sendOneInvite = async function(playerId, email, hasAccount) {
     const redirectTo = window.location.origin + window.location.pathname.replace(/admin\.html$/, '') + 'index.html';
 
     if (!hasAccount) {
-      const tempPw = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2).toUpperCase() + '!1';
-      const player = loadData().players.find(p => p.id === playerId);
-      const displayName = player ? `${player.firstName} ${player.lastName}` : email.split('@')[0];
-      const { error: signUpErr } = await sb.auth.signUp({
+      // New user: OTP magic link creates the account and sends a login link in one step.
+      // Avoids the signUp→unconfirmed→resetPassword failure where Supabase rejects
+      // a recovery email sent to an account that hasn't confirmed its email yet.
+      const { error } = await sb.auth.signInWithOtp({
         email,
-        password: tempPw,
-        options: { data: { display_name: displayName, role: 'player', approved: false }, emailRedirectTo: redirectTo }
+        options: { shouldCreateUser: true, emailRedirectTo: redirectTo }
       });
-      if (signUpErr && !signUpErr.message.includes('already registered')) throw signUpErr;
+      if (error) throw error;
+    } else {
+      // Existing confirmed account: standard password reset link.
+      const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo });
+      if (error) throw error;
     }
-
-    const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo });
-    if (error) throw error;
 
     if (statusCell) statusCell.innerHTML = '<span style="font-size:11px;font-weight:700;color:#16a34a">✓ Sent</span>';
   } catch(e) {
-    if (statusCell) statusCell.innerHTML = `<span style="font-size:11px;color:#dc2626" title="${e.message}">✗ Error</span>`;
+    if (statusCell) statusCell.innerHTML = `<span style="font-size:11px;color:#dc2626">✗ ${e.message || 'Error'}</span>`;
   }
 };
 
