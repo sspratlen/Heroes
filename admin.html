@@ -1798,6 +1798,10 @@ function renderPlayerStats(keepFilter) {
     </div>
   `);
 
+  if (_psSearch) {
+    const inp = document.getElementById('ps-search-inp');
+    if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+  }
   if (_psPlayerId) loadPlayerStatEdit(_psPlayerId);
 }
 
