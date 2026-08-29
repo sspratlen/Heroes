@@ -2884,7 +2884,25 @@ function buildSponsorForm(s) {
 // ─── PAGE BUILDER ─────────────────────────────────────────
 function renderPageBuilder() {
   const data = loadData();
-  const layout = data.pageLayouts?.home || [];
+  // Seed default layout if none exists yet
+  if (!data.pageLayouts?.home?.length) {
+    const d = loadData();
+    if (!d.pageLayouts) d.pageLayouts = {};
+    if (!d.pageLayouts.home || !d.pageLayouts.home.length) {
+      d.pageLayouts.home = [
+        { id:'hero-default',           type:'hero',            visible:true,  settings:{} },
+        { id:'team-cards-default',     type:'team-cards',      visible:true,  settings:{} },
+        { id:'latest-results-default', type:'latest-results',  visible:true,  settings:{} },
+        { id:'upcoming-events-default',type:'upcoming-events', visible:true,  settings:{} },
+        { id:'stat-leaders-default',   type:'stat-leaders',    visible:true,  settings:{} },
+        { id:'news-feed-default',      type:'news-feed',       visible:true,  settings:{} },
+        { id:'awards-default',         type:'awards',          visible:true,  settings:{} },
+        { id:'sponsors-default',       type:'sponsors',        visible:true,  settings:{} },
+      ];
+      saveData(d);
+    }
+  }
+  const layout = loadData().pageLayouts?.home || [];
   const components = [
     { type:'hero', icon:'🏆', name:'Hero Banner', desc:'Big banner with team info & CTAs' },
     { type:'team-cards', icon:'⚾', name:'Team Cards', desc:'Grid of team cards with records' },
@@ -2985,7 +3003,7 @@ window.pbEditSection = function(idx) {
     saveData(d); closeModal(); renderPageBuilder(); toast('Section updated!');
   });
 };
-window.savePageLayout = function() { toast('Layout saved! ✓', 'success'); };
+window.savePageLayout = function() { toast('Layout saved! Changes appear on the public site immediately.', 'success'); };
 
 // ─── SETTINGS ─────────────────────────────────────────────
 function renderSettings() {

@@ -423,8 +423,9 @@ function renderHome() {
   const _curTotal = _curW + _curL;
   const _curPct = _curTotal ? (_curW/_curTotal).toFixed(3).replace(/^0/,'') : '.000';
 
-  App.render(`
-    <!-- HERO -->
+  // Section fragments — keyed by Page Builder type
+  const _sections = {
+    'hero': `
     <section id="hero">
       <div class="hero-bg-text">HEROES</div>
       <div class="hero-accent" aria-hidden="true"><img src="assets/img/hero_bg.png" alt=""></div>
@@ -461,9 +462,9 @@ function renderHome() {
           </div>
         </div>
       </div>
-    </section>
+    </section>`,
 
-    <!-- TEAMS -->
+    'team-cards': `
     <section class="section">
       <div class="container">
         <div class="section-header">
@@ -473,33 +474,33 @@ function renderHome() {
         </div>
         <div class="cards-grid cards-3">${teamCards}</div>
       </div>
-    </section>
+    </section>`,
 
-    <!-- RESULTS + SCHEDULE -->
+    'latest-results': `
     <section class="section section-light">
       <div class="container">
-        <div style="display:grid;grid-template-columns:1fr 320px;gap:32px">
-          <div>
-            <div class="section-header">
-              <div class="section-label">Results</div>
-              <h2>Latest <span>Results</span></h2>
-            </div>
-            <div class="game-list">${gameRows || '<p style="color:var(--gray)">No games recorded yet</p>'}</div>
-            <div style="margin-top:16px"><a class="btn btn-dark btn-sm" data-route="/schedule">View Full Schedule →</a></div>
-          </div>
-          <div>
-            <div class="section-header">
-              <div class="section-label">Calendar</div>
-              <h2>Upcoming <span>Events</span></h2>
-            </div>
-            ${eventsHtml || '<p style="color:var(--gray)">No upcoming events</p>'}
-            <div style="margin-top:16px"><a class="btn btn-dark btn-sm" data-route="/events">All Events →</a></div>
-          </div>
+        <div class="section-header">
+          <div class="section-label">Results</div>
+          <h2>Latest <span>Results</span></h2>
         </div>
+        <div class="game-list">${gameRows || '<p style="color:var(--gray)">No games recorded yet</p>'}</div>
+        <div style="margin-top:16px"><a class="btn btn-dark btn-sm" data-route="/schedule">View Full Schedule →</a></div>
       </div>
-    </section>
+    </section>`,
 
-    <!-- STAT LEADERS -->
+    'upcoming-events': `
+    <section class="section">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-label">Calendar</div>
+          <h2>Upcoming <span>Events</span></h2>
+        </div>
+        ${eventsHtml || '<p style="color:var(--gray)">No upcoming events</p>'}
+        <div style="margin-top:16px"><a class="btn btn-dark btn-sm" data-route="/events">All Events →</a></div>
+      </div>
+    </section>`,
+
+    'stat-leaders': `
     <section class="section section-dark">
       <div class="container">
         <div class="section-header" style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap">
@@ -522,9 +523,9 @@ function renderHome() {
         <div id="leaders-content" class="leaderboard-section">${leaders}</div>
         <div style="margin-top:24px;text-align:center"><a class="btn btn-gold" data-route="/stats">Full Stats & Leaderboards →</a></div>
       </div>
-    </section>
+    </section>`,
 
-    <!-- NEWS -->
+    'news-feed': `
     <section class="section">
       <div class="container">
         <div class="section-header">
@@ -534,9 +535,9 @@ function renderHome() {
         <div class="cards-grid cards-3">${newsItems}</div>
         <div style="margin-top:24px;text-align:center"><a class="btn btn-dark" data-route="/news">All News & Announcements →</a></div>
       </div>
-    </section>
+    </section>`,
 
-    <!-- AWARDS -->
+    'awards': `
     <section class="section section-light">
       <div class="container">
         <div class="section-header">
@@ -545,9 +546,9 @@ function renderHome() {
         </div>
         <div class="awards-grid">${awardsHtml}</div>
       </div>
-    </section>
+    </section>`,
 
-    <!-- SPONSORS -->
+    'sponsors': `
     <section class="section">
       <div class="container">
         <div class="section-header text-center">
@@ -558,8 +559,48 @@ function renderHome() {
         <div class="sponsors-row">${sponsorsHtml}</div>
         <div style="text-align:center;margin-top:8px"><a class="btn btn-sm btn-outline btn-dark" data-route="/sponsors">Become a Sponsor</a></div>
       </div>
-    </section>
-  `);
+    </section>`,
+  };
+
+  // Default combined results+schedule section (shown when no layout is configured)
+  const _defaultResultsSchedule = `
+    <section class="section section-light">
+      <div class="container">
+        <div style="display:grid;grid-template-columns:1fr 320px;gap:32px">
+          <div>
+            <div class="section-header">
+              <div class="section-label">Results</div>
+              <h2>Latest <span>Results</span></h2>
+            </div>
+            <div class="game-list">${gameRows || '<p style="color:var(--gray)">No games recorded yet</p>'}</div>
+            <div style="margin-top:16px"><a class="btn btn-dark btn-sm" data-route="/schedule">View Full Schedule →</a></div>
+          </div>
+          <div>
+            <div class="section-header">
+              <div class="section-label">Calendar</div>
+              <h2>Upcoming <span>Events</span></h2>
+            </div>
+            ${eventsHtml || '<p style="color:var(--gray)">No upcoming events</p>'}
+            <div style="margin-top:16px"><a class="btn btn-dark btn-sm" data-route="/events">All Events →</a></div>
+          </div>
+        </div>
+      </div>
+    </section>`;
+
+  let pageHtml;
+  if (layout.length > 0) {
+    // Page Builder is configured — render visible sections in layout order
+    pageHtml = layout
+      .filter(s => s.visible !== false)
+      .map(s => _sections[s.type] || '')
+      .join('');
+  } else {
+    // No layout configured — render default order with combined results+schedule
+    pageHtml = _sections['hero'] + _sections['team-cards'] + _defaultResultsSchedule +
+               _sections['stat-leaders'] + _sections['news-feed'] + _sections['awards'] + _sections['sponsors'];
+  }
+
+  App.render(pageHtml);
 }
 
 // ─── PAGE: TEAM ─────────────────────────────────────────────
