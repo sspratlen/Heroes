@@ -352,7 +352,7 @@ const StatCalc = {
 function getPlayerStats(playerId, filters = {}) {
   const data = loadData();
   let games = data.games;
-  if (filters.season) games = games.filter(g => g.season === filters.season);
+  if (filters.season) games = games.filter(g => (g.season+'') === (filters.season+''));
   if (filters.teamId) games = games.filter(g => g.teamId === filters.teamId);
   if (filters.dateFrom) games = games.filter(g => g.date >= filters.dateFrom);
   if (filters.dateTo) games = games.filter(g => g.date <= filters.dateTo);
