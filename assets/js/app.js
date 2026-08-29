@@ -170,8 +170,21 @@ const App = {
     document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
   },
   render(html) {
+    // Stop any running carousel timers before wiping the DOM
+    Object.keys(_carouselState).forEach(uid => {
+      clearInterval(_carouselState[uid]?.timer);
+    });
+    Object.keys(_carouselState).forEach(k => delete _carouselState[k]);
     this.main.innerHTML = html;
     this.initAnimations();
+    this.initCarousels();
+  },
+  initCarousels() {
+    this.main.querySelectorAll('[data-carousel]').forEach(el => {
+      const uid = el.dataset.carousel;
+      const total = parseInt(el.dataset.carouselTotal || '0', 10);
+      if (total > 1) window.carouselStart(uid, total);
+    });
   },
   toast(msg, type = 'success') {
     const t = document.createElement('div');
@@ -182,6 +195,114 @@ const App = {
     setTimeout(() => t.remove(), 3000);
   }
 };
+
+// ─── PHOTO CAROUSEL ────────────────────────────────────────────
+const _carouselState = {};
+
+window.carouselGoto = function(uid, idx) {
+  const state = _carouselState[uid];
+  if (!state) return;
+  const prev = state.idx;
+  if (prev === idx) return;
+
+  const prevSlide = document.getElementById(`${uid}-slide-${prev}`);
+  const prevThumb = document.getElementById(`${uid}-thumb-${prev}`);
+  if (prevSlide) { prevSlide.style.opacity = '0'; prevSlide.style.pointerEvents = 'none'; }
+  if (prevThumb) { prevThumb.style.opacity = '0.45'; prevThumb.style.outline = 'none'; prevThumb.style.transform = 'scale(1)'; }
+
+  const nextSlide = document.getElementById(`${uid}-slide-${idx}`);
+  const nextThumb = document.getElementById(`${uid}-thumb-${idx}`);
+  if (nextSlide) { nextSlide.style.opacity = '1'; nextSlide.style.pointerEvents = 'all'; }
+  if (nextThumb) { nextThumb.style.opacity = '1'; nextThumb.style.outline = '2px solid #fff'; nextThumb.style.transform = 'scale(1.08)'; }
+
+  const counter = document.getElementById(`${uid}-counter`);
+  if (counter) counter.textContent = `${idx + 1} / ${state.total}`;
+
+  const strip = document.getElementById(`${uid}-strip`);
+  if (strip && nextThumb) nextThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+
+  state.idx = idx;
+  clearInterval(state.timer);
+  state.timer = setInterval(() => window.carouselNav(uid, 1), 5000);
+};
+
+window.carouselNav = function(uid, dir) {
+  const state = _carouselState[uid];
+  if (!state) return;
+  window.carouselGoto(uid, (state.idx + dir + state.total) % state.total);
+};
+
+window.carouselStart = function(uid, total) {
+  if (_carouselState[uid]) clearInterval(_carouselState[uid].timer);
+  _carouselState[uid] = { idx: 0, total, timer: setInterval(() => window.carouselNav(uid, 1), 5000) };
+};
+
+function buildPhotoGallerySection(settings, data) {
+  const albumId = settings?.albumId;
+  const maxPhotos = Math.max(3, Math.min(parseInt(settings?.count || 20), 50));
+  const album = albumId ? (data.albums || []).find(a => a.id === albumId) : null;
+
+  if (!album) {
+    return `<section style="background:#0d0d0d;padding:60px 24px;text-align:center">
+      <div style="color:#555;font-size:14px">📷 Photo Gallery — no album selected.<br><span style="font-size:12px">Configure this section in the Page Builder to pick an album.</span></div>
+    </section>`;
+  }
+
+  const photos = (data.photos || []).filter(p => p.albumId === albumId).slice(0, maxPhotos);
+
+  if (!photos.length) {
+    return `<section style="background:#0d0d0d;padding:60px 24px;text-align:center">
+      <div style="color:#555;font-size:14px">📷 "${album.name}" has no photos yet.</div>
+    </section>`;
+  }
+
+  const uid = 'cs-' + albumId.replace(/[^a-z0-9]/gi, '');
+  const title = settings?.title || album.name;
+  const teamName = album.teamId ? (data.teams||[]).find(t=>t.id===album.teamId)?.shortName : null;
+  const dateLabel = album.date ? new Date(album.date+'T12:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}) : '';
+  const metaParts = [dateLabel, teamName].filter(Boolean);
+
+  const slides = photos.map((ph, i) => `
+    <div id="${uid}-slide-${i}" style="position:absolute;inset:0;opacity:${i===0?'1':'0'};transition:opacity 0.9s ease;pointer-events:${i===0?'all':'none'};will-change:opacity;">
+      <img src="${ph.url}" alt="${ph.caption||''}" style="width:100%;height:100%;object-fit:cover;display:block;">
+      <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,0.72) 0%,rgba(0,0,0,0.18) 40%,transparent 65%);"></div>
+      ${ph.caption ? `<div style="position:absolute;bottom:72px;left:0;right:0;padding:0 80px;color:#fff;font-size:15px;font-weight:500;text-shadow:0 1px 6px rgba(0,0,0,0.9);line-height:1.4">${ph.caption}</div>` : ''}
+    </div>`).join('');
+
+  const thumbs = photos.map((ph, i) => `
+    <div id="${uid}-thumb-${i}" onclick="carouselGoto('${uid}',${i})" style="flex-shrink:0;width:64px;height:48px;border-radius:5px;overflow:hidden;cursor:pointer;opacity:${i===0?'1':'0.45'};outline:${i===0?'2px solid #fff':'none'};outline-offset:2px;transform:${i===0?'scale(1.08)':'scale(1)'};transition:all 0.3s ease;">
+      <img src="${ph.url}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;">
+    </div>`).join('');
+
+  return `
+    <section style="background:#0a0a0a;overflow:hidden;">
+      <!-- Main slide area -->
+      <div data-carousel="${uid}" data-carousel-total="${photos.length}" style="position:relative;width:100%;aspect-ratio:16/9;max-height:580px;overflow:hidden;background:#111;cursor:pointer;" onclick="if(event.target===this||event.target.tagName==='IMG')carouselNav('${uid}',1)">
+        ${slides}
+
+        <!-- Arrows -->
+        <button onclick="event.stopPropagation();carouselNav('${uid}',-1)" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);z-index:20;background:rgba(0,0,0,0.52);backdrop-filter:blur(6px);color:#fff;border:1px solid rgba(255,255,255,0.18);border-radius:50%;width:46px;height:46px;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" onmouseover="this.style.background='rgba(0,0,0,0.82)'" onmouseout="this.style.background='rgba(0,0,0,0.52)'">‹</button>
+        <button onclick="event.stopPropagation();carouselNav('${uid}',1)"  style="position:absolute;right:14px;top:50%;transform:translateY(-50%);z-index:20;background:rgba(0,0,0,0.52);backdrop-filter:blur(6px);color:#fff;border:1px solid rgba(255,255,255,0.18);border-radius:50%;width:46px;height:46px;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" onmouseover="this.style.background='rgba(0,0,0,0.82)'" onmouseout="this.style.background='rgba(0,0,0,0.52)'">›</button>
+
+        <!-- Top bar -->
+        <div style="position:absolute;top:0;left:0;right:0;z-index:15;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(to bottom,rgba(0,0,0,0.55) 0%,transparent 100%);pointer-events:none;">
+          <div style="color:#fff;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;text-shadow:0 1px 4px rgba(0,0,0,0.8)">📷 ${title}</div>
+          <div id="${uid}-counter" style="color:#fff;font-size:12px;background:rgba(0,0,0,0.42);backdrop-filter:blur(4px);padding:4px 10px;border-radius:20px;border:1px solid rgba(255,255,255,0.15)">1 / ${photos.length}</div>
+        </div>
+      </div>
+
+      <!-- Thumbnail strip -->
+      <div id="${uid}-strip" style="background:#111;padding:10px 20px;display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;align-items:center;justify-content:${photos.length<=8?'center':'flex-start'};">
+        ${thumbs}
+      </div>
+
+      <!-- Footer -->
+      <div style="background:#0a0a0a;border-top:1px solid #1c1c1c;padding:13px 24px;display:flex;align-items:center;justify-content:space-between;">
+        <div style="color:#666;font-size:13px;">${[title, ...metaParts].join(' · ')} <span style="color:#444">· ${photos.length} photo${photos.length!==1?'s':''}</span></div>
+        <a data-route="/gallery" style="color:#e74c3c;font-size:12px;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;text-decoration:none;">View Gallery →</a>
+      </div>
+    </section>`;
+}
 
 // ─── HOME: SEASON LEADERS HELPERS ─────────────────────────────
 // Globally exposed so the inline <select onchange> handler can call it.
@@ -592,7 +713,10 @@ function renderHome() {
     // Page Builder is configured — render visible sections in layout order
     pageHtml = layout
       .filter(s => s.visible !== false)
-      .map(s => _sections[s.type] || '')
+      .map(s => {
+        if (s.type === 'photo-gallery') return buildPhotoGallerySection(s.settings || {}, data);
+        return _sections[s.type] || '';
+      })
       .join('');
   } else {
     // No layout configured — render default order with combined results+schedule
