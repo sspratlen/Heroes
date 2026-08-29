@@ -551,16 +551,21 @@ function renderDashboard() {
 }
 
 // ─── PLAYERS / ROSTER MANAGEMENT ─────────────────────────
-let _rosterTeamFilter = 'all';
+let _rosterTeamFilter = 'all', _pStatus = '', _pSort = 'number';
 
 function renderPlayers() {
   const data = loadData();
   const activeCount = data.players.filter(p => p.active).length;
 
-  // Players shown in current view
-  const viewPlayers = _rosterTeamFilter === 'all'
-    ? data.players
+  // Players shown in current view, with status filter + sort
+  let viewPlayers = _rosterTeamFilter === 'all'
+    ? [...data.players]
     : data.players.filter(p => p.teams.includes(_rosterTeamFilter));
+  if (_pStatus === 'active')   viewPlayers = viewPlayers.filter(p => p.active);
+  if (_pStatus === 'inactive') viewPlayers = viewPlayers.filter(p => !p.active);
+  viewPlayers.sort((a,b) => _pSort === 'name'
+    ? (a.lastName||'').localeCompare(b.lastName||'') || (a.firstName||'').localeCompare(b.firstName||'')
+    : (parseInt(a.number)||999) - (parseInt(b.number)||999));
 
   // Players NOT on the selected team (for quick-assign dropdown)
   const unassigned = _rosterTeamFilter === 'all' ? [] :
@@ -598,6 +603,21 @@ function renderPlayers() {
             ${t.shortName} (${cnt})
           </button>`;
         }).join('')}
+      </div>
+
+      <!-- Filter + sort bar -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;padding:8px 16px;background:#f9fafb;border-bottom:1px solid var(--border);align-items:center">
+        <select class="form-select" style="width:auto;min-width:120px" onchange="_pStatus=this.value;renderPlayers()">
+          <option value=""${_pStatus===''?' selected':''}>All Players</option>
+          <option value="active"${_pStatus==='active'?' selected':''}>Active only</option>
+          <option value="inactive"${_pStatus==='inactive'?' selected':''}>Inactive only</option>
+        </select>
+        <select class="form-select" style="width:auto;min-width:130px" onchange="_pSort=this.value;renderPlayers()">
+          <option value="number"${_pSort==='number'?' selected':''}>Sort by # Number</option>
+          <option value="name"${_pSort==='name'?' selected':''}>Sort by Last Name</option>
+        </select>
+        <span style="font-size:12px;color:var(--gray);margin-left:4px">${viewPlayers.length} player${viewPlayers.length!==1?'s':''}</span>
+        ${_pStatus?`<button class="btn btn-secondary btn-sm" onclick="_pStatus='';renderPlayers()">Clear</button>`:''}
       </div>
 
       <!-- Quick-assign bar (team view only) -->
@@ -1209,14 +1229,14 @@ function renderGames() {
   const teams = data.teams || [];
   const tournaments = data.tournaments || [];
 
-  const seasons = [...new Set(all.map(g=>g.season).filter(Boolean))].sort((a,b)=>b-a);
-  const tourneyOpts = [...new Set(all.map(g=>g.tournamentId).filter(Boolean))];
+  const seasons = [...new Set(all.map(g=>String(g.season||'')).filter(Boolean))].sort((a,b)=>b-a);
 
   let list = all.filter(g => {
-    if (_gTeam       && g.teamId !== _gTeam) return false;
-    if (_gSeason     && String(g.season) !== String(_gSeason)) return false;
-    if (_gResult     && gameResult(g) !== _gResult) return false;
-    if (_gTournament && g.tournamentId !== _gTournament) return false;
+    if (_gTeam   && g.teamId !== _gTeam) return false;
+    if (_gSeason && String(g.season) !== _gSeason) return false;
+    if (_gResult && gameResult(g) !== _gResult) return false;
+    if (_gTournament === '__tourney__' && !g.tournamentId) return false;
+    if (_gTournament === '__regular__' && g.tournamentId) return false;
     return true;
   });
 
@@ -1266,11 +1286,7 @@ function renderGames() {
       ${list.length===0?`<div style="text-align:center;padding:48px;color:var(--gray)">${all.length===0?'No games yet.':'No games match the current filters.'}</div>`:`
       <table class="admin-table" id="games-table">
         <thead><tr><th>Date</th><th>Team</th><th>Opponent</th><th>Tournament</th><th>Score</th><th>Result</th><th>Stats</th><th>Actions</th></tr></thead>
-        <tbody>${list.filter(g => {
-          if (_gTournament === '__tourney__') return !!g.tournamentId;
-          if (_gTournament === '__regular__') return !g.tournamentId;
-          return true;
-        }).map(g=>{
+        <tbody>${list.map(g=>{
           const team = teams.find(t=>t.id===g.teamId);
           const statCount = g.playerStats?.reduce((s,ps)=>s+(ps.ab>0?1:0),0)||0;
           const tourney = g.tournamentId ? tournaments.find(t=>t.id===g.tournamentId) : null;
@@ -1399,7 +1415,7 @@ function renderTournaments() {
   const all = data.tournaments || [];
 
   // Collect distinct seasons and teams for filter dropdowns
-  const seasons = [...new Set(all.map(t => t.season).filter(Boolean))].sort((a,b)=>b-a);
+  const seasons = [...new Set(all.map(t => String(t.season||'')).filter(Boolean))].sort((a,b)=>b-a);
   const teams   = data.teams || [];
 
   // Apply filters
