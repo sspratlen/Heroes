@@ -357,8 +357,8 @@ function buildPhotoGallerySection(settings, data) {
   #${uid}-track { animation:${uid}-mq ${marqueeDur}s linear infinite; }
   #${uid}-track:hover { animation-play-state:paused; }
 </style>
-<!-- Outer wrapper: heroes-consistent dark section with red accent -->
-<section style="background:linear-gradient(180deg,#0f1520 0%,#141b26 40%,#141b26 60%,#0f1520 100%);
+<!-- Outer wrapper: matches site dark widget sections -->
+<section style="background:#1C1C1C;
   border-top:3px solid #C8102E;border-bottom:1px solid rgba(200,16,46,0.18);
   padding:20px 0;">
 
