@@ -247,35 +247,36 @@ window.carouselStart = function(uid, total) {
 window.carouselNav  = function() {};
 window.carouselGoto = function() {};
 
-// bgMode=true renders the gallery as an absolutely-positioned background layer
-// (translucent fixed-tile grid behind page content) instead of an inline section.
-function buildPhotoGallerySection(settings, data, bgMode = false) {
+function buildPhotoGallerySection(settings, data) {
   const albumId   = settings?.albumId;
   const maxPhotos = Math.max(4, Math.min(parseInt(settings?.count || 30), 60));
   const album     = albumId ? (data.albums || []).find(a => a.id === albumId) : null;
 
-  const placeholder = bgMode ? '' : `
+  if (!album) return `
     <section style="background:#0d0d0d;padding:60px 24px;text-align:center">
       <div style="color:#444;font-size:14px">📷 Photo Gallery — no album selected.<br>
         <span style="font-size:12px;color:#333">Configure this section in the Page Builder.</span>
       </div>
     </section>`;
 
-  if (!album) return placeholder;
-
   const photos = (data.photos || []).filter(p => p.albumId === albumId).slice(0, maxPhotos);
-  if (!photos.length) return bgMode ? '' : `
+  if (!photos.length) return `
     <section style="background:#0d0d0d;padding:60px 24px;text-align:center">
       <div style="color:#444;font-size:14px">📷 "${album.name}" has no photos yet.</div>
     </section>`;
 
-  const uid   = 'cg-' + albumId.replace(/[^a-z0-9]/gi, '');
-  const title = settings?.title || album.name;
+  const uid      = 'cg-' + albumId.replace(/[^a-z0-9]/gi, '');
+  const title    = settings?.title || album.name;
   const teamName = album.teamId ? (data.teams||[]).find(t => t.id === album.teamId)?.shortName : null;
   const dateStr  = album.date ? new Date(album.date+'T12:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}) : '';
   const meta     = [dateStr, teamName].filter(Boolean).join(' · ');
 
-  // 6 float-animation variants — scale+rotate only so whole photo stays in frame
+  // How many slots to show (max 9 in a 3-col grid)
+  const slotCount   = Math.min(photos.length, 9);
+  const photoUrlsJson = JSON.stringify(photos.map(p => p.url));
+
+  // 6 float-animation variants — applied round-robin to slots
+  // Scale only (no translateY) so the whole photo stays in frame
   const floatAnims = [
     { name:'fg-a', kf:'0%,100%{transform:scale(1) rotate(0deg)} 50%{transform:scale(1.022) rotate(0.35deg)}',      dur:5.4, delay:0   },
     { name:'fg-b', kf:'0%,100%{transform:scale(1.018) rotate(-0.25deg)} 50%{transform:scale(1.0) rotate(0.2deg)}', dur:4.9, delay:-1.2},
@@ -284,41 +285,11 @@ function buildPhotoGallerySection(settings, data, bgMode = false) {
     { name:'fg-e', kf:'0%,100%{transform:scale(1.014) rotate(0.3deg)} 50%{transform:scale(1.002) rotate(-0.15deg)}',dur:4.6, delay:-3.0},
     { name:'fg-f', kf:'0%,100%{transform:scale(1.02) rotate(-0.1deg)} 50%{transform:scale(1.0) rotate(0.25deg)}',   dur:5.2, delay:-1.7},
   ];
-  const keyframes = floatAnims.map(a => `@keyframes ${a.name} { ${a.kf} }`).join('\n  ');
 
-  // ── BACKGROUND MODE ─────────────────────────────────────────
-  if (bgMode) {
-    // Fixed-height tiles (object-fit:cover) in a CSS grid — fills any height.
-    // Generate enough tiles to cover a tall page by cycling through photos.
-    const tileCount = Math.max(photos.length, 30);
-    const tiles = Array.from({ length: tileCount }, (_, i) => {
-      const ph = photos[i % photos.length];
-      const fa = floatAnims[i % floatAnims.length];
-      return `<div style="overflow:hidden;border-radius:4px;">
-        <img src="${ph.url}" alt="" loading="lazy"
-          style="width:100%;height:100%;object-fit:cover;display:block;transform-origin:center;
-            animation:${fa.name} ${fa.dur}s ease-in-out infinite;animation-delay:${fa.delay}s;">
-      </div>`;
-    }).join('');
+  const keyframes = floatAnims.map(a =>
+    `@keyframes ${a.name} { ${a.kf} }`).join('\n  ');
 
-    return `
-<style id="${uid}-css">
-  ${keyframes}
-  #${uid}-bg-grid {
-    display:grid;
-    grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
-    grid-auto-rows:200px;
-    gap:4px;
-  }
-  @media (max-width:600px) { #${uid}-bg-grid { grid-template-columns:repeat(2,1fr); grid-auto-rows:150px; } }
-</style>
-<div id="${uid}-bg-grid">${tiles}</div>`;
-  }
-
-  // ── INLINE MODE (default) ────────────────────────────────────
-  const slotCount     = Math.min(photos.length, 9);
-  const photoUrlsJson = JSON.stringify(photos.map(p => p.url));
-
+  // Each slot: clip wrapper with transition + floating img
   const slots = photos.slice(0, slotCount).map((ph, i) => {
     const fa = floatAnims[i % floatAnims.length];
     const safeAlt = (ph.caption || '').replace(/"/g, '&quot;');
@@ -345,6 +316,8 @@ function buildPhotoGallerySection(settings, data, bgMode = false) {
   @media (max-width: 400px) { #${uid}-grid { columns: 1; } }
 </style>
 <section style="background:#0a0a0a;overflow:hidden;">
+
+  <!-- Header -->
   <div style="padding:22px 22px 14px;display:flex;align-items:baseline;justify-content:space-between;gap:12px;">
     <div>
       <div style="color:#fff;font-size:20px;font-weight:900;letter-spacing:-0.02em;line-height:1.1;">${title}</div>
@@ -352,6 +325,8 @@ function buildPhotoGallerySection(settings, data, bgMode = false) {
     </div>
     <div style="color:#333;font-size:12px;white-space:nowrap;letter-spacing:0.03em;">${photos.length} photos</div>
   </div>
+
+  <!-- Masonry grid -->
   <div id="${uid}-grid"
     data-carousel="${uid}"
     data-carousel-total="${photos.length}"
@@ -360,6 +335,8 @@ function buildPhotoGallerySection(settings, data, bgMode = false) {
     style="padding:0 8px 8px;">
     ${slots}
   </div>
+
+  <!-- Footer -->
   <div style="padding:12px 22px 16px;display:flex;align-items:center;justify-content:space-between;
     border-top:1px solid #161616;">
     <div style="color:#2e2e2e;font-size:11px;letter-spacing:0.04em;text-transform:uppercase;">
@@ -779,45 +756,16 @@ function renderHome() {
 
   let pageHtml;
   if (layout.length > 0) {
-    const visible = layout.filter(s => s.visible !== false);
-
-    // Photo gallery renders as a translucent animated background behind all other sections
-    const gallerySection = visible.find(s => s.type === 'photo-gallery');
-    const galleryBgHtml  = gallerySection
-      ? buildPhotoGallerySection(gallerySection.settings || {}, data, true)
-      : '';
-
-    const contentHtml = visible
-      .filter(s => s.type !== 'photo-gallery')
-      .map(s => _sections[s.type] || '')
+    // Page Builder is configured — render visible sections in layout order
+    pageHtml = layout
+      .filter(s => s.visible !== false)
+      .map(s => {
+        if (s.type === 'photo-gallery') return buildPhotoGallerySection(s.settings || {}, data);
+        return _sections[s.type] || '';
+      })
       .join('');
-
-    if (galleryBgHtml) {
-      // Background layer: absolute, full coverage, translucent + dark veil
-      // Content layer: on top with semi-transparent section backgrounds
-      pageHtml = `
-<style id="home-bg-overlay-css">
-  #home-bg-wrap { position:relative; }
-  #home-bg-layer {
-    position:absolute; inset:0; overflow:hidden; z-index:0;
-    pointer-events:none; opacity:0.22;
-  }
-  #home-content-layer { position:relative; z-index:1; }
-  /* Let photo background bleed through section surfaces */
-  #home-content-layer section,
-  #home-content-layer .home-section {
-    background: rgba(10,10,10,0.82) !important;
-  }
-</style>
-<div id="home-bg-wrap">
-  <div id="home-bg-layer">${galleryBgHtml}</div>
-  <div id="home-content-layer">${contentHtml}</div>
-</div>`;
-    } else {
-      pageHtml = contentHtml;
-    }
   } else {
-    // No layout configured — render default order
+    // No layout configured — render default order with combined results+schedule
     pageHtml = _sections['hero'] + _sections['team-cards'] + _defaultResultsSchedule +
                _sections['stat-leaders'] + _sections['news-feed'] + _sections['awards'] + _sections['sponsors'];
   }
