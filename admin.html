@@ -1042,20 +1042,14 @@ window.sendOneInvite = async function(playerId, email, hasAccount) {
     const sb = _getClient();
     const redirectTo = window.location.origin + window.location.pathname.replace(/admin\.html$/, '') + 'index.html';
 
-    if (!hasAccount) {
-      // New user: OTP magic link creates the account and sends a login link in one step.
-      // Avoids the signUp→unconfirmed→resetPassword failure where Supabase rejects
-      // a recovery email sent to an account that hasn't confirmed its email yet.
-      const { error } = await sb.auth.signInWithOtp({
-        email,
-        options: { shouldCreateUser: true, emailRedirectTo: redirectTo }
-      });
-      if (error) throw error;
-    } else {
-      // Existing confirmed account: standard password reset link.
-      const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo });
-      if (error) throw error;
-    }
+    // Always use OTP magic link — works for new accounts, unconfirmed accounts,
+    // and confirmed accounts alike. resetPasswordForEmail fails on unconfirmed
+    // auth.users rows (e.g. from a prior failed invite attempt).
+    const { error } = await sb.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: true, emailRedirectTo: redirectTo }
+    });
+    if (error) throw error;
 
     if (statusCell) statusCell.innerHTML = '<span style="font-size:11px;font-weight:700;color:#16a34a">✓ Sent</span>';
   } catch(e) {
