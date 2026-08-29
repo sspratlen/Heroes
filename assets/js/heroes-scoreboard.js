@@ -541,32 +541,17 @@
       .sort((a, b) =>
         (a.startDate || a.date || '').localeCompare(b.startDate || b.date || ''));
 
-    // No events
-    if (!upcomingAll.length) {
-      App.render(`
-        <div class="mh-locked">
-          <div class="mh-locked-inner" style="text-align:center">
-            <div style="font-size:48px;margin-bottom:16px">📅</div>
-            <div class="mh-locked-eye">MY HEROES · PLAYER PORTAL</div>
-            <h2 class="mh-locked-title">No Upcoming Events</h2>
-            <p class="mh-locked-sub">No events are scheduled yet. Check back soon.</p>
-            ${isStaff ? '<div class="mh-locked-btns"><a href="admin.html" class="mh-btn-red" style="text-decoration:none">⚙ Admin Panel</a></div>' : ''}
-          </div>
-        </div>${MH_CSS}`);
-      return;
-    }
-
-    // Player identity for hero banner
+    // Player identity for hero banner (always shown for logged-in approved users)
     const fullName    = `${player.firstName||''} ${player.lastName||''}`.trim();
     const initials    = fullName.split(/\s+/).slice(0,2).map(w=>w[0]?.toUpperCase()||'').join('') || '?';
     const playerTeams = (player.teams||[]).map(tid=>data.teams.find(t=>t.id===tid)).filter(Boolean);
     const teamNamesStr = playerTeams.map(t=>t.shortName||t.name).join(' · ') || '';
     const teamColor    = playerTeams[0]?.color || '#C8102E';
 
-    // Next event for hero banner countdown
-    const nextEv    = upcomingAll[0];
-    const nextStart = nextEv.startDate || nextEv.date || '';
-    const nextDays  = daysUntil(nextStart);
+    // Next event for hero banner countdown (null when no events)
+    const nextEv    = upcomingAll[0] || null;
+    const nextStart = nextEv ? (nextEv.startDate || nextEv.date || '') : '';
+    const nextDays  = nextEv ? daysUntil(nextStart) : null;
 
     // Build one card per upcoming event
     const evCards = upcomingAll.map(ev => {
@@ -659,8 +644,9 @@
                 </div>
               </div>
 
+              ${upcomingAll.length ? `
               <h1 class="mh-ev-name">UPCOMING EVENTS</h1>
-              <div class="mh-ev-meta">${upcomingAll.length} event${upcomingAll.length !== 1 ? 's' : ''} scheduled · Next: ${nextEv.name}</div>
+              <div class="mh-ev-meta">${upcomingAll.length} event${upcomingAll.length !== 1 ? 's' : ''} scheduled · Next: ${nextEv ? nextEv.name : ''}</div>` : ''}
               <div class="mh-hero-actions">
                 <button onclick="myOpenPhotoPicker()" class="mh-chpw-btn">📷 Change Photo</button>
                 <button onclick="showEditProfileModal()" class="mh-chpw-btn">✏️ Edit Profile</button>
@@ -685,10 +671,17 @@
         </div>
 
         <!-- EVENT CARDS -->
+        ${upcomingAll.length ? `
         <div class="mh-ev-cards">
           <p class="mh-ev-hint">Tap your availability for each event — saves instantly.</p>
           ${evCards}
-        </div>
+        </div>` : `
+        <div style="text-align:center;padding:60px 20px;color:#888">
+          <div style="font-size:40px;margin-bottom:12px">📅</div>
+          <div style="font-size:15px;font-weight:700;color:#555;margin-bottom:6px">No Upcoming Events</div>
+          <div style="font-size:13px">No events are scheduled yet. Check back soon.</div>
+          ${isStaff ? '<div style="margin-top:20px"><a href="admin.html" style="display:inline-block;padding:10px 22px;background:#C8102E;color:#fff;border-radius:6px;font-size:13px;font-weight:800;text-decoration:none">⚙ Admin Panel</a></div>' : ''}
+        </div>`}
 
       </div>${MH_CSS}`);
   }
