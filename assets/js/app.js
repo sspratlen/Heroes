@@ -293,17 +293,33 @@ function buildPhotoGallerySection(settings, data) {
   // ~90px/s scroll speed — slow, cinematic
   const marqueeDur = Math.round(trackW / 90);
 
+  // Sprocket strip height — sits above and below the photo track
+  const SPROCKET_H = 18;
+  const TOTAL_H    = TILE_H + SPROCKET_H * 2;
+
   const tiles = allTiles.map((ph, i) => {
     const fa = floatAnims[i % floatAnims.length];
     return `<div style="flex-shrink:0;width:${TILE_W}px;height:${TILE_H}px;
-        border-radius:8px;overflow:hidden;position:relative;background:#0a0a0a;">
+        border-radius:3px;overflow:hidden;position:relative;background:#120e09;
+        border:1px solid #2a2218;box-shadow:0 0 0 1px #0a0806;">
       <img src="${ph.url}" alt="" loading="lazy"
         style="width:100%;height:100%;object-fit:contain;display:block;transform-origin:center center;
+          filter:sepia(0.18) contrast(1.06) brightness(0.9);
           animation:${fa.name} ${fa.dur}s ease-in-out infinite;animation-delay:${fa.delay}s;">
       <div style="position:absolute;inset:0;pointer-events:none;
-        background:linear-gradient(to top,rgba(0,0,0,0.3) 0%,transparent 50%);"></div>
+        background:linear-gradient(to top,rgba(0,0,0,0.35) 0%,transparent 50%);"></div>
     </div>`;
   }).join('');
+
+  // Sprocket strip: dark film-colored bar with punched holes via radial-gradient repeat
+  const sprocketStrip = (pos) =>
+    `<div style="position:absolute;${pos}:0;left:0;right:0;height:${SPROCKET_H}px;z-index:10;
+      pointer-events:none;
+      background-color:#0d0a06;
+      background-image:radial-gradient(circle,#000 42%,transparent 43%);
+      background-size:26px ${SPROCKET_H}px;
+      background-repeat:repeat-x;
+      background-position:6px center;"></div>`;
 
   return `
 <style id="${uid}-css">
@@ -312,29 +328,35 @@ function buildPhotoGallerySection(settings, data) {
   #${uid}-track { animation:${uid}-mq ${marqueeDur}s linear infinite; }
   #${uid}-track:hover { animation-play-state:paused; }
 </style>
-<section style="background:#0a0a0a;overflow:hidden;">
+<section style="background:#0d0a06;overflow:hidden;">
 
-  <!-- Compact header -->
-  <div style="padding:10px 20px 8px;display:flex;align-items:center;justify-content:space-between;">
+  <!-- Compact header — warm dark film tone -->
+  <div style="padding:10px 20px 8px;display:flex;align-items:center;justify-content:space-between;
+    border-bottom:1px solid #1e1810;">
     <div style="display:flex;align-items:baseline;gap:10px;">
-      <span style="color:#fff;font-size:13px;font-weight:900;letter-spacing:0.06em;text-transform:uppercase;">${title}</span>
-      ${meta ? `<span style="color:#444;font-size:11px;">${meta}</span>` : ''}
+      <span style="color:#d4b896;font-size:12px;font-weight:900;letter-spacing:0.08em;text-transform:uppercase;">🎞 ${title}</span>
+      ${meta ? `<span style="color:#4a3e2e;font-size:11px;">${meta}</span>` : ''}
     </div>
-    <a data-route="/gallery" style="color:#e74c3c;font-size:10px;font-weight:800;
+    <a data-route="/gallery" style="color:#c0855a;font-size:10px;font-weight:800;
       letter-spacing:0.08em;text-decoration:none;text-transform:uppercase;">View Gallery →</a>
   </div>
 
-  <!-- Filmstrip: edges dissolve via CSS mask, photos drift left continuously -->
-  <div style="position:relative;height:${TILE_H}px;overflow:hidden;
-    -webkit-mask-image:linear-gradient(to right,transparent 0%,#000 10%,#000 90%,transparent 100%);
-    mask-image:linear-gradient(to right,transparent 0%,#000 10%,#000 90%,transparent 100%);">
+  <!-- Film reel strip: sprocket holes top + bottom, photos scroll through the middle -->
+  <div style="position:relative;height:${TOTAL_H}px;overflow:hidden;
+    -webkit-mask-image:linear-gradient(to right,transparent 0%,#000 8%,#000 92%,transparent 100%);
+    mask-image:linear-gradient(to right,transparent 0%,#000 8%,#000 92%,transparent 100%);">
+
+    ${sprocketStrip('top')}
+    ${sprocketStrip('bottom')}
+
     <div id="${uid}-track"
-      style="display:flex;gap:${GAP}px;width:max-content;height:100%;align-items:center;">
+      style="display:flex;gap:${GAP}px;width:max-content;
+        height:${TILE_H}px;margin-top:${SPROCKET_H}px;align-items:center;">
       ${tiles}
     </div>
   </div>
 
-  <div style="height:10px;"></div>
+  <div style="height:4px;background:#0d0a06;"></div>
 </section>`;
 }
 
