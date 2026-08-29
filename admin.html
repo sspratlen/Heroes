@@ -1345,20 +1345,64 @@ function placementLabel(place) {
   return `#${place} Place`;
 }
 
+let _tSeason = '', _tTeam = '', _tSort = 'date-desc';
+
 function renderTournaments() {
   const data = loadData();
-  const tournaments = [...(data.tournaments||[])].sort((a,b)=>(b.startDate||'').localeCompare(a.startDate||''));
+  const all = data.tournaments || [];
+
+  // Collect distinct seasons and teams for filter dropdowns
+  const seasons = [...new Set(all.map(t => t.season).filter(Boolean))].sort((a,b)=>b-a);
+  const teams   = data.teams || [];
+
+  // Apply filters
+  let list = all.filter(t => {
+    if (_tSeason && String(t.season) !== String(_tSeason)) return false;
+    if (_tTeam   && t.teamId !== _tTeam) return false;
+    return true;
+  });
+
+  // Apply sort
+  list.sort((a, b) => {
+    switch (_tSort) {
+      case 'date-asc':  return (a.startDate||'').localeCompare(b.startDate||'');
+      case 'name':      return (a.name||'').localeCompare(b.name||'');
+      case 'placement': {
+        const rank = p => p==='1st'?1:p==='2nd'?2:p==='3rd'?3:p==='4th'?4:99;
+        return rank(a.placement) - rank(b.placement);
+      }
+      default:          return (b.startDate||'').localeCompare(a.startDate||'');
+    }
+  });
+
   setContent(`
     <div class="admin-table-wrap">
       <div class="admin-table-header">
-        <h3>Tournaments (${tournaments.length})</h3>
+        <h3>Tournaments (${list.length}${list.length!==all.length?' of '+all.length:''})</h3>
         <button class="btn btn-primary btn-sm" onclick="addTournament()">+ Add Tournament</button>
       </div>
-      ${tournaments.length === 0 ? `<div style="text-align:center;padding:48px;color:var(--gray)">No tournaments yet. Click "+ Add Tournament" to create one.</div>` : `
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+        <select class="form-select" style="width:auto;min-width:100px" onchange="_tSeason=this.value;renderTournaments()">
+          <option value="">All Years</option>
+          ${seasons.map(s=>`<option value="${s}"${String(_tSeason)===String(s)?' selected':''}>${s}</option>`).join('')}
+        </select>
+        <select class="form-select" style="width:auto;min-width:120px" onchange="_tTeam=this.value;renderTournaments()">
+          <option value="">All Teams</option>
+          ${teams.map(tm=>`<option value="${tm.id}"${_tTeam===tm.id?' selected':''}>${tm.shortName||tm.name}</option>`).join('')}
+        </select>
+        <select class="form-select" style="width:auto;min-width:140px" onchange="_tSort=this.value;renderTournaments()">
+          <option value="date-desc"${_tSort==='date-desc'?' selected':''}>Date (Newest)</option>
+          <option value="date-asc"${_tSort==='date-asc'?' selected':''}>Date (Oldest)</option>
+          <option value="name"${_tSort==='name'?' selected':''}>Name A–Z</option>
+          <option value="placement"${_tSort==='placement'?' selected':''}>Placement</option>
+        </select>
+        ${(_tSeason||_tTeam) ? `<button class="btn btn-secondary btn-sm" onclick="_tSeason='';_tTeam='';renderTournaments()">Clear</button>` : ''}
+      </div>
+      ${list.length === 0 ? `<div style="text-align:center;padding:48px;color:var(--gray)">${all.length===0?'No tournaments yet. Click "+ Add Tournament" to create one.':'No tournaments match the current filters.'}</div>` : `
       <table class="admin-table">
         <thead><tr><th>Tournament</th><th>Team</th><th>Dates</th><th>Games</th><th>Placement</th><th>Actions</th></tr></thead>
-        <tbody>${tournaments.map(t => {
-          const team  = data.teams.find(tm=>tm.id===t.teamId);
+        <tbody>${list.map(t => {
+          const team  = teams.find(tm=>tm.id===t.teamId);
           const games = (data.games||[]).filter(g=>g.tournamentId===t.id);
           const trophy = t.placement ? `<span style="font-size:18px">${tourneyTrophy(t.placement).trim()}</span> <strong>${placementLabel(t.placement)}</strong>` : '<span style="color:var(--gray);font-size:12px">Not set</span>';
           const dateStr = t.startDate && t.endDate && t.startDate!==t.endDate
