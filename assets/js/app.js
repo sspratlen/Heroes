@@ -319,7 +319,7 @@ function buildPhotoGallerySection(settings, data) {
       <div onclick="openFilmPhoto('${ph.albumId}','${ph.url.replace(/'/g,"\\'")}')"
           style="height:${TILE_H}px;overflow:hidden;position:relative;cursor:pointer;
           border:4px solid #ccc;box-shadow:0 2px 8px rgba(0,0,0,0.15);">
-        <img src="${ph.url}" alt="" loading="lazy"
+        <img src="${ph.url}" alt="" loading="eager"
           style="width:100%;height:100%;object-fit:contain;display:block;
             background:#f0f0f0;transform-origin:center center;
             animation:${fa.name} ${fa.dur}s ease-in-out infinite;animation-delay:${fa.delay}s;">
