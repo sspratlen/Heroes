@@ -78,6 +78,20 @@ const HeroesAuth = {
         this._renderSetPasswordForm();
         return;
       }
+      // Magic link / OTP invite: force the player to set a real password on first visit.
+      // Supabase puts type=magiclink in the URL hash when redirecting after OTP login.
+      if (event === 'SIGNED_IN') {
+        const hashParams = new URLSearchParams(window.location.hash.slice(1));
+        if (hashParams.get('type') === 'magiclink') {
+          if (session?.user) await this._loadProfile(session.user.id);
+          this.refreshNavAuth();
+          // Clean the auth tokens out of the URL before showing the form
+          window.history.replaceState(null, '', window.location.pathname + window.location.search + '#/');
+          this.showLoginModal();
+          this._renderSetPasswordForm({ firstLogin: true, magicLink: true });
+          return;
+        }
+      }
       if (session?.user) {
         await this._loadProfile(session.user.id);
       } else {
@@ -691,10 +705,12 @@ const HeroesAuth = {
     const inner = document.getElementById('auth-modal-inner');
     if (!inner) return;
     this._firstLogin = !!opts.firstLogin;
-    const title    = opts.firstLogin ? 'Choose Your Password' : 'Set New Password';
-    const subtitle = opts.firstLogin
-      ? 'Your admin set a temporary password. Pick a new one to finish signing in.'
-      : 'Choose a new password for your account';
+    const title    = opts.firstLogin ? 'Welcome to Heroes SSB!' : 'Set New Password';
+    const subtitle = opts.magicLink
+      ? 'Set a password so you can log in anytime.'
+      : opts.firstLogin
+        ? 'Your admin set a temporary password. Pick a new one to finish signing in.'
+        : 'Choose a new password for your account';
     // Make sure the modal overlay is visible, but don't re-render the login
     // form — that would clobber the password fields below.
     document.getElementById('heroes-login-modal')?.classList.add('open');
