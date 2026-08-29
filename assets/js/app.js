@@ -336,6 +336,7 @@ function buildPhotoGallerySection(settings, data) {
 
   <div style="height:10px;"></div>
 </section>`;
+}
 
 // ─── HOME: SEASON LEADERS HELPERS ─────────────────────────────
 // Globally exposed so the inline <select onchange> handler can call it.
