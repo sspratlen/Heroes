@@ -248,27 +248,41 @@ window.carouselNav  = function() {};
 window.carouselGoto = function() {};
 
 function buildPhotoGallerySection(settings, data) {
-  const albumId   = settings?.albumId;
   const maxPhotos = Math.max(4, Math.min(parseInt(settings?.count || 40), 60));
-  const album     = albumId ? (data.albums || []).find(a => a.id === albumId) : null;
 
-  if (!album) return `
+  // Support both new albumIds (array) and legacy albumId (single string)
+  const albumIds = settings?.albumIds?.length
+    ? settings.albumIds
+    : (settings?.albumId ? [settings.albumId] : []);
+
+  const albums = albumIds
+    .map(id => (data.albums || []).find(a => a.id === id))
+    .filter(Boolean);
+
+  if (!albums.length) return `
     <section style="background:#0d0d0d;padding:40px 24px;text-align:center">
       <div style="color:#444;font-size:14px">📷 Photo Gallery — no album selected.<br>
         <span style="font-size:12px;color:#333">Configure this section in the Page Builder.</span>
       </div>
     </section>`;
 
-  const photos = (data.photos || []).filter(p => p.albumId === albumId).slice(0, maxPhotos);
+  // Interleave photos from all albums, capped at maxPhotos
+  const photos = albumIds
+    .flatMap(id => (data.photos || []).filter(p => p.albumId === id))
+    .slice(0, maxPhotos);
+
   if (!photos.length) return `
     <section style="background:#0d0d0d;padding:40px 24px;text-align:center">
-      <div style="color:#444;font-size:14px">📷 "${album.name}" has no photos yet.</div>
+      <div style="color:#444;font-size:14px">📷 No photos in the selected album${albums.length!==1?'s':''}.</div>
     </section>`;
 
-  const uid      = 'cg-' + albumId.replace(/[^a-z0-9]/gi, '');
-  const title    = settings?.title || album.name;
-  const teamName = album.teamId ? (data.teams||[]).find(t => t.id === album.teamId)?.shortName : null;
-  const dateStr  = album.date ? new Date(album.date+'T12:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}) : '';
+  const album    = albums[0]; // primary album for uid / fallback meta
+  const uid      = 'cg-' + albumIds.join('').replace(/[^a-z0-9]/gi, '').slice(0, 20);
+  const title    = settings?.title || (albums.length === 1 ? album.name : `${albums.length} Albums`);
+  const teamName = albums.length === 1 && album.teamId
+    ? (data.teams||[]).find(t => t.id === album.teamId)?.shortName : null;
+  const dateStr  = albums.length === 1 && album.date
+    ? new Date(album.date+'T12:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}) : '';
   const meta     = [dateStr, teamName].filter(Boolean).join(' · ');
 
   // Ken Burns float variants for individual tiles
