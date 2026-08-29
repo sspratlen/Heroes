@@ -954,6 +954,16 @@ window.sendPlayerPasswordReset = async function(email, name) {
   if (!email) { toast('No email address on file for this player.', 'warning'); return; }
   try {
     const sb = _getClient();
+
+    // Verify the player has an auth account before attempting reset.
+    // resetPasswordForEmail returns "Error sending recovery email" for non-existent users.
+    const { data: profileRows } = await sb.from('profiles').select('email').eq('email', email).limit(1);
+    const hasAccount = (profileRows || []).length > 0;
+    if (!hasAccount) {
+      toast(`${name || email} doesn't have an account yet — use Send Invites to create one first.`, 'warning');
+      return;
+    }
+
     const origin = window.location.origin;
     const base = window.location.pathname.replace(/admin\.html$/, '');
     const { error } = await sb.auth.resetPasswordForEmail(email, {
