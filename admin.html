@@ -522,7 +522,7 @@ function renderDashboard() {
         <div class="stat-card-sub">${data.events.length} total</div>
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+    <div class="mobile-stack" style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
       <div class="admin-table-wrap">
         <div class="admin-table-header"><h3>Recent Games</h3><button class="btn btn-sm btn-secondary" onclick="showPage('games')">View All</button></div>
         <table class="admin-table">
@@ -1703,7 +1703,7 @@ function setTournamentPlacement(id) {
   const places = [1,2,3,4,5,6,7,8];
   openModal(`Set Placement — ${t?.name||''}`,
     `<p style="margin:0 0 16px;color:var(--text)">Select where your team finished in this tournament:</p>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <div class="mobile-stack" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       ${places.map(p=>`
         <button onclick="savePlacement('${id}',${p});closeModal()" style="
           padding:14px 10px;border-radius:10px;border:2px solid ${t?.placement===p?'var(--red)':'var(--border)'};
@@ -1769,7 +1769,7 @@ function renderStatsEntry(keepTeam) {
   }).join('') || '<p style="font-size:12px;color:var(--gray);padding:12px">No games found</p>';
 
   setContent(`
-    <div style="display:grid;grid-template-columns:300px 1fr;gap:20px">
+    <div class="mobile-stack" style="display:grid;grid-template-columns:300px 1fr;gap:20px">
       <div class="admin-table-wrap" style="height:fit-content">
         <div class="admin-table-header"><h3>Select Game</h3></div>
         ${teamBtns}
@@ -4155,7 +4155,7 @@ function escapeHtmlAdmin(s) {
 // ─── DATA MANAGEMENT ──────────────────────────────────────
 function renderData() {
   setContent(`
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+    <div class="mobile-stack" style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
       <div class="admin-form">
         <div class="admin-form-header"><h3>⬇ Export Data</h3></div>
         <div class="admin-form-body">
