@@ -118,12 +118,16 @@
     </div>
   </aside>
 
+  <!-- SIDEBAR BACKDROP (mobile only) -->
+  <div id="sidebar-backdrop" onclick="closeSidebar()"></div>
+
   <!-- MAIN -->
   <div id="admin-main">
     <div id="admin-topbar">
+      <button class="hamburger-btn" onclick="toggleSidebar()" aria-label="Open menu">☰</button>
       <div class="topbar-title" id="page-title">Dashboard <span>Overview</span></div>
       <div class="topbar-actions">
-        <button class="btn btn-sm btn-secondary" onclick="exportData()">⬇ Export Data</button>
+        <button class="btn btn-sm btn-secondary" id="topbar-export-btn" onclick="exportData()">⬇ Export Data</button>
         <button class="btn btn-sm btn-primary" id="topbar-add-btn" onclick="triggerAddNew()">+ Add New</button>
       </div>
     </div>
@@ -152,6 +156,21 @@
 <script src="assets/js/photo-picker.js"></script>
 <script>
 'use strict';
+
+// ─── MOBILE SIDEBAR ───────────────────────────────────────
+function toggleSidebar() {
+  document.getElementById('admin-layout').classList.toggle('sidebar-open');
+}
+function closeSidebar() {
+  document.getElementById('admin-layout').classList.remove('sidebar-open');
+}
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.sidebar-link').forEach(function(link) {
+    link.addEventListener('click', function() {
+      if (window.innerWidth <= 767) closeSidebar();
+    });
+  });
+});
 
 // ─── HELPERS ──────────────────────────────────────────────
 function gameResult(g) {
