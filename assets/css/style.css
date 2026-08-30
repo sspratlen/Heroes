@@ -896,6 +896,8 @@ button { cursor: pointer; border: none; font-family: inherit; font-size: inherit
   .hero-record { gap: 16px; }
   .section { padding: 40px 0; }
   .player-profile-inner { flex-direction: column; }
+  .hero-season-record { width: 100%; flex-wrap: wrap; gap: 10px; padding: 12px 16px; }
+  .hero-season-w, .hero-season-l { font-size: 34px; }
 }
 @media (max-width: 480px) {
   .hero-ctas { flex-direction: column; }
