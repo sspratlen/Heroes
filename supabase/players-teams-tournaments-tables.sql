@@ -117,7 +117,8 @@ DO $$ BEGIN
   ) THEN
     ALTER TABLE tournament_rsvps
       ADD CONSTRAINT fk_rsvps_tournament
-      FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE;
+      FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
+      NOT VALID;
   END IF;
 END $$;
 
