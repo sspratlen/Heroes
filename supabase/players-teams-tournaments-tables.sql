@@ -111,9 +111,15 @@ CREATE POLICY "admin write tournaments" ON tournaments
 
 -- ─── 7. FK: tournament_rsvps → tournaments ────────────────────
 -- tournament_rsvps.tournament_id is text; tournaments.id is text — compatible.
-ALTER TABLE tournament_rsvps
-  ADD CONSTRAINT IF NOT EXISTS fk_rsvps_tournament
-  FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE;
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'fk_rsvps_tournament'
+  ) THEN
+    ALTER TABLE tournament_rsvps
+      ADD CONSTRAINT fk_rsvps_tournament
+      FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE;
+  END IF;
+END $$;
 
 -- ─── 8. Expose new tables to Data API ─────────────────────────
 GRANT SELECT ON tournaments TO anon, authenticated;
