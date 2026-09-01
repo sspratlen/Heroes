@@ -1144,32 +1144,34 @@ window.sendOneInvite = async function(playerId, email, hasAccount) {
 
   try {
     const sb = _getClient();
+    const session = (await sb.auth.getSession()).data.session;
     const redirectTo = window.location.origin + window.location.pathname.replace(/admin\.html$/, '') + 'index.html';
 
-    // Try OTP magic link first (works for all account states).
-    // Fall back to signUp if OTP is disabled in the Supabase project.
-    const { error: otpErr } = await sb.auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: true, emailRedirectTo: redirectTo }
+    // Get display name from roster data
+    const data = loadData();
+    const player = data.players.find(p => p.id === playerId);
+    const displayName = player ? `${player.firstName} ${player.lastName}` : '';
+
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/invite-player`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${session?.access_token}`,
+      },
+      body: JSON.stringify({ email, displayName, redirectTo }),
     });
 
-    if (otpErr) {
-      // OTP may be disabled — fall back to signUp which sends a confirmation
-      // email the player clicks to set their password and gain access.
-      const player = loadData().players.find(p => p.id === playerId);
-      const displayName = player ? `${player.firstName} ${player.lastName}` : email.split('@')[0];
-      const tempPw = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2).toUpperCase() + '!1';
-      const { error: signUpErr } = await sb.auth.signUp({
-        email,
-        password: tempPw,
-        options: { data: { display_name: displayName, role: 'player' }, emailRedirectTo: redirectTo }
-      });
-      if (signUpErr && !signUpErr.message.toLowerCase().includes('already registered')) throw signUpErr;
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(err.error || 'Invite failed');
     }
 
-    if (statusCell) statusCell.innerHTML = '<span style="font-size:11px;font-weight:700;color:#16a34a">✓ Sent</span>';
-  } catch(e) {
-    if (statusCell) statusCell.innerHTML = `<span style="font-size:11px;color:#dc2626">✗ ${e.message || 'Error'}</span>`;
+    if (statusCell) statusCell.innerHTML = '<span style="font-size:11px;color:#16a34a;font-weight:700">✓ Sent!</span>';
+
+  } catch(err) {
+    if (statusCell) statusCell.innerHTML = `<span style="font-size:11px;color:#dc2626">✗ ${err.message || 'Error'}</span>`;
+    toast(`Failed to invite ${email}: ${err.message}`, 'danger');
   }
 };
 
@@ -3948,6 +3950,19 @@ async function approveProfile(profileId, grantRole) {
 
     const { error } = await sb.from('profiles').update(updates).eq('id', profileId);
     if (error) throw error;
+
+    // Fire-and-forget: notify the player they've been approved
+    try {
+      const { data: approvedProf } = await sb.from('profiles').select('email, display_name').eq('id', profileId).single();
+      if (approvedProf?.email) {
+        const session2 = (await sb.auth.getSession()).data.session;
+        fetch(`${SUPABASE_URL}/functions/v1/notify-player-approved`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${session2?.access_token}` },
+          body: JSON.stringify({ playerEmail: approvedProf.email, playerName: approvedProf.display_name, role: grantRole }),
+        }).catch(() => {});
+      }
+    } catch (_) {}
 
     if (matched) {
       toast(`✅ Account approved as ${grantRole} and linked to player ${matched.firstName} ${matched.lastName}!`);
