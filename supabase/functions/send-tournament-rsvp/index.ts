@@ -53,7 +53,7 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Forbidden' }, 403);
     }
 
-    const { tournament_id, name, start_date, end_date, location, team_id } = await req.json();
+    const { tournament_id, name, start_date, end_date, location, team_id, player_emails } = await req.json();
     if (!tournament_id || !name || !start_date || !team_id) {
       return json({ error: 'Missing required fields' }, 400);
     }
@@ -64,13 +64,24 @@ Deno.serve(async (req: Request) => {
       location: location || null, team_id,
     });
 
-    // Fetch all approved players/coaches/managers on this team
-    const { data: players } = await serviceClient
-      .from('profiles')
-      .select('id, email, display_name')
-      .eq('team_id', team_id)
-      .eq('approved', true)
-      .in('role', ['player', 'coach', 'manager']);
+    // Fetch players — by email list from localStorage roster when provided (team membership is
+    // stored client-side in localStorage p.teams[], not in profiles.team_id)
+    let players;
+    if (player_emails && player_emails.length > 0) {
+      const { data } = await serviceClient
+        .from('profiles')
+        .select('id, email, display_name')
+        .in('email', player_emails);
+      players = data;
+    } else {
+      const { data } = await serviceClient
+        .from('profiles')
+        .select('id, email, display_name')
+        .eq('team_id', team_id)
+        .eq('approved', true)
+        .in('role', ['player', 'coach', 'manager']);
+      players = data;
+    }
 
     if (!players || players.length === 0) {
       return json({ sent: 0, skipped: 'no players on team' });

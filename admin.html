@@ -1741,17 +1741,12 @@ async function sendTournamentRsvp(id, name, teamId, startDate, endDate, location
   const team = (data.teams || []).find(t => t.id === teamId);
   const teamName = team?.shortName || team?.name || 'the team';
 
+  // Roster membership is stored in localStorage (p.teams[]), not in Supabase profiles.team_id
+  const teamPlayers = (data.players || []).filter(p => p.active && (p.teams || []).includes(teamId) && p.email);
+  const playerEmails = teamPlayers.map(p => p.email.toLowerCase());
+  const playerCount = teamPlayers.length;
+
   const sb = _getClient();
-  let playerCount = '?';
-  try {
-    const { data: players, count } = await sb
-      .from('profiles')
-      .select('id', { count: 'exact' })
-      .eq('team_id', teamId)
-      .eq('approved', true)
-      .in('role', ['player', 'coach', 'manager']);
-    playerCount = count ?? (players ? players.length : '?');
-  } catch (_) {}
 
   openModal(
     'Send RSVP Request',
@@ -1778,6 +1773,7 @@ async function sendTournamentRsvp(id, name, teamId, startDate, endDate, location
           body: JSON.stringify({
             tournament_id: id, name, start_date: startDate,
             end_date: endDate || null, location: location || null, team_id: teamId,
+            player_emails: playerEmails,
           }),
         });
         const result = await res.json();
