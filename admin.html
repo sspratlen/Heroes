@@ -698,6 +698,7 @@ function renderPlayers() {
               <button class="action-btn action-edit" onclick="editPlayer('${p.id}')">Edit</button>
               ${_adminProfile?.role==='admin'?`<button class="action-btn" style="background:#ede9fe;color:#5b21b6;border:none" onclick="setPlayerRole('${p.id}')">Role</button>`:''}
               ${_rosterTeamFilter!=='all'?`<button class="action-btn action-delete" onclick="removeFromTeam('${p.id}','${_rosterTeamFilter}')">Remove</button>`:(p.active?`<button class="action-btn action-delete" onclick="deletePlayer('${p.id}')">Deactivate</button>`:`<button class="action-btn" style="background:#dcfce7;color:#15803d;border:none" onclick="reactivatePlayer('${p.id}')">ReActivate</button>`)}
+              ${_adminProfile?.role==='admin'?`<button class="action-btn action-delete" title="Permanently delete player" onclick="deletePlayerFull('${p.id}')">🗑️</button>`:''}
             </td>
           </tr>`).join('')}
         </tbody>
@@ -738,6 +739,73 @@ window.removeFromTeam = function(playerId, teamId) {
   d.players[idx].teams = d.players[idx].teams.filter(t => t !== teamId);
   saveData(d); renderPlayers(); toast('Player removed from roster');
 };
+
+async function deletePlayerFull(playerId) {
+  const d = loadData();
+  const p = d.players.find(x => x.id === playerId);
+  if (!p) return;
+
+  const fullName = `${p.firstName} ${p.lastName}`;
+  const sb = _getClient();
+
+  // Check whether they have a Supabase account
+  let hasDbAccount = false;
+  if (p.email) {
+    try {
+      const { data: profile } = await sb
+        .from('profiles')
+        .select('id')
+        .eq('email', p.email.toLowerCase())
+        .single();
+      hasDbAccount = !!profile;
+    } catch (_) {}
+  }
+
+  const dbWarning = hasDbAccount
+    ? `<div style="background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:12px 14px;margin:12px 0;font-size:13px;color:#7f1d1d;line-height:1.5">
+         ⚠️ <strong>${fullName} has a site account.</strong> Deleting will also remove their login, RSVP history, and all associated data from the database.
+       </div>`
+    : `<div style="background:#f3f4f6;border-radius:8px;padding:10px 14px;margin:12px 0;font-size:13px;color:#6b7280">
+         This player has no site account — only their roster entry will be removed.
+       </div>`;
+
+  openModal(
+    `Delete ${fullName}?`,
+    `<p style="font-size:15px;color:var(--text);margin:0">Permanently remove <strong>${fullName}</strong> from the roster?</p>
+     ${dbWarning}
+     <p style="font-size:13px;color:var(--gray);margin:0">This cannot be undone.</p>`,
+    'Permanently Delete',
+    async () => {
+      try {
+        // Delete DB account if they have one
+        if (hasDbAccount && p.email) {
+          const session = (await sb.auth.getSession()).data.session;
+          const res = await fetch(`${SUPABASE_URL}/functions/v1/delete-player`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${session?.access_token}`,
+            },
+            body: JSON.stringify({ email: p.email }),
+          });
+          const result = await res.json();
+          if (!res.ok) throw new Error(result.error || 'Failed to delete account');
+        }
+
+        // Remove from localStorage
+        const fresh = loadData();
+        fresh.players = fresh.players.filter(x => x.id !== playerId);
+        saveData(fresh);
+        closeModal();
+        renderPlayers();
+        toast(`${fullName} permanently deleted`);
+      } catch (e) {
+        toast(e.message || 'Error deleting player', 'error');
+      }
+    }
+  );
+}
 
 // ─── ROLE MANAGEMENT (admin only) ────────────────────────
 
