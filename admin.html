@@ -1542,10 +1542,18 @@ function placementLabel(place) {
 }
 
 let _tSeason = '', _tTeam = '', _tSort = 'date-desc';
+let _sentTournamentIds = new Set();
 
-function renderTournaments() {
+async function renderTournaments() {
   const data = loadData();
   const all = data.tournaments || [];
+  try {
+    const sb = _getClient();
+    if (sb) {
+      const { data: meta } = await sb.from('tournament_email_meta').select('tournament_id');
+      _sentTournamentIds = new Set((meta || []).map(m => m.tournament_id));
+    }
+  } catch (_) {}
 
   // Collect distinct seasons and teams for filter dropdowns
   const seasons = [...new Set(all.map(t => String(t.season||'')).filter(Boolean))].sort((a,b)=>b-a);
@@ -1612,6 +1620,11 @@ function renderTournaments() {
             <td style="display:flex;gap:4px;flex-wrap:wrap">
               <button class="action-btn action-edit" onclick="editTournament('${t.id}')">Edit</button>
               <button class="action-btn action-edit" onclick="setTournamentPlacement('${t.id}')">🏆 Place</button>
+              ${ADMIN_ROLES.includes(_adminProfile?.role) ? (
+                _sentTournamentIds.has(t.id)
+                  ? `<button class="action-btn action-edit" onclick="viewTournamentRsvp('${t.id}','${(t.name||'').replace(/'/g,"\\'")}')">📊 RSVP</button>`
+                  : `<button class="action-btn action-edit" onclick="sendTournamentRsvp('${t.id}','${(t.name||'').replace(/'/g,"\\'")}','${t.teamId||''}','${t.startDate||''}','${t.endDate||''}','${(t.location||'').replace(/'/g,"\\'")}')">📧 Send RSVP</button>`
+              ) : ''}
               <button class="action-btn action-delete" onclick="deleteTournament('${t.id}')">Del</button>
             </td>
           </tr>`;
@@ -1721,6 +1734,170 @@ function setTournamentPlacement(id) {
         Clear Placement
       </button>
     </div>`, null, null);
+}
+
+async function sendTournamentRsvp(id, name, teamId, startDate, endDate, location) {
+  const data = loadData();
+  const team = (data.teams || []).find(t => t.id === teamId);
+  const teamName = team?.shortName || team?.name || 'the team';
+
+  const sb = _getClient();
+  let playerCount = '?';
+  try {
+    const { data: players, count } = await sb
+      .from('profiles')
+      .select('id', { count: 'exact' })
+      .eq('team_id', teamId)
+      .eq('approved', true)
+      .in('role', ['player', 'coach', 'manager']);
+    playerCount = count ?? (players ? players.length : '?');
+  } catch (_) {}
+
+  openModal(
+    'Send RSVP Request',
+    `<p style="font-size:15px;line-height:1.6;color:var(--text);margin:0 0 16px">
+       Send an RSVP email to all players on <strong>${teamName}</strong> for:
+     </p>
+     <div style="background:var(--bg);border-left:4px solid var(--red);border-radius:0 8px 8px 0;padding:12px 16px;margin-bottom:16px">
+       <div style="font-weight:700;font-size:15px;color:var(--text)">${name}</div>
+       ${startDate ? `<div style="font-size:13px;color:var(--gray);margin-top:4px">📅 ${startDate}${endDate && endDate !== startDate ? ' – ' + endDate : ''}</div>` : ''}
+       ${location ? `<div style="font-size:13px;color:var(--gray);margin-top:2px">📍 ${location}</div>` : ''}
+     </div>
+     <p style="font-size:13px;color:var(--gray);margin:0">This will email approximately <strong>${playerCount} players</strong>. Players who already responded will keep their existing status.</p>`,
+    'Send RSVP Emails',
+    async () => {
+      try {
+        const session = (await sb.auth.getSession()).data.session;
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/send-tournament-rsvp`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({
+            tournament_id: id, name, start_date: startDate,
+            end_date: endDate || null, location: location || null, team_id: teamId,
+          }),
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || 'Failed to send');
+        closeModal();
+        _sentTournamentIds.add(id);
+        toast(`RSVP emails sent to ${result.sent} players ⚾`);
+        renderTournaments();
+      } catch (e) {
+        toast(e.message || 'Error sending RSVP emails', 'error');
+      }
+    }
+  );
+}
+
+async function viewTournamentRsvp(id, name) {
+  const sb = _getClient();
+
+  const { data: rsvps } = await sb
+    .from('tournament_rsvps')
+    .select('player_id, status, profiles(display_name)')
+    .eq('tournament_id', id);
+
+  const rows = rsvps || [];
+  const counts = { yes: 0, no: 0, maybe: 0, pending: 0 };
+  rows.forEach(r => { if (counts[r.status] !== undefined) counts[r.status]++; });
+
+  const pendingMaybe = counts.pending + counts.maybe;
+  const canOverride = ADMIN_ROLES.includes(_adminProfile?.role);
+
+  const statusBadge = s => {
+    const map = {
+      yes:     '<span style="background:#dcfce7;color:#16a34a;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700">✅ Yes</span>',
+      no:      '<span style="background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700">❌ No</span>',
+      maybe:   '<span style="background:#fef3c7;color:#d97706;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700">🤔 Maybe</span>',
+      pending: '<span style="background:#f3f4f6;color:#6b7280;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700">⏳ Pending</span>',
+    };
+    return map[s] || s;
+  };
+
+  const tableRows = rows.map(r => `
+    <tr>
+      <td style="padding:8px 0;font-size:14px">${r.profiles?.display_name || '—'}</td>
+      <td style="padding:8px 0">${statusBadge(r.status)}</td>
+      <td style="padding:8px 0">
+        ${canOverride ? `
+          <select style="font-size:12px;padding:3px 6px;border:1px solid #e5e7eb;border-radius:6px;background:#fff"
+            onchange="overrideRsvp('${id}','${r.player_id}',this.value)">
+            <option value="yes"${r.status==='yes'?' selected':''}>✅ Yes</option>
+            <option value="no"${r.status==='no'?' selected':''}>❌ No</option>
+            <option value="maybe"${r.status==='maybe'?' selected':''}>🤔 Maybe</option>
+            <option value="pending"${r.status==='pending'?' selected':''}>⏳ Pending</option>
+          </select>` : ''}
+      </td>
+    </tr>`).join('');
+
+  openModal(
+    `${name} — RSVP Status`,
+    `<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px">
+       <span style="font-size:14px;font-weight:700">✅ ${counts.yes} Yes</span>
+       <span style="font-size:14px;font-weight:700">❌ ${counts.no} No</span>
+       <span style="font-size:14px;font-weight:700">🤔 ${counts.maybe} Maybe</span>
+       <span style="font-size:14px;font-weight:700">⏳ ${counts.pending} Pending</span>
+     </div>
+     ${rows.length === 0 ? '<p style="color:var(--gray);font-size:14px">No responses yet.</p>' : `
+     <div style="overflow-x:auto">
+       <table style="width:100%;border-collapse:collapse">
+         <thead><tr>
+           <th style="text-align:left;font-size:12px;color:var(--gray);padding:0 0 8px;font-weight:700">Player</th>
+           <th style="text-align:left;font-size:12px;color:var(--gray);padding:0 0 8px;font-weight:700">Status</th>
+           ${canOverride ? '<th style="text-align:left;font-size:12px;color:var(--gray);padding:0 0 8px;font-weight:700">Override</th>' : ''}
+         </tr></thead>
+         <tbody>${tableRows}</tbody>
+       </table>
+     </div>`}
+     ${canOverride && pendingMaybe > 0 ? `
+     <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+       <button class="btn btn-secondary btn-sm" onclick="sendTournamentReminders('${id}')">
+         🔔 Resend Reminders (${pendingMaybe} pending/maybe)
+       </button>
+     </div>` : ''}`,
+    null, null
+  );
+}
+
+async function overrideRsvp(tournamentId, playerId, newStatus) {
+  try {
+    const sb = _getClient();
+    const { error } = await sb
+      .from('tournament_rsvps')
+      .update({ status: newStatus, responded_at: new Date().toISOString() })
+      .eq('tournament_id', tournamentId)
+      .eq('player_id', playerId);
+    if (error) throw error;
+    toast(`Status updated to ${newStatus}`);
+  } catch (e) {
+    toast(e.message || 'Error updating status', 'error');
+  }
+}
+
+async function sendTournamentReminders(tournamentId) {
+  try {
+    const sb = _getClient();
+    const session = (await sb.auth.getSession()).data.session;
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/send-tournament-reminders`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${session?.access_token}`,
+      },
+      body: JSON.stringify({ tournament_id: tournamentId }),
+    });
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.error || 'Failed');
+    closeModal();
+    toast(`Reminders sent to ${result.sent} players 🔔`);
+  } catch (e) {
+    toast(e.message || 'Error sending reminders', 'error');
+  }
 }
 
 window.savePlacement = function(id, place) {
