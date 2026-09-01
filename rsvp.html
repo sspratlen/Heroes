@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tournament RSVP · Heroes Senior Softball</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      background: #111;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: Arial, Helvetica, sans-serif;
+      padding: 24px 16px;
+    }
+
+    .rsvp-card {
+      background: #fff;
+      border-radius: 16px;
+      width: 100%;
+      max-width: 500px;
+      overflow: hidden;
+      box-shadow: 0 8px 40px rgba(0,0,0,.5);
+    }
+
+    .rsvp-header {
+      background: #C8102E;
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .rsvp-header img {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,.3);
+    }
+    .rsvp-header-text { color: #fff; }
+    .rsvp-header-text h1 { font-size: 16px; font-weight: 700; margin: 0; }
+    .rsvp-header-text p { font-size: 11px; margin: 2px 0 0; opacity: .7; text-transform: uppercase; letter-spacing: .08em; }
+
+    .rsvp-body { padding: 24px; }
+
+    .rsvp-loading {
+      text-align: center;
+      padding: 48px 0;
+      color: #aaa;
+      font-size: 14px;
+    }
+    .rsvp-spinner {
+      width: 32px; height: 32px;
+      border: 3px solid #e5e7eb;
+      border-top-color: #C8102E;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .rsvp-tournament-name { font-size: 18px; font-weight: 700; color: #111; margin-bottom: 6px; }
+    .rsvp-tournament-meta { font-size: 13px; color: #666; margin-bottom: 20px; line-height: 1.6; }
+
+    .rsvp-status-line {
+      background: #f8f8f8;
+      border-left: 4px solid #C8102E;
+      border-radius: 0 8px 8px 0;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      font-size: 15px;
+      font-weight: 700;
+      color: #111;
+    }
+
+    .rsvp-change {
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 24px;
+    }
+    .rsvp-change a {
+      color: #C8102E;
+      text-decoration: none;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .rsvp-change a:hover { text-decoration: underline; }
+
+    .rsvp-divider {
+      border: none;
+      border-top: 1px solid #e5e7eb;
+      margin: 0 0 20px;
+    }
+
+    .rsvp-roster-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: #888;
+      margin-bottom: 12px;
+    }
+
+    .rsvp-roster-list { list-style: none; }
+    .rsvp-roster-list li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #f0f0f0;
+      font-size: 14px;
+    }
+    .rsvp-roster-list li:last-child { border-bottom: none; }
+
+    .rsvp-badge {
+      font-size: 12px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+    }
+    .badge-yes     { background: #dcfce7; color: #16a34a; }
+    .badge-no      { background: #fee2e2; color: #dc2626; }
+    .badge-maybe   { background: #fef3c7; color: #d97706; }
+    .badge-pending { background: #f3f4f6; color: #6b7280; }
+
+    .rsvp-error {
+      text-align: center;
+      padding: 40px 24px;
+    }
+    .rsvp-error-icon { font-size: 40px; margin-bottom: 12px; }
+    .rsvp-error h2 { font-size: 18px; font-weight: 700; color: #111; margin-bottom: 8px; }
+    .rsvp-error p { font-size: 14px; color: #666; }
+
+    .rsvp-footer {
+      text-align: center;
+      padding: 14px;
+      background: #f8f8f8;
+      border-top: 1px solid #e5e7eb;
+      font-size: 12px;
+      color: #aaa;
+    }
+    .rsvp-footer a { color: #C8102E; text-decoration: none; }
+    .rsvp-footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<div class="rsvp-card">
+  <div class="rsvp-header">
+    <img src="assets/img/heroes-logo.jpg" alt="Heroes">
+    <div class="rsvp-header-text">
+      <h1>Heroes Senior Softball</h1>
+      <p>Tournament RSVP</p>
+    </div>
+  </div>
+  <div class="rsvp-body" id="rsvp-body">
+    <div class="rsvp-loading">
+      <div class="rsvp-spinner"></div>
+      Recording your response…
+    </div>
+  </div>
+  <div class="rsvp-footer">
+    <a href="index.html">heroesseniorsoftball.com</a>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="assets/js/data.js"></script>
+<script>
+  const params = new URLSearchParams(location.search);
+  const token    = params.get('token') || '';
+  const response = params.get('r') || '';
+
+  const STATUS_LABELS = { yes: '✅ Yes, I\'m in!', no: '❌ Can\'t make it', maybe: '🤔 Maybe' };
+  const STATUS_BADGES = { yes: 'badge-yes', no: 'badge-no', maybe: 'badge-maybe', pending: 'badge-pending' };
+  const STATUS_PENDING_LABEL = '⏳ Hasn\'t responded';
+
+  async function recordRsvp(t, r) {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/record-tournament-rsvp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({ token: t, response: r }),
+    });
+    return res.json();
+  }
+
+  function render(data) {
+    const body = document.getElementById('rsvp-body');
+    if (data.error) {
+      body.innerHTML = `
+        <div class="rsvp-error">
+          <div class="rsvp-error-icon">🔗</div>
+          <h2>Link not valid</h2>
+          <p>This RSVP link is expired or invalid. Contact your team admin.</p>
+        </div>`;
+      return;
+    }
+
+    const t = data.tournament || {};
+    const dateStr = t.end_date && t.end_date !== t.start_date
+      ? `${t.start_date} – ${t.end_date}` : (t.start_date || '');
+    const statusLabel = STATUS_LABELS[data.myStatus] || data.myStatus;
+
+    const changeLinks = ['yes','no','maybe']
+      .filter(r => r !== data.myStatus)
+      .map(r => `<a onclick="changeResponse('${r}')">${STATUS_LABELS[r]}</a>`)
+      .join(' · ');
+
+    const rosterItems = (data.roster || []).map(p => {
+      const badgeClass = STATUS_BADGES[p.status] || 'badge-pending';
+      const label = p.status === 'pending' ? STATUS_PENDING_LABEL : (STATUS_LABELS[p.status] || p.status);
+      return `<li><span>${p.name}</span><span class="rsvp-badge ${badgeClass}">${label}</span></li>`;
+    }).join('');
+
+    body.innerHTML = `
+      <div class="rsvp-tournament-name">${t.name || 'Tournament'}</div>
+      <div class="rsvp-tournament-meta">
+        ${dateStr ? `📅 ${dateStr}<br>` : ''}
+        ${t.location ? `📍 ${t.location}` : ''}
+      </div>
+      <div class="rsvp-status-line">You're marked as: ${statusLabel}</div>
+      <div class="rsvp-change">Change to: ${changeLinks}</div>
+      <hr class="rsvp-divider">
+      <div class="rsvp-roster-title">Team Response Summary</div>
+      <ul class="rsvp-roster-list">${rosterItems || '<li style="color:#aaa;font-size:13px">No responses yet</li>'}</ul>`;
+  }
+
+  async function changeResponse(r) {
+    document.getElementById('rsvp-body').innerHTML = `
+      <div class="rsvp-loading"><div class="rsvp-spinner"></div>Updating…</div>`;
+    const data = await recordRsvp(token, r);
+    render(data);
+  }
+
+  (async () => {
+    if (!token || !['yes','no','maybe'].includes(response)) {
+      document.getElementById('rsvp-body').innerHTML = `
+        <div class="rsvp-error">
+          <div class="rsvp-error-icon">🔗</div>
+          <h2>Link not valid</h2>
+          <p>Use one of the links from your RSVP email. Contact your team admin if you need help.</p>
+        </div>`;
+      return;
+    }
+    const data = await recordRsvp(token, response);
+    render(data);
+  })();
+</script>
+
+</body>
+</html>
