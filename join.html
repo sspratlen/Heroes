@@ -82,8 +82,14 @@
     const { data: { session } } = await sb.auth.getSession();
 
     if (!session) {
-      // New visitor — show registration form (auth.js handles form + submission + admin notification)
       HeroesAuth._renderRegisterForm();
+      // Customize the form for a welcome experience
+      const titleEl = document.querySelector('#auth-modal-inner .auth-modal-title');
+      const subtitleEl = document.querySelector('#auth-modal-inner .auth-modal-subtitle');
+      const cancelBtn = document.querySelector('#auth-modal-inner .auth-cancel-btn, #auth-modal-inner button.auth-secondary-btn');
+      if (titleEl) titleEl.textContent = 'Join the Heroes Family';
+      if (subtitleEl) subtitleEl.textContent = 'Fill out the quick form to become a fan or join the team.';
+      if (cancelBtn) cancelBtn.style.display = 'none';
       return;
     }
 
