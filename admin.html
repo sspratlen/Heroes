@@ -4463,13 +4463,6 @@ function renderData() {
         </div>
       </div>
       <div class="admin-form">
-        <div class="admin-form-header"><h3>☁️ Migrate Data to Database</h3></div>
-        <div class="admin-form-body">
-          <p style="color:var(--gray);font-size:14px;margin-bottom:16px">Push all players, teams, and tournaments from local storage into the Supabase relational tables. Run this once after setting up the database tables, or any time local data is ahead of the database.</p>
-          <button class="btn btn-primary" onclick="migrateDataToSupabase()">Migrate to Supabase</button>
-        </div>
-      </div>
-      <div class="admin-form">
         <div class="admin-form-header"><h3>📤 Deploy Instructions</h3></div>
         <div class="admin-form-body">
           <p style="color:var(--gray);font-size:14px;margin-bottom:10px">To deploy to GoDaddy or Namecheap:</p>
@@ -4485,22 +4478,6 @@ function renderData() {
     </div>
   `);
 }
-window.migrateDataToSupabase = async function() {
-  const data = loadData();
-  const players     = data.players     || [];
-  const teams       = data.teams       || [];
-  const tournaments = data.tournaments || [];
-  try {
-    await Promise.all([
-      _syncTeamsToSupabase(teams),
-      _syncTournamentsToSupabase(tournaments),
-    ]);
-    await _syncPlayersToSupabase(players);
-    toast(`Migrated ${teams.length} teams, ${players.length} players, ${tournaments.length} tournaments to Supabase.`);
-  } catch(e) {
-    toast('Migration failed: ' + e.message, 'error');
-  }
-};
 window.doImport = function() {
   const file = document.getElementById('import-file')?.files?.[0];
   if (!file) { toast('Select a file first', 'error'); return; }
