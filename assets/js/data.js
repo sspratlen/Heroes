@@ -452,7 +452,7 @@ const SUPABASE_URL     = 'https://mpgbgucmnxowteonldoh.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_qEfH752_O5r7F9pdKTalEA_B8P0LkV0';
 
 // Collections that get synced to Supabase
-const DB_COLLECTIONS = ['config','teams','players','games','events','news','awards','sponsors','accountRequests','pageLayouts','albums','photos'];
+const DB_COLLECTIONS = ['config','games','events','news','awards','sponsors','accountRequests','pageLayouts','albums','photos'];
 
 let _sb = null;
 function _getClient() {
@@ -493,6 +493,11 @@ function saveCollection(name, value) {
   const data = loadData();
   data[name] = value;
   localStorage.setItem('heroes_data', JSON.stringify(data));
+
+  if (name === 'players')     { _syncPlayersToSupabase(value);     return; }
+  if (name === 'teams')       { _syncTeamsToSupabase(value);        return; }
+  if (name === 'tournaments') { _syncTournamentsToSupabase(value);  return; }
+
   _pushCollectionToSupabase(name, value);
 }
 
@@ -530,6 +535,122 @@ async function _pushCollectionToSupabase(name, value) {
   }
 }
 
+async function _syncTeamsToSupabase(teams) {
+  const client = _getClient();
+  if (!client) return;
+  try {
+    const currentLegacyIds = teams.map(t => t.id);
+    const rows = teams.map(t => ({
+      legacy_id:         t.id,
+      name:              t.name,
+      short_name:        t.shortName        || '',
+      division:          t.division          || '',
+      age_group:         t.ageGroup          || null,
+      color:             t.color             || '',
+      manager:           t.manager           || '',
+      assistant_manager: t.assistantManager  || '',
+      updated_at:        new Date().toISOString(),
+    }));
+    const { error } = await client.from('teams').upsert(rows, { onConflict: 'legacy_id' });
+    if (error) { console.error('Supabase teams sync error:', error.message); return; }
+
+    const { data: existing } = await client.from('teams').select('legacy_id');
+    const toDelete = (existing || []).map(r => r.legacy_id).filter(lid => !currentLegacyIds.includes(lid));
+    for (const lid of toDelete) {
+      await client.from('teams').delete().eq('legacy_id', lid);
+    }
+  } catch(e) {
+    console.warn('Teams sync failed:', e.message);
+  }
+}
+
+async function _syncPlayersToSupabase(players) {
+  const client = _getClient();
+  if (!client) return;
+  try {
+    const playerRows = players.map(p => ({
+      legacy_id:  p.id,
+      first_name: p.firstName || '',
+      last_name:  p.lastName  || '',
+      number:     p.number ? parseInt(p.number, 10) : null,
+      position:   p.position  || '',
+      bats:       p.bats      || 'R',
+      throws:     p.throws    || 'R',
+      join_year:  p.joinYear  || null,
+      active:     p.active !== false,
+      photo:      p.photo     || '',
+      email:      p.email     || '',
+      updated_at: new Date().toISOString(),
+    }));
+    const { error: playerErr } = await client.from('players').upsert(playerRows, { onConflict: 'legacy_id' });
+    if (playerErr) { console.error('Supabase players sync error:', playerErr.message); return; }
+
+    const [{ data: playerUuids }, { data: teamUuids }] = await Promise.all([
+      client.from('players').select('id, legacy_id'),
+      client.from('teams').select('id, legacy_id'),
+    ]);
+    const legacyToPlayerUuid = {};
+    (playerUuids || []).forEach(p => { legacyToPlayerUuid[p.legacy_id] = p.id; });
+    const legacyToTeamUuid = {};
+    (teamUuids || []).forEach(t => { legacyToTeamUuid[t.legacy_id] = t.id; });
+
+    const affectedUuids = players.map(p => legacyToPlayerUuid[p.id]).filter(Boolean);
+    if (affectedUuids.length > 0) {
+      await client.from('player_teams').delete().in('player_id', affectedUuids);
+      const ptRows = [];
+      players.forEach(p => {
+        const playerUuid = legacyToPlayerUuid[p.id];
+        if (!playerUuid) return;
+        (p.teams || []).forEach(teamLegacyId => {
+          const teamUuid = legacyToTeamUuid[teamLegacyId];
+          if (teamUuid) ptRows.push({ player_id: playerUuid, team_id: teamUuid });
+        });
+      });
+      if (ptRows.length > 0) {
+        const { error: ptErr } = await client.from('player_teams').insert(ptRows);
+        if (ptErr) console.error('Supabase player_teams sync error:', ptErr.message);
+      }
+    }
+  } catch(e) {
+    console.warn('Players sync failed:', e.message);
+  }
+}
+
+async function _syncTournamentsToSupabase(tournaments) {
+  const client = _getClient();
+  if (!client) return;
+  try {
+    const { data: teamUuids } = await client.from('teams').select('id, legacy_id');
+    const legacyToTeamUuid = {};
+    (teamUuids || []).forEach(t => { legacyToTeamUuid[t.legacy_id] = t.id; });
+
+    const currentIds = tournaments.map(t => t.id);
+    const rows = tournaments.map(t => ({
+      id:         t.id,
+      name:       t.name,
+      team_id:    legacyToTeamUuid[t.teamId] || null,
+      start_date: t.startDate  || null,
+      end_date:   t.endDate    || null,
+      location:   t.location   || '',
+      season:     t.season     || null,
+      placement:  t.placement  || null,
+      notes:      t.notes      || '',
+    }));
+    if (rows.length > 0) {
+      const { error } = await client.from('tournaments').upsert(rows, { onConflict: 'id' });
+      if (error) console.error('Supabase tournaments sync error:', error.message);
+    }
+
+    const { data: existing } = await client.from('tournaments').select('id');
+    const toDelete = (existing || []).map(r => r.id).filter(id => !currentIds.includes(id));
+    for (const id of toDelete) {
+      await client.from('tournaments').delete().eq('id', id);
+    }
+  } catch(e) {
+    console.warn('Tournaments sync failed:', e.message);
+  }
+}
+
 // initData() — called once on app startup.
 // Pulls all collections from Supabase and merges into localStorage cache.
 // Falls back to localStorage (or HeroesData defaults) if offline.
@@ -557,6 +678,65 @@ async function initData() {
     const merged = { ...base, ...current };
     rows.forEach(row => { if (row.collection) merged[row.collection] = row.value; });
     if (!merged.accountRequests) merged.accountRequests = [];
+    if (!merged.tournaments)     merged.tournaments     = [];
+
+    // Fetch from relational tables (teams, players, player_teams, tournaments)
+    const [{ data: teamRows }, { data: playerRows }, { data: ptRows }, { data: tourneyRows }] =
+      await Promise.all([
+        client.from('teams').select('*'),
+        client.from('players').select('*'),
+        client.from('player_teams').select('player_id, team_id'),
+        client.from('tournaments').select('*'),
+      ]);
+
+    // Build UUID → legacy_id map for teams (used by player_teams and tournaments)
+    const teamUuidToLegacyId = {};
+    (teamRows || []).forEach(t => { if (t.id && t.legacy_id) teamUuidToLegacyId[t.id] = t.legacy_id; });
+
+    if (teamRows && teamRows.length > 0) {
+      merged.teams = teamRows.map(t => ({
+        id:               t.legacy_id || t.id,
+        name:             t.name,
+        shortName:        t.short_name        || '',
+        division:         t.division          || '',
+        ageGroup:         t.age_group,
+        color:            t.color             || '',
+        manager:          t.manager           || '',
+        assistantManager: t.assistant_manager || '',
+      }));
+    }
+
+    if (playerRows && playerRows.length > 0) {
+      merged.players = playerRows.map(p => ({
+        id:        p.legacy_id || p.id,
+        firstName: p.first_name,
+        lastName:  p.last_name,
+        number:    p.number != null ? String(p.number) : '',
+        position:  p.position || '',
+        teams:     (ptRows || []).filter(pt => pt.player_id === p.id).map(pt => teamUuidToLegacyId[pt.team_id] || pt.team_id),
+        bats:      p.bats    || 'R',
+        throws:    p.throws  || 'R',
+        joinYear:  p.join_year,
+        active:    p.active,
+        photo:     p.photo   || '',
+        email:     p.email   || '',
+      }));
+    }
+
+    if (tourneyRows && tourneyRows.length > 0) {
+      merged.tournaments = tourneyRows.map(t => ({
+        id:        t.id,
+        name:      t.name,
+        teamId:    teamUuidToLegacyId[t.team_id] || t.team_id || '',
+        startDate: t.start_date,
+        endDate:   t.end_date,
+        location:  t.location || '',
+        season:    t.season,
+        placement: t.placement || null,
+        notes:     t.notes    || '',
+      }));
+    }
+
     localStorage.setItem('heroes_data', JSON.stringify(merged));
     console.log('✓ Synced from Supabase');
   } catch(e) {
