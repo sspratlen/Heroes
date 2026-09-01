@@ -878,6 +878,18 @@ const HeroesAuth = {
       return;
     }
 
+    // Fire-and-forget: notify admins of the new registration
+    try {
+      const sb2 = _getClient();
+      const session2 = (await sb2.auth.getSession()).data.session;
+      const token2 = session2?.access_token || '';
+      fetch(`${SUPABASE_URL}/functions/v1/notify-new-registration`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${token2}` },
+        body: JSON.stringify({ playerName: displayName, playerEmail: email }),
+      }).catch(() => {}); // best-effort
+    } catch (_) {}
+
     // Success — show confirmation state
     const inner = document.getElementById('auth-modal-inner');
     if (inner) {
@@ -890,6 +902,176 @@ const HeroesAuth = {
             A team admin will review it shortly — you'll have access once approved.
           </p>
           <button class="auth-submit-btn" onclick="HeroesAuth.hideLoginModal()">Got it</button>
+        </div>`;
+    }
+  },
+
+  _renderOnboardingWizard(step) {
+    const inner = document.getElementById('auth-modal-inner');
+    if (!inner) return;
+
+    const steps = ['Your Name', 'Jersey & Position', 'Profile Photo'];
+    const pips = steps.map((label, i) => {
+      const active = i + 1 === step;
+      const done   = i + 1 < step;
+      const color  = done ? '#16a34a' : active ? '#C8102E' : '#d1d5db';
+      return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1">
+        <div style="width:28px;height:28px;border-radius:50%;background:${color};color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center">${done ? '✓' : i+1}</div>
+        <div style="font-size:10px;color:${active?'#C8102E':'#888'};font-weight:${active?700:400};white-space:nowrap">${label}</div>
+      </div>`;
+    }).join(`<div style="flex:1;height:2px;background:#e5e7eb;margin-top:14px;align-self:flex-start"></div>`);
+
+    const progressBar = `<div style="display:flex;align-items:flex-start;gap:0;margin-bottom:24px">${pips}</div>`;
+    const header = `
+      <div class="auth-modal-header">
+        <img src="assets/img/heroes-logo.jpg" alt="Heroes Logo" onerror="this.style.background='#C8102E';this.style.borderRadius='50%'">
+        <div>
+          <div class="auth-modal-title">Welcome to Heroes! ⚾</div>
+          <div class="auth-modal-subtitle">Let's set up your player profile — takes 30 seconds.</div>
+        </div>
+      </div>`;
+
+    let body = '';
+    if (step === 1) {
+      const current = this._profile?.display_name || '';
+      body = `
+        ${header}
+        ${progressBar}
+        <div class="auth-form-group">
+          <label class="auth-form-label" for="wiz-name">Your full name</label>
+          <input id="wiz-name" class="auth-form-input" type="text" value="${current.replace(/"/g,'&quot;')}" placeholder="First Last" autocomplete="name"
+                 onkeydown="if(event.key==='Enter')HeroesAuth._submitOnboardingStep(1)">
+        </div>
+        <div id="wiz-error" class="auth-form-error" aria-live="polite"></div>
+        <button class="auth-submit-btn" onclick="HeroesAuth._submitOnboardingStep(1)">Next →</button>
+        <button class="auth-secondary-btn" onclick="HeroesAuth._renderOnboardingWizard(2)">Skip</button>`;
+    } else if (step === 2) {
+      const jerseyVal = this._profile?.jersey_number || '';
+      const posVal    = this._profile?.position || '';
+      const positions = ['','P','C','1B','2B','3B','SS','OF','DH','UT'];
+      const opts = positions.map(p => `<option value="${p}" ${posVal===p?'selected':''}>${p||'Select…'}</option>`).join('');
+      body = `
+        ${header}
+        ${progressBar}
+        <div class="auth-form-group">
+          <label class="auth-form-label" for="wiz-jersey">Jersey number</label>
+          <input id="wiz-jersey" class="auth-form-input" type="text" value="${jerseyVal}" placeholder="e.g. 17" inputmode="numeric" style="max-width:120px"
+                 onkeydown="if(event.key==='Enter')document.getElementById('wiz-pos').focus()">
+        </div>
+        <div class="auth-form-group">
+          <label class="auth-form-label" for="wiz-pos">Primary position</label>
+          <select id="wiz-pos" class="auth-form-input" style="max-width:180px">${opts}</select>
+        </div>
+        <div id="wiz-error" class="auth-form-error" aria-live="polite"></div>
+        <button class="auth-submit-btn" onclick="HeroesAuth._submitOnboardingStep(2)">Next →</button>
+        <button class="auth-secondary-btn" onclick="HeroesAuth._renderOnboardingWizard(3)">Skip</button>`;
+    } else if (step === 3) {
+      body = `
+        ${header}
+        ${progressBar}
+        <div class="auth-form-group">
+          <label class="auth-form-label">Profile photo <span style="color:#888;font-weight:400">(optional)</span></label>
+          <div style="margin-bottom:12px">
+            <img id="wiz-photo-preview" src="${this._profile?.photo_url || ''}" alt=""
+                 style="width:72px;height:72px;border-radius:50%;object-fit:cover;background:#e5e7eb;display:${this._profile?.photo_url?'block':'none'}">
+          </div>
+          <input id="wiz-photo" type="file" accept="image/*" class="auth-form-input" style="padding:6px"
+                 onchange="HeroesAuth._previewPhoto(this)">
+          <div style="font-size:12px;color:#888;margin-top:6px">Max 5 MB. JPEG, PNG, or WebP.</div>
+        </div>
+        <div id="wiz-error" class="auth-form-error" aria-live="polite"></div>
+        <button class="auth-submit-btn" onclick="HeroesAuth._submitOnboardingStep(3)">Save & Finish</button>
+        <button class="auth-secondary-btn" onclick="HeroesAuth._finishOnboarding()">Skip</button>`;
+    }
+
+    inner.innerHTML = body;
+    setTimeout(() => inner.querySelector('input, select')?.focus(), 80);
+  },
+
+  _previewPhoto(input) {
+    const file = input.files?.[0];
+    if (!file) return;
+    const preview = document.getElementById('wiz-photo-preview');
+    if (preview) {
+      preview.src = URL.createObjectURL(file);
+      preview.style.display = 'block';
+    }
+  },
+
+  async _submitOnboardingStep(step) {
+    const errEl = document.getElementById('wiz-error');
+    if (errEl) errEl.textContent = '';
+    const sb = _getClient();
+    if (!sb || !this._profile?.id) { this._renderOnboardingWizard(step + 1); return; }
+
+    const btn = document.querySelector('#auth-modal-inner .auth-submit-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+    try {
+      if (step === 1) {
+        const nameEl = document.getElementById('wiz-name');
+        const name   = (nameEl?.value || '').trim();
+        if (!name) { if (errEl) errEl.textContent = 'Please enter your name.'; if (btn) { btn.disabled=false; btn.textContent='Next →'; } return; }
+        await sb.from('profiles').update({ display_name: name }).eq('id', this._profile.id);
+        this._profile.display_name = name;
+        this._renderOnboardingWizard(2);
+
+      } else if (step === 2) {
+        const jersey = (document.getElementById('wiz-jersey')?.value || '').trim();
+        const pos    = document.getElementById('wiz-pos')?.value || '';
+        const updates = {};
+        if (jersey) updates.jersey_number = jersey;
+        if (pos)    updates.position      = pos;
+        if (Object.keys(updates).length) {
+          await sb.from('profiles').update(updates).eq('id', this._profile.id);
+          Object.assign(this._profile, updates);
+        }
+        this._renderOnboardingWizard(3);
+
+      } else if (step === 3) {
+        const fileInput = document.getElementById('wiz-photo');
+        const file = fileInput?.files?.[0];
+        if (file) {
+          if (file.size > 5 * 1024 * 1024) {
+            if (errEl) errEl.textContent = 'File too large (max 5 MB).';
+            if (btn) { btn.disabled = false; btn.textContent = 'Save & Finish'; }
+            return;
+          }
+          const ext  = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+          const path = `${this._profile.id}/avatar.${ext}`;
+          const { error: upErr } = await sb.storage.from('profile-photos').upload(path, file, { upsert: true });
+          if (upErr) throw upErr;
+          const { data: urlData } = sb.storage.from('profile-photos').getPublicUrl(path);
+          const photoUrl = urlData?.publicUrl;
+          if (photoUrl) {
+            await sb.from('profiles').update({ photo_url: photoUrl }).eq('id', this._profile.id);
+            this._profile.photo_url = photoUrl;
+          }
+        }
+        await this._finishOnboarding();
+        return;
+      }
+    } catch (e) {
+      if (errEl) errEl.textContent = e?.message || 'Something went wrong. Please try again.';
+      if (btn) { btn.disabled = false; btn.textContent = step === 3 ? 'Save & Finish' : 'Next →'; }
+    }
+  },
+
+  async _finishOnboarding() {
+    const sb = _getClient();
+    if (sb && this._profile?.id) {
+      await sb.from('profiles').update({ onboarding_complete: true }).eq('id', this._profile.id).catch(() => {});
+      this._profile.onboarding_complete = true;
+    }
+    this.refreshNavAuth();
+    const inner = document.getElementById('auth-modal-inner');
+    if (inner) {
+      inner.innerHTML = `
+        <div class="auth-approval-state">
+          <div class="auth-approval-icon">⚾</div>
+          <h2 class="auth-approval-title">You're all set!</h2>
+          <p class="auth-approval-msg">Welcome to Heroes Senior Softball. Your profile is ready — a team admin will approve your account shortly.</p>
+          <button class="auth-submit-btn" onclick="HeroesAuth.hideLoginModal()">Let's Go</button>
         </div>`;
     }
   },
@@ -981,19 +1163,20 @@ const HeroesAuth = {
     const wasFirstLogin = this._firstLogin;
     this._firstLogin = false;
 
-    const inner = document.getElementById('auth-modal-inner');
-    if (inner) {
-      inner.innerHTML = `
-        <div class="auth-approval-state">
-          <div class="auth-approval-icon">✅</div>
-          <h2 class="auth-approval-title">Password Updated!</h2>
-          <p class="auth-approval-msg">${
-            wasFirstLogin
-              ? 'You\'re all set. You can now use the site.'
-              : 'Your password has been changed successfully.'
-          }</p>
-          <button class="auth-submit-btn" onclick="HeroesAuth.hideLoginModal()">Done</button>
-        </div>`;
+    if (wasFirstLogin) {
+      // Launch onboarding wizard instead of generic success screen
+      this._renderOnboardingWizard(1);
+    } else {
+      const inner = document.getElementById('auth-modal-inner');
+      if (inner) {
+        inner.innerHTML = `
+          <div class="auth-approval-state">
+            <div class="auth-approval-icon">✅</div>
+            <h2 class="auth-approval-title">Password Updated!</h2>
+            <p class="auth-approval-msg">Your password has been changed successfully.</p>
+            <button class="auth-submit-btn" onclick="HeroesAuth.hideLoginModal()">Done</button>
+          </div>`;
+      }
     }
 
     // Refresh the nav so the avatar/menu appears now that the first-login
