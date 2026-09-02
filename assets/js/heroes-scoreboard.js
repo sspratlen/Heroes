@@ -940,7 +940,7 @@
 .gm-spinner{width:22px;height:22px;border:2.5px solid #e5e7eb;border-top-color:#C8102E;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
 .gm-empty{text-align:center;padding:60px 20px;color:#888;font-size:14px}
 .gm-panes{display:flex;height:100%;overflow:hidden}
-.gm-groups-pane{width:280px;flex-shrink:0;overflow-y:auto;background:#fff;transition:width 0.22s ease}
+.gm-groups-pane{width:280px;flex-shrink:0;overflow-y:auto;background:#fff;transition:width 0.22s ease;overscroll-behavior:contain}
 .gm-groups-pane.gm-collapsed{width:0!important;overflow:hidden}
 .gm-panes-toggle{width:18px;flex-shrink:0;border:none;border-left:1px solid #e5e7eb;border-right:1px solid #e5e7eb;background:#f9fafb;color:#bbb;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;font-size:13px;font-weight:900;font-family:inherit}
 .gm-panes-toggle:hover{background:#f0f0f0;color:#555}
@@ -957,7 +957,7 @@
 .gm-thread-head{display:flex;align-items:center;gap:12px;padding:12px 16px;background:#fff;border-bottom:1px solid #e5e7eb;flex-shrink:0}
 .gm-back-btn{display:none;padding:6px 12px;background:transparent;border:1px solid #ddd;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;color:#555;font-family:inherit}
 .gm-thread-title{font-size:14px;font-weight:800;color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gm-msgs{flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+.gm-msgs{flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;overscroll-behavior:contain}
 .gm-msg{display:flex;gap:10px;align-items:flex-start}
 .gm-msg-av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;color:#fff;flex-shrink:0}
 .gm-msg-body{min-width:0}
@@ -1098,6 +1098,14 @@
           <div id="gm-popup-panel" style="flex:1;min-height:0;overflow:hidden"></div>
         </div>
       </div>`;
+    // Lock body scroll (iOS-safe: position:fixed + restore scroll on close)
+    const savedScrollY = window.scrollY;
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${savedScrollY}px`;
+    document.body.style.width = '100%';
+    overlay._savedScrollY = savedScrollY;
+
     document.body.appendChild(overlay);
 
     document.getElementById('gm-popup-backdrop').addEventListener('click', e => {
@@ -1110,7 +1118,15 @@
   window.closeGmChatPopup = function () {
     if (_gmPollTimer) { clearInterval(_gmPollTimer); _gmPollTimer = null; _gmCurrentGroupId = null; }
     _gmLastMessageId = null;
-    document.getElementById('gm-popup-overlay')?.remove();
+    const overlay = document.getElementById('gm-popup-overlay');
+    const savedScrollY = overlay?._savedScrollY || 0;
+    overlay?.remove();
+    // Restore body scroll and position
+    document.body.style.overflow = '';
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.width = '';
+    window.scrollTo(0, savedScrollY);
     gmSaveSeenIds();
     gmUpdateHomeBadge();
   };
