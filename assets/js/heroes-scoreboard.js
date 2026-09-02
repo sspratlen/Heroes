@@ -722,7 +722,12 @@
       if (!e.data?.groupmeToken) return;
       window.removeEventListener('message', onMsg);
       clearInterval(closedCheck);
-      saveGroupMeToken(e.data.groupmeToken).then(() => gmUpdateHomeBadge());
+      saveGroupMeToken(e.data.groupmeToken).then(async () => {
+        gmUpdateHomeBadge();
+        // If the chat popup is open, replace the connect card with the full chat UI
+        const popupPanel = document.getElementById('gm-popup-panel');
+        if (popupPanel) await renderChatInto(popupPanel);
+      });
     }
     window.addEventListener('message', onMsg);
 
@@ -1078,10 +1083,13 @@
       document.head.appendChild(s);
     }
 
-    const token = getGroupMeToken();
-    if (!token) { btn.style.display = 'none'; return; }
-
     btn.style.display = '';
+
+    const token = getGroupMeToken();
+    if (!token) {
+      if (badge) badge.hidden = true;
+      return;
+    }
 
     let groups;
     try { groups = await gmFetch('/groups?per_page=50&order=recent', token); }
