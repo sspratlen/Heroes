@@ -906,8 +906,7 @@
     _gmCurrentGroupId = null;
   };
 
-  async function renderChatTab() {
-    const panel = document.getElementById('mh-panel-chat');
+  async function renderChatInto(panel) {
     if (!panel) return;
     if (_gmPollTimer) { clearInterval(_gmPollTimer); _gmPollTimer = null; }
     _gmCurrentGroupId = null;
@@ -975,6 +974,108 @@
           </div>
         </div>
       </div>`;
+  }
+
+  async function renderChatTab() {
+    return renderChatInto(document.getElementById('mh-panel-chat'));
+  }
+
+  // ── Home page GroupMe chat popup ──────────────────────────────
+  window.openGmChatPopup = async function () {
+    const existing = document.getElementById('gm-popup-overlay');
+    if (existing) { existing.remove(); return; }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'gm-popup-overlay';
+    overlay.innerHTML = `
+      <div id="gm-popup-backdrop" style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9500;display:flex;align-items:center;justify-content:center;padding:16px">
+        <div id="gm-popup-box" style="background:#fff;border-radius:14px;width:100%;max-width:840px;height:78vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,0.35)">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid #e5e7eb;flex-shrink:0;background:#fff">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:30px;height:30px;background:#00AFF0;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px">💬</div>
+              <span style="font-size:16px;font-weight:800;color:#111">Team Chat</span>
+            </div>
+            <button onclick="closeGmChatPopup()"
+              style="width:32px;height:32px;border-radius:50%;border:1.5px solid #e5e7eb;background:transparent;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#555;font-family:inherit">✕</button>
+          </div>
+          <div id="gm-popup-panel" style="flex:1;min-height:0;overflow:hidden"></div>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    document.getElementById('gm-popup-backdrop').addEventListener('click', e => {
+      if (e.target.id === 'gm-popup-backdrop') closeGmChatPopup();
+    });
+
+    await renderChatInto(document.getElementById('gm-popup-panel'));
+  };
+
+  window.closeGmChatPopup = function () {
+    if (_gmPollTimer) { clearInterval(_gmPollTimer); _gmPollTimer = null; _gmCurrentGroupId = null; }
+    _gmLastMessageId = null;
+    document.getElementById('gm-popup-overlay')?.remove();
+    gmSaveSeenIds();
+    gmUpdateHomeBadge();
+  };
+
+  function gmSaveSeenIds() {
+    const token = getGroupMeToken();
+    if (!token) return;
+    const pane = document.getElementById('gm-groups-pane');
+    if (!pane) return;
+    try {
+      const seen = JSON.parse(localStorage.getItem('gm_seen_groups') || '{}');
+      pane.querySelectorAll('.gm-grp-row[data-gid]').forEach(row => {
+        seen[row.dataset.gid] = row.dataset.lastMsgId || seen[row.dataset.gid] || '';
+      });
+      localStorage.setItem('gm_seen_groups', JSON.stringify(seen));
+    } catch (_) {}
+  }
+
+  async function gmUpdateHomeBadge() {
+    const btn   = document.getElementById('gm-home-chat-btn');
+    const badge = document.getElementById('gm-home-badge');
+    if (!btn) return;
+
+    if (!document.getElementById('gm-global-css')) {
+      const s = document.createElement('style');
+      s.id = 'gm-global-css';
+      s.textContent = [
+        '.btn-gm-chat{background:#fff;border:2px solid #00AFF0;color:#00AFF0;font-weight:800;position:relative;cursor:pointer;font-family:inherit;font-size:inherit;border-radius:6px;padding:10px 22px;text-decoration:none;display:inline-flex;align-items:center;gap:6px}',
+        '.btn-gm-chat:hover{background:#f0fbff}',
+        '.gm-home-badge{background:#C8102E;color:#fff;border-radius:10px;min-width:18px;height:18px;font-size:11px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;margin-left:4px;line-height:1}',
+      ].join('');
+      document.head.appendChild(s);
+    }
+
+    const token = getGroupMeToken();
+    if (!token) { btn.style.display = 'none'; return; }
+
+    btn.style.display = '';
+
+    let groups;
+    try { groups = await gmFetch('/groups?per_page=50&order=recent', token); }
+    catch (_) { return; }
+    if (!Array.isArray(groups) || groups._unauthorized || groups._error) return;
+
+    let seen;
+    try { seen = JSON.parse(localStorage.getItem('gm_seen_groups') || '{}'); }
+    catch (_) { seen = {}; }
+
+    let unread = 0;
+    groups.forEach(g => {
+      const lastId = g.messages?.last_message_id || '';
+      if (lastId && lastId !== seen[g.id]) unread++;
+    });
+
+    if (badge) {
+      if (unread > 0) {
+        badge.hidden = false;
+        badge.textContent = unread > 9 ? '9+' : String(unread);
+      } else {
+        badge.hidden = true;
+      }
+    }
   }
 
   // ── Main render ─────────────────────────────────────────────
@@ -1391,6 +1492,7 @@
     .gm-send-err { font-size:12px; color:#dc2626; padding:4px 0; }
     .gm-refresh-btn { margin-left:auto; padding:5px 10px; background:transparent; border:1px solid #ddd; border-radius:6px; font-size:15px; cursor:pointer; color:#555; font-family:inherit; line-height:1; }
     .gm-refresh-btn:hover { background:#f3f4f6; }
+    #gm-popup-box .gm-panes { height:100%; }
 
     /* Responsive */
     @media (max-width:768px) {
@@ -1420,8 +1522,10 @@
   const origDispatch = Router.dispatch.bind(Router);
   Router.dispatch = function dispatchPatched() {
     if (_gmPollTimer) { clearInterval(_gmPollTimer); _gmPollTimer = null; _gmCurrentGroupId = null; }
+    document.getElementById('gm-popup-overlay')?.remove();
     origDispatch();
     setTimeout(updateTeamStripMeta, 0);
+    setTimeout(gmUpdateHomeBadge, 600);
   };
 
   console.info('[scoreboard] IA overlay active — 5 primary items + team strip + /my portal');

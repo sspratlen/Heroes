@@ -681,6 +681,9 @@ function renderHome() {
             <a class="btn btn-primary" data-route="/stats">📊 Season Stats</a>
             <a class="btn btn-outline" data-route="/schedule">View Schedule</a>
             <a class="btn btn-gold" href="${data.config.storeUrl}" target="_blank">🛒 Heroes Store</a>
+            <button class="btn btn-gm-chat" id="gm-home-chat-btn" onclick="openGmChatPopup()" style="display:none">
+              💬 Chat<span class="gm-home-badge" id="gm-home-badge" hidden></span>
+            </button>
           </div>
         </div>
       </div>
