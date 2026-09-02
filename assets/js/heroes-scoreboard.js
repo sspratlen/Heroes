@@ -1023,8 +1023,8 @@
     const overlay = document.createElement('div');
     overlay.id = 'gm-popup-overlay';
     overlay.innerHTML = `
-      <div id="gm-popup-backdrop" style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9500;display:flex;align-items:center;justify-content:center;padding:16px">
-        <div id="gm-popup-box" style="background:#fff;border-radius:14px;width:100%;max-width:840px;height:78vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,0.35)">
+      <div id="gm-popup-backdrop" style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9500;display:flex;flex-direction:column;padding:12px">
+        <div id="gm-popup-box" style="background:#fff;border-radius:14px;flex:1;width:100%;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,0.35)">
           <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid #e5e7eb;flex-shrink:0;background:#fff">
             <div style="display:flex;align-items:center;gap:10px">
               <div style="width:30px;height:30px;background:#00AFF0;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px">💬</div>
@@ -1079,6 +1079,7 @@
         '.btn-gm-chat{background:#fff;border:2px solid #00AFF0;color:#00AFF0;font-weight:800;position:relative;cursor:pointer;font-family:inherit;font-size:inherit;border-radius:6px;padding:10px 22px;text-decoration:none;display:inline-flex;align-items:center;gap:6px}',
         '.btn-gm-chat:hover{background:#f0fbff}',
         '.gm-home-badge{background:#C8102E;color:#fff;border-radius:10px;min-width:18px;height:18px;font-size:11px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;margin-left:4px;line-height:1}',
+        '@media(max-width:600px){#gm-popup-backdrop{padding:0 !important}#gm-popup-box{border-radius:0 !important}}',
       ].join('');
       document.head.appendChild(s);
     }
