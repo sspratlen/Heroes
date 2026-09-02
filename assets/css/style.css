@@ -287,7 +287,8 @@ button { cursor: pointer; border: none; font-family: inherit; font-size: inherit
 .hero-stat-num { font-size: 36px; font-weight: 900; color: var(--white); line-height: 1; }
 .hero-stat-label { font-size: 11px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
 .hero-stat-divider { width: 1px; background: rgba(255,255,255,0.15); }
-.hero-ctas { display: flex; gap: 12px; flex-wrap: nowrap; }
+.hero-ctas { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.hero-ctas .btn { width: 100%; justify-content: center; white-space: nowrap; }
 .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; border-radius: var(--radius); font-weight: 700; font-size: 14px; transition: var(--transition); cursor: pointer; border: none; }
 .btn-primary { background: var(--red); color: var(--white); }
 .btn-primary:hover { background: var(--red-dark); color: var(--white); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(200,16,46,0.4); }
@@ -900,7 +901,6 @@ button { cursor: pointer; border: none; font-family: inherit; font-size: inherit
   .hero-season-w, .hero-season-l { font-size: 34px; }
 }
 @media (max-width: 480px) {
-  .hero-ctas { flex-direction: column; }
   .tabs { flex-direction: column; border-bottom: none; }
   .tab-btn { border-bottom: 1px solid var(--gray-light); }
 }
