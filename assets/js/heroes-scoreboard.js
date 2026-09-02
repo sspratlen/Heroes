@@ -967,6 +967,7 @@
               </div>
             </div>`).join('')}
         </div>
+        <button class="gm-panes-toggle" id="gm-panes-toggle" onclick="gmToggleGroups()" title="Toggle groups list">‹</button>
         <div class="gm-thread-pane" id="gm-thread-pane">
           <div class="gm-thread-empty">
             <div style="font-size:40px;margin-bottom:12px">💬</div>
@@ -974,11 +975,29 @@
           </div>
         </div>
       </div>`;
+
+    // Restore collapsed state from localStorage
+    try {
+      if (localStorage.getItem('gm_groups_collapsed') === '1') {
+        document.getElementById('gm-groups-pane')?.classList.add('gm-collapsed');
+        const t = document.getElementById('gm-panes-toggle');
+        if (t) t.textContent = '›';
+      }
+    } catch (_) {}
   }
 
   async function renderChatTab() {
     return renderChatInto(document.getElementById('mh-panel-chat'));
   }
+
+  window.gmToggleGroups = function () {
+    const pane = document.getElementById('gm-groups-pane');
+    const btn  = document.getElementById('gm-panes-toggle');
+    if (!pane) return;
+    const collapsed = pane.classList.toggle('gm-collapsed');
+    if (btn) btn.textContent = collapsed ? '›' : '‹';
+    try { localStorage.setItem('gm_groups_collapsed', collapsed ? '1' : '0'); } catch (_) {}
+  };
 
   // ── Home page GroupMe chat popup ──────────────────────────────
   window.openGmChatPopup = async function () {
@@ -1459,7 +1478,10 @@
 
     .gm-panes { display:flex; height:calc(100vh - 280px); min-height:400px; overflow:hidden; }
 
-    .gm-groups-pane { width:280px; flex-shrink:0; border-right:1px solid #e5e7eb; overflow-y:auto; background:#fff; }
+    .gm-groups-pane { width:280px; flex-shrink:0; overflow-y:auto; background:#fff; transition:width 0.22s ease; }
+    .gm-groups-pane.gm-collapsed { width:0 !important; overflow:hidden; }
+    .gm-panes-toggle { width:18px; flex-shrink:0; border:none; border-left:1px solid #e5e7eb; border-right:1px solid #e5e7eb; background:#f9fafb; color:#bbb; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; font-size:13px; font-weight:900; font-family:inherit; }
+    .gm-panes-toggle:hover { background:#f0f0f0; color:#555; }
     .gm-grp-row { display:flex; align-items:center; gap:12px; padding:14px 16px; cursor:pointer; border-bottom:1px solid #f3f4f6; transition:background 0.1s; }
     .gm-grp-row:hover { background:#f9fafb; }
     .gm-grp-row.gm-grp-sel { background:#fef2f4; border-left:3px solid #C8102E; }
