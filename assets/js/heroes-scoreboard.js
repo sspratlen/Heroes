@@ -641,6 +641,7 @@
   // ── GroupMe state ─────────────────────────────────────────────
   let _gmPollTimer = null;
   let _gmCurrentGroupId = null;
+  let _gmCurrentDMUserId = null;
   let _gmLastMessageId = null;
 
   // ── GroupMe helpers ───────────────────────────────────────────
@@ -833,6 +834,7 @@
     if (!token) return;
     if (_gmPollTimer) { clearInterval(_gmPollTimer); _gmPollTimer = null; }
     _gmCurrentGroupId = groupId;
+    _gmCurrentDMUserId = null;
     _gmLastMessageId  = null;
 
     document.querySelectorAll('.gm-grp-row').forEach(r => r.classList.remove('gm-grp-sel'));
@@ -920,6 +922,144 @@
     document.getElementById('gm-thread-pane')?.classList.remove('gm-mobile-visible');
     if (_gmPollTimer) { clearInterval(_gmPollTimer); _gmPollTimer = null; }
     _gmCurrentGroupId = null;
+    _gmCurrentDMUserId = null;
+  };
+
+  // ── Direct Messages ───────────────────────────────────────────
+  async function gmLoadDMMessages(userId, token) {
+    const msgsEl = document.getElementById('gm-msgs');
+    if (!msgsEl) return;
+    let data;
+    try {
+      data = await gmFetch(`/direct_messages?other_user_id=${encodeURIComponent(userId)}&limit=20`, token);
+    } catch (err) {
+      msgsEl.innerHTML = '<div style="text-align:center;padding:40px;color:#dc2626;font-size:13px">Failed to load messages. Check your connection and try refreshing.</div>';
+      return;
+    }
+    if (data._unauthorized) { await clearGroupMeToken(); return; }
+    if (data._error) {
+      msgsEl.innerHTML = `<div style="text-align:center;padding:40px;color:#dc2626;font-size:13px">Error loading messages (${data._error}). Try refreshing.</div>`;
+      return;
+    }
+    const msgs = (data.direct_messages || []);
+    if (msgs.length === 0) {
+      msgsEl.innerHTML = '<div style="text-align:center;padding:40px;color:#888;font-size:13px">No messages yet. Send the first one!</div>';
+      return;
+    }
+    _gmLastMessageId = msgs[0].id;
+    msgsEl.innerHTML = [...msgs].reverse().map(gmRenderMsg).join('');
+    msgsEl.scrollTop = msgsEl.scrollHeight;
+  }
+
+  async function gmPollDMMessages(userId, token) {
+    if (!_gmLastMessageId) return;
+    let data;
+    try { data = await gmFetch(`/direct_messages?other_user_id=${encodeURIComponent(userId)}&since_id=${_gmLastMessageId}`, token); }
+    catch (_) { return; }
+    if (data._unauthorized) { clearInterval(_gmPollTimer); await clearGroupMeToken(); return; }
+    const msgs = data.direct_messages || [];
+    if (msgs.length === 0) return;
+    _gmLastMessageId = msgs[0].id;
+    const msgsEl = document.getElementById('gm-msgs');
+    if (!msgsEl) return;
+    const atBottom = msgsEl.scrollHeight - msgsEl.scrollTop <= msgsEl.clientHeight + 40;
+    [...msgs].reverse().forEach(m => { msgsEl.innerHTML += gmRenderMsg(m); });
+    if (atBottom) msgsEl.scrollTop = msgsEl.scrollHeight;
+  }
+
+  window.openGroupMeDM = async function (userId, userName) {
+    const token = getGroupMeToken();
+    if (!token) return;
+    if (_gmPollTimer) { clearInterval(_gmPollTimer); _gmPollTimer = null; }
+    _gmCurrentGroupId = null;
+    _gmCurrentDMUserId = userId;
+    _gmLastMessageId = null;
+
+    document.querySelectorAll('.gm-grp-row').forEach(r => r.classList.remove('gm-grp-sel'));
+    document.querySelector(`.gm-grp-row[data-uid="${userId}"]`)?.classList.add('gm-grp-sel');
+
+    const threadPane = document.getElementById('gm-thread-pane');
+    if (!threadPane) return;
+
+    const sendBox = threadPane.querySelector('.gm-send-box');
+    threadPane.innerHTML = `
+      <div class="gm-thread-head">
+        <button class="gm-back-btn" onclick="gmBackToGroups()">← Back</button>
+        <div class="gm-thread-title">${_escHtml(userName)}</div>
+        <button class="gm-refresh-btn" onclick="gmRefreshDM('${userId}')" title="Refresh messages">↻</button>
+      </div>
+      <div class="gm-msgs" id="gm-msgs"><div class="gm-loading"><div class="gm-spinner"></div></div></div>`;
+    if (sendBox) {
+      const inp = sendBox.querySelector('.gm-send-input');
+      const btn = sendBox.querySelector('.gm-send-btn');
+      if (inp) { inp.id = 'gm-send-input'; inp.placeholder = 'Send a message…'; inp.disabled = false; inp.style.opacity = ''; inp.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); gmSendDM(userId); } }; }
+      if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.style.cursor = ''; btn.onclick = () => gmSendDM(userId); }
+      threadPane.appendChild(sendBox);
+    } else {
+      const sb = document.createElement('div');
+      sb.className = 'gm-send-box';
+      sb.innerHTML = `<textarea class="gm-send-input" id="gm-send-input" placeholder="Send a message…" rows="1"></textarea><button class="gm-send-btn">Send</button>`;
+      sb.querySelector('.gm-send-input').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); gmSendDM(userId); } };
+      sb.querySelector('.gm-send-btn').onclick = () => gmSendDM(userId);
+      threadPane.appendChild(sb);
+    }
+
+    document.getElementById('gm-groups-pane')?.classList.add('gm-mobile-hidden');
+    threadPane.classList.add('gm-mobile-visible');
+
+    await gmLoadDMMessages(userId, token);
+
+    _gmPollTimer = setInterval(async () => {
+      if (_gmCurrentDMUserId !== userId) return;
+      const t = getGroupMeToken();
+      if (t) await gmPollDMMessages(userId, t);
+    }, 30000);
+  };
+
+  window.gmSendDM = async function (userId) {
+    const input = document.getElementById('gm-send-input');
+    const token = getGroupMeToken();
+    if (!input || !token) return;
+    const text = input.value.trim();
+    if (!text) return;
+
+    input.value = '';
+    input.disabled = true;
+
+    const profile = getHA()?.getProfile();
+    const name = profile?.display_name || 'Me';
+    const msgsEl = document.getElementById('gm-msgs');
+    if (msgsEl) {
+      msgsEl.innerHTML += gmRenderMsg({ name, user_id: 'me', text, created_at: Math.floor(Date.now() / 1000) });
+      msgsEl.scrollTop = msgsEl.scrollHeight;
+    }
+
+    const guid = Math.random().toString(36).slice(2) + Date.now();
+    const result = await gmPost('/direct_messages', token, {
+      direct_message: { source_guid: guid, recipient_id: userId, text },
+    });
+
+    input.disabled = false;
+    input.focus();
+
+    if (result._unauthorized) {
+      await clearGroupMeToken();
+    } else if (result._error) {
+      const errEl = document.createElement('div');
+      errEl.className = 'gm-send-err';
+      errEl.textContent = "Couldn't send. Try again.";
+      input.parentElement?.insertBefore(errEl, input);
+      setTimeout(() => errEl.remove(), 3000);
+    }
+  };
+
+  window.gmRefreshDM = async function (userId) {
+    const token = getGroupMeToken();
+    if (!token) return;
+    _gmLastMessageId = null;
+    const msgsEl = document.getElementById('gm-msgs');
+    if (msgsEl) msgsEl.innerHTML = '<div class="gm-loading"><div class="gm-spinner"></div></div>';
+    await gmLoadDMMessages(userId, token);
   };
 
   function ensureGmChatCSS() {
@@ -944,6 +1084,7 @@
 .gm-groups-pane.gm-collapsed{width:0!important;overflow:hidden}
 .gm-panes-toggle{width:18px;flex-shrink:0;border:none;border-left:1px solid #e5e7eb;border-right:1px solid #e5e7eb;background:#f9fafb;color:#bbb;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;font-size:13px;font-weight:900;font-family:inherit}
 .gm-panes-toggle:hover{background:#f0f0f0;color:#555}
+.gm-section-hdr{padding:8px 14px 4px;font-size:10px;font-weight:900;letter-spacing:.08em;color:#999;text-transform:uppercase;background:#fff;border-bottom:1px solid #ebebeb;position:sticky;top:0;z-index:1}
 .gm-grp-row{cursor:pointer;border-bottom:1px solid #ebebeb;transition:background 0.1s;overflow:hidden}
 .gm-grp-row:hover{background:#f5f5f5}
 .gm-grp-row.gm-grp-sel{background:#fef2f4;box-shadow:inset 3px 0 0 #C8102E}
@@ -995,6 +1136,7 @@
 .gm-hdr-btn{border-color:#3a3a3c!important;color:#aeaeb2!important}
 .gm-hdr-btn:hover{background:#2c2c2e!important}
 .gm-groups-pane{background:#2c2c2e!important;border-right-color:#3a3a3c!important}
+.gm-section-hdr{background:#2c2c2e!important;color:#6e6e73!important;border-bottom-color:#3a3a3c!important}
 .gm-panes-toggle{background:#1c1c1e!important;border-color:#3a3a3c!important;color:#6e6e73!important}
 .gm-grp-row{border-bottom-color:#3a3a3c!important}
 .gm-grp-row:hover{background:#3a3a3c!important}
@@ -1060,9 +1202,12 @@
       return;
     }
 
-    panel.innerHTML = '<div class="gm-loading"><div class="gm-spinner"></div> Loading groups…</div>';
+    panel.innerHTML = '<div class="gm-loading"><div class="gm-spinner"></div> Loading chats…</div>';
 
-    const groups = await gmFetch('/groups?per_page=50&order=recent', token);
+    const [groups, chats] = await Promise.all([
+      gmFetch('/groups?per_page=50&order=recent', token),
+      gmFetch('/chats?per_page=30', token).catch(() => []),
+    ]);
 
     if (groups._unauthorized) {
       await clearGroupMeToken();
@@ -1079,26 +1224,51 @@
       return;
     }
 
-    if (!Array.isArray(groups) || groups.length === 0) {
+    const groupList = Array.isArray(groups) ? groups : [];
+    const chatList  = Array.isArray(chats)  ? chats  : [];
+
+    if (groupList.length === 0 && chatList.length === 0) {
       panel.innerHTML = '<div class="gm-empty">You don\'t appear to be in any GroupMe groups yet.</div>';
       return;
     }
 
+    const groupsHTML = groupList.length === 0 ? '' : `
+      <div class="gm-section-hdr">Groups</div>
+      ${groupList.map(g => `
+        <div class="gm-grp-row" data-gid="${g.id}" data-gname="${_escHtml(g.name || '')}"
+            onclick="openGroupMeGroup(this.dataset.gid, this.dataset.gname)">
+          <div class="gm-grp-header" style="background:${_gmColor(g.id)}">${(g.name || '?')[0].toUpperCase()}</div>
+          <div class="gm-grp-body">
+            <div class="gm-grp-name">${_escHtml(g.name || '')}</div>
+            <div class="gm-grp-meta">${(g.members || []).length} members</div>
+            ${g.messages?.preview?.preview
+              ? `<div class="gm-grp-preview">${_escHtml((g.messages.preview.preview || '').substring(0, 60))}</div>`
+              : ''}
+          </div>
+        </div>`).join('')}`;
+
+    const dmsHTML = chatList.length === 0 ? '' : `
+      <div class="gm-section-hdr">Direct Messages</div>
+      ${chatList.map(c => {
+        const u = c.other_user || {};
+        const uid = String(u.id || '');
+        const uname = u.name || 'Unknown';
+        const preview = c.last_message?.text || '';
+        return `
+          <div class="gm-grp-row" data-uid="${uid}" data-uname="${_escHtml(uname)}"
+              onclick="openGroupMeDM(this.dataset.uid, this.dataset.uname)">
+            <div class="gm-grp-header" style="background:${_gmColor(uid)}">${uname[0]?.toUpperCase() || '?'}</div>
+            <div class="gm-grp-body">
+              <div class="gm-grp-name">${_escHtml(uname)}</div>
+              ${preview ? `<div class="gm-grp-preview">${_escHtml(preview.substring(0, 60))}</div>` : ''}
+            </div>
+          </div>`;
+      }).join('')}`;
+
     panel.innerHTML = `
       <div class="gm-panes">
         <div class="gm-groups-pane" id="gm-groups-pane">
-          ${groups.map(g => `
-            <div class="gm-grp-row" data-gid="${g.id}" data-gname="${_escHtml(g.name || '')}"
-                onclick="openGroupMeGroup(this.dataset.gid, this.dataset.gname)">
-              <div class="gm-grp-header" style="background:${_gmColor(g.id)}">${(g.name || '?')[0].toUpperCase()}</div>
-              <div class="gm-grp-body">
-                <div class="gm-grp-name">${_escHtml(g.name || '')}</div>
-                <div class="gm-grp-meta">${(g.members || []).length} members</div>
-                ${g.messages?.preview?.preview
-                  ? `<div class="gm-grp-preview">${_escHtml((g.messages.preview.preview || '').substring(0, 60))}</div>`
-                  : ''}
-              </div>
-            </div>`).join('')}
+          ${groupsHTML}${dmsHTML}
         </div>
         <button class="gm-panes-toggle" id="gm-panes-toggle" onclick="gmToggleGroups()" title="Toggle groups list">‹</button>
         <div class="gm-thread-pane" id="gm-thread-pane">
