@@ -785,6 +785,20 @@ function renderHome() {
         <div style="text-align:center;margin-top:8px"><a class="btn btn-sm btn-outline btn-dark" data-route="/sponsors">Become a Sponsor</a></div>
       </div>
     </section>`,
+
+    'my-upcoming-events': `
+    <section class="section section-light" id="my-events-section">
+      <div class="container">
+        <div class="section-header">
+          <div class="section-label">My Schedule</div>
+          <h2>My Upcoming <span>Events</span></h2>
+        </div>
+        <div id="my-events-content" style="text-align:center;padding:40px 20px;color:var(--gray);font-size:14px">
+          <div style="display:inline-block;width:22px;height:22px;border:2.5px solid #e5e7eb;border-top-color:#C8102E;border-radius:50%;animation:spin .7s linear infinite;margin-bottom:10px"></div>
+          <div>Loading your events…</div>
+        </div>
+      </div>
+    </section>`,
   };
 
   // Default combined results+schedule section (shown when no layout is configured)
@@ -829,7 +843,130 @@ function renderHome() {
   }
 
   App.render(pageHtml);
+
+  // Async-populate my-upcoming-events if it's in the layout
+  if (layout.some(s => s.visible !== false && s.type === 'my-upcoming-events')) {
+    window.renderMyUpcomingEvents('all');
+  }
 }
+
+// ─── MY UPCOMING EVENTS — async populate ─────────────────────
+window.renderMyUpcomingEvents = async function(filter) {
+  if (!document.getElementById('mue-css')) {
+    const s = document.createElement('style');
+    s.id = 'mue-css';
+    s.textContent = `
+      .mue-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+      .mue-filter{padding:7px 16px;border-radius:20px;border:1.5px solid #e5e7eb;background:#fff;color:#374151;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s}
+      .mue-filter:hover{border-color:#C8102E;color:#C8102E}
+      .mue-filter-on{background:#C8102E;border-color:#C8102E;color:#fff}
+      .mue-count{display:inline-block;background:rgba(0,0,0,.12);border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px}
+      .mue-filter-on .mue-count{background:rgba(255,255,255,.25)}
+      .mue-list{display:flex;flex-direction:column;gap:10px;text-align:left}
+      .mue-card{display:flex;align-items:center;gap:16px;padding:14px 18px;border-radius:10px;border:1.5px solid #e5e7eb;background:#fff;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+      .mue-card:hover{border-color:#C8102E;box-shadow:0 2px 8px rgba(200,16,46,.1)}
+      .mue-date-block{min-width:44px;text-align:center;line-height:1}
+      .mue-month{font-size:10px;font-weight:700;color:#C8102E;text-transform:uppercase;letter-spacing:.06em}
+      .mue-day{font-size:26px;font-weight:800;color:#111;line-height:1.1}
+      .mue-info{flex:1;min-width:0}
+      .mue-name{font-size:15px;font-weight:600;color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .mue-meta{font-size:12px;color:var(--gray,#6b7280);margin-top:2px}
+      .mue-badge{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;margin-top:5px}
+      .mue-yes{background:#dcfce7;color:#16a34a}
+      .mue-maybe{background:#fef3c7;color:#d97706}
+      .mue-arrow{color:#aaa;font-size:18px;flex-shrink:0}
+    `;
+    document.head.appendChild(s);
+  }
+
+  const el = document.getElementById('my-events-content');
+  if (!el) return;
+
+  const profile = window.getHA?.()?.getProfile?.();
+  const playerId = profile?.player_id;
+
+  if (!playerId) {
+    el.innerHTML = `<div style="padding:40px;text-align:center;color:var(--gray);font-size:14px">
+      Sign in to see your upcoming events.</div>`;
+    return;
+  }
+
+  const sb = _getClient();
+  if (!sb) { el.innerHTML = '<p style="color:var(--gray);padding:32px">Unable to connect.</p>'; return; }
+
+  const { data: rsvps } = await sb
+    .from('tournament_rsvps')
+    .select('tournament_id, status')
+    .eq('player_id', playerId)
+    .in('status', ['yes', 'maybe']);
+
+  const myRsvps = rsvps || [];
+  if (myRsvps.length === 0) {
+    el.innerHTML = `<div style="padding:40px;text-align:center;color:var(--gray);font-size:14px">
+      You haven't RSVP'd Yes or Maybe to any upcoming events yet.<br>
+      <a class="btn btn-sm btn-dark" data-route="/events" style="display:inline-block;margin-top:16px">Browse Events →</a></div>`;
+    App.bindLinks(el);
+    return;
+  }
+
+  const statusMap = Object.fromEntries(myRsvps.map(r => [r.tournament_id, r.status]));
+  const myIds = new Set(myRsvps.map(r => r.tournament_id));
+  const today = new Date().toISOString().split('T')[0];
+  const data = loadData();
+
+  const upcoming = (data.events || [])
+    .filter(ev => myIds.has(ev.id) && ev.date >= today)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const yesCount   = upcoming.filter(e => statusMap[e.id] === 'yes').length;
+  const maybeCount = upcoming.filter(e => statusMap[e.id] === 'maybe').length;
+  const active = filter || 'all';
+  const shown = active === 'all' ? upcoming : upcoming.filter(e => statusMap[e.id] === active);
+
+  if (upcoming.length === 0) {
+    el.innerHTML = `<div style="padding:40px;text-align:center;color:var(--gray);font-size:14px">
+      No upcoming events — check back after new tournaments are scheduled.<br>
+      <a class="btn btn-sm btn-dark" data-route="/events" style="display:inline-block;margin-top:16px">All Events →</a></div>`;
+    App.bindLinks(el);
+    return;
+  }
+
+  const filterBtn = (key, label, count) =>
+    `<button class="mue-filter${active===key?' mue-filter-on':''}" onclick="window.renderMyUpcomingEvents('${key}')">${label} <span class="mue-count">${count}</span></button>`;
+
+  const cards = shown.map(ev => {
+    const d = new Date(ev.date + 'T12:00:00');
+    const status = statusMap[ev.id];
+    const badge = status === 'yes'
+      ? '<span class="mue-badge mue-yes">✅ Going</span>'
+      : '<span class="mue-badge mue-maybe">🤔 Maybe</span>';
+    const thru = ev.endDate && ev.endDate !== ev.date
+      ? ` – ${new Date(ev.endDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}`
+      : '';
+    return `<div class="mue-card" data-route="/events" onclick="Router.dispatch('/events')">
+      <div class="mue-date-block">
+        <div class="mue-month">${d.toLocaleDateString('en-US',{month:'short'}).toUpperCase()}</div>
+        <div class="mue-day">${d.getDate()}</div>
+      </div>
+      <div class="mue-info">
+        <div class="mue-name">${ev.name || ''}</div>
+        <div class="mue-meta">${ev.location || ''}${thru}</div>
+        ${badge}
+      </div>
+      <div class="mue-arrow">→</div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="mue-filters">
+      ${filterBtn('all','All',upcoming.length)}
+      ${filterBtn('yes','✅ Going',yesCount)}
+      ${filterBtn('maybe','🤔 Maybe',maybeCount)}
+    </div>
+    ${shown.length ? `<div class="mue-list">${cards}</div>` : `<p style="color:var(--gray);padding:24px 0">No events match this filter.</p>`}
+    <div style="margin-top:16px"><a class="btn btn-sm btn-dark" data-route="/events">All Events →</a></div>`;
+  App.bindLinks(el);
+};
 
 // ─── PAGE: TEAM ─────────────────────────────────────────────
 function renderTeam(teamId) {
