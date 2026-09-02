@@ -985,76 +985,57 @@
   .gm-thread-pane.gm-mobile-visible{display:flex}
   .gm-back-btn{display:block}
 }
-@media(prefers-color-scheme:dark){
-  .gm-popup-box,.gm-popup-hdr{background:#1c1c1e}
-  .gm-popup-hdr{border-bottom-color:#3a3a3c}
-  .gm-popup-title{color:#f2f2f7}
-  .gm-hdr-btn{border-color:#3a3a3c;color:#aeaeb2}
-  .gm-hdr-btn:hover{background:#2c2c2e}
-  .gm-groups-pane{background:#2c2c2e;border-right-color:#3a3a3c}
-  .gm-panes-toggle{background:#1c1c1e;border-color:#3a3a3c;color:#6e6e73}
-  .gm-panes-toggle:hover{background:#2c2c2e;color:#aeaeb2}
-  .gm-grp-row{border-bottom-color:#3a3a3c}
-  .gm-grp-row:hover{background:#3a3a3c}
-  .gm-grp-row.gm-grp-sel{background:#3d1214;box-shadow:inset 3px 0 0 #C8102E}
-  .gm-grp-name{color:#f2f2f7}
-  .gm-grp-meta,.gm-grp-preview{color:#6e6e73}
-  .gm-thread-pane{background:#141414}
-  .gm-thread-empty{color:#6e6e73}
-  .gm-thread-head{background:#1c1c1e;border-bottom-color:#3a3a3c}
-  .gm-thread-title{color:#f2f2f7}
-  .gm-back-btn{border-color:#3a3a3c;color:#aeaeb2}
-  .gm-back-btn:hover{background:#2c2c2e}
-  .gm-refresh-btn{border-color:#3a3a3c;color:#aeaeb2}
-  .gm-refresh-btn:hover{background:#2c2c2e}
-  .gm-msg-name{color:#f2f2f7}
-  .gm-msg-time{color:#6e6e73}
-  .gm-msg-text{color:#d1d1d6}
-  .gm-send-box{background:#1c1c1e;border-top-color:#3a3a3c}
-  .gm-send-input{background:#2c2c2e;border-color:#3a3a3c;color:#f2f2f7}
-  .gm-send-input:focus{border-color:#C8102E}
-  .gm-send-input::placeholder{color:#6e6e73}
-}
-#gm-popup-box.gm-dark,#gm-popup-box.gm-dark .gm-popup-hdr{background:#1c1c1e}
-#gm-popup-box.gm-dark .gm-popup-hdr{border-bottom-color:#3a3a3c}
-#gm-popup-box.gm-dark .gm-popup-title{color:#f2f2f7}
-#gm-popup-box.gm-dark .gm-hdr-btn{border-color:#3a3a3c;color:#aeaeb2}
-#gm-popup-box.gm-dark .gm-hdr-btn:hover{background:#2c2c2e}
-#gm-popup-box.gm-dark .gm-groups-pane{background:#2c2c2e;border-right-color:#3a3a3c}
-#gm-popup-box.gm-dark .gm-panes-toggle{background:#1c1c1e;border-color:#3a3a3c;color:#6e6e73}
-#gm-popup-box.gm-dark .gm-panes-toggle:hover{background:#2c2c2e;color:#aeaeb2}
-#gm-popup-box.gm-dark .gm-grp-row{border-bottom-color:#3a3a3c}
-#gm-popup-box.gm-dark .gm-grp-row:hover{background:#3a3a3c}
-#gm-popup-box.gm-dark .gm-grp-row.gm-grp-sel{background:#3d1214;box-shadow:inset 3px 0 0 #C8102E}
-#gm-popup-box.gm-dark .gm-grp-name{color:#f2f2f7}
-#gm-popup-box.gm-dark .gm-grp-meta,#gm-popup-box.gm-dark .gm-grp-preview{color:#6e6e73}
-#gm-popup-box.gm-dark .gm-thread-pane{background:#141414}
-#gm-popup-box.gm-dark .gm-thread-empty{color:#6e6e73}
-#gm-popup-box.gm-dark .gm-thread-head{background:#1c1c1e;border-bottom-color:#3a3a3c}
-#gm-popup-box.gm-dark .gm-thread-title{color:#f2f2f7}
-#gm-popup-box.gm-dark .gm-back-btn{border-color:#3a3a3c;color:#aeaeb2}
-#gm-popup-box.gm-dark .gm-refresh-btn{border-color:#3a3a3c;color:#aeaeb2}
-#gm-popup-box.gm-dark .gm-msg-name{color:#f2f2f7}
-#gm-popup-box.gm-dark .gm-msg-time{color:#6e6e73}
-#gm-popup-box.gm-dark .gm-msg-text{color:#d1d1d6}
-#gm-popup-box.gm-dark .gm-send-box{background:#1c1c1e;border-top-color:#3a3a3c}
-#gm-popup-box.gm-dark .gm-send-input{background:#2c2c2e;border-color:#3a3a3c;color:#f2f2f7}
-#gm-popup-box.gm-dark .gm-send-input:focus{border-color:#C8102E}
-#gm-popup-box.gm-dark .gm-send-input::placeholder{color:#6e6e73}`;
+`;
     document.head.appendChild(s);
   }
 
+  const _GM_DARK_CSS = `.gm-popup-box,.gm-popup-hdr{background:#1c1c1e!important}
+.gm-popup-hdr{border-bottom-color:#3a3a3c!important}
+.gm-popup-title{color:#f2f2f7!important}
+.gm-hdr-btn{border-color:#3a3a3c!important;color:#aeaeb2!important}
+.gm-hdr-btn:hover{background:#2c2c2e!important}
+.gm-groups-pane{background:#2c2c2e!important;border-right-color:#3a3a3c!important}
+.gm-panes-toggle{background:#1c1c1e!important;border-color:#3a3a3c!important;color:#6e6e73!important}
+.gm-grp-row{border-bottom-color:#3a3a3c!important}
+.gm-grp-row:hover{background:#3a3a3c!important}
+.gm-grp-row.gm-grp-sel{background:#3d1214!important;box-shadow:inset 3px 0 0 #C8102E!important}
+.gm-grp-name{color:#f2f2f7!important}
+.gm-grp-meta,.gm-grp-preview{color:#6e6e73!important}
+.gm-thread-pane{background:#141414!important}
+.gm-thread-empty{color:#6e6e73!important}
+.gm-thread-head{background:#1c1c1e!important;border-bottom-color:#3a3a3c!important}
+.gm-thread-title{color:#f2f2f7!important}
+.gm-back-btn,.gm-refresh-btn{border-color:#3a3a3c!important;color:#aeaeb2!important}
+.gm-msg-name{color:#f2f2f7!important}
+.gm-msg-time{color:#6e6e73!important}
+.gm-msg-text{color:#d1d1d6!important}
+.gm-send-box{background:#1c1c1e!important;border-top-color:#3a3a3c!important}
+.gm-send-input{background:#2c2c2e!important;border-color:#3a3a3c!important;color:#f2f2f7!important}
+.gm-send-input::placeholder{color:#6e6e73!important}`;
+
+  function _gmSetDark(isDark) {
+    const existing = document.getElementById('gm-dark-css');
+    if (isDark && !existing) {
+      const s = document.createElement('style');
+      s.id = 'gm-dark-css';
+      s.textContent = _GM_DARK_CSS;
+      document.head.appendChild(s);
+    } else if (!isDark && existing) {
+      existing.remove();
+    }
+    const btn = document.getElementById('gm-dark-toggle');
+    if (btn) btn.textContent = isDark ? '☀️' : '🌙';
+    try { localStorage.setItem('gm-dark', isDark ? '1' : '0'); } catch (_) {}
+  }
+
   function _gmApplySavedDark() {
+    let isDark = false;
     try {
       const saved = localStorage.getItem('gm-dark');
-      if (saved === null) return;
-      const box = document.getElementById('gm-popup-box');
-      const btn = document.getElementById('gm-dark-toggle');
-      if (!box) return;
-      const isDark = saved === '1';
-      box.classList.toggle('gm-dark', isDark);
-      if (btn) btn.textContent = isDark ? '☀️' : '🌙';
+      isDark = saved !== null ? saved === '1'
+        : (window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false);
     } catch (_) {}
+    _gmSetDark(isDark);
   }
 
   async function renderChatInto(panel) {
@@ -1187,12 +1168,7 @@
     _gmApplySavedDark();
 
     document.getElementById('gm-dark-toggle')?.addEventListener('click', () => {
-      const box = document.getElementById('gm-popup-box');
-      const btn = document.getElementById('gm-dark-toggle');
-      if (!box) return;
-      const isDark = box.classList.toggle('gm-dark');
-      if (btn) btn.textContent = isDark ? '☀️' : '🌙';
-      try { localStorage.setItem('gm-dark', isDark ? '1' : '0'); } catch (_) {}
+      _gmSetDark(!document.getElementById('gm-dark-css'));
     });
 
     document.getElementById('gm-popup-backdrop').addEventListener('click', e => {
