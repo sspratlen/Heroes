@@ -897,63 +897,27 @@ window.renderMyUpcomingEvents = async function(filter) {
     return;
   }
 
-  const profile = ha.getProfile();
-  const playerId = profile?.player_id;
-  if (!playerId) {
+  // Use the same "attending" data that the Events page uses (localStorage fan toggle)
+  const attendingIds = new Set(ha.getAttendingEvents?.() || []);
+  const today = new Date().toISOString().split('T')[0];
+  const data = loadData();
+
+  const upcoming = (data.events || [])
+    .filter(ev => attendingIds.has(ev.id) && (ev.date || ev.startDate || '') >= today)
+    .sort((a, b) => (a.date || a.startDate || '').localeCompare(b.date || b.startDate || ''));
+
+  if (upcoming.length === 0) {
     el.innerHTML = `<div style="padding:40px;text-align:center;color:var(--gray);font-size:14px">
-      Your account isn't linked to a player profile yet.</div>`;
-    return;
-  }
-
-  const sb = _getClient();
-  if (!sb) { el.innerHTML = '<p style="color:var(--gray);padding:32px">Unable to connect.</p>'; return; }
-
-  const { data: rsvps } = await sb
-    .from('tournament_rsvps')
-    .select('tournament_id, status')
-    .eq('player_id', playerId)
-    .in('status', ['yes', 'maybe']);
-
-  const myRsvps = rsvps || [];
-  if (myRsvps.length === 0) {
-    el.innerHTML = `<div style="padding:40px;text-align:center;color:var(--gray);font-size:14px">
-      You haven't RSVP'd Yes or Maybe to any upcoming events yet.<br>
+      You haven't marked any upcoming events as attending yet.<br>
       <a class="btn btn-sm btn-dark" data-route="/events" style="display:inline-block;margin-top:16px">Browse Events →</a></div>`;
     App.bindLinks(el);
     return;
   }
 
-  const statusMap = Object.fromEntries(myRsvps.map(r => [r.tournament_id, r.status]));
-  const myIds = new Set(myRsvps.map(r => r.tournament_id));
-  const today = new Date().toISOString().split('T')[0];
-  const data = loadData();
-
-  const upcoming = (data.events || [])
-    .filter(ev => myIds.has(ev.id) && ev.date >= today)
-    .sort((a, b) => a.date.localeCompare(b.date));
-
-  const yesCount   = upcoming.filter(e => statusMap[e.id] === 'yes').length;
-  const maybeCount = upcoming.filter(e => statusMap[e.id] === 'maybe').length;
-  const active = filter || 'all';
-  const shown = active === 'all' ? upcoming : upcoming.filter(e => statusMap[e.id] === active);
-
-  if (upcoming.length === 0) {
-    el.innerHTML = `<div style="padding:40px;text-align:center;color:var(--gray);font-size:14px">
-      No upcoming events — check back after new tournaments are scheduled.<br>
-      <a class="btn btn-sm btn-dark" data-route="/events" style="display:inline-block;margin-top:16px">All Events →</a></div>`;
-    App.bindLinks(el);
-    return;
-  }
-
-  const filterBtn = (key, label, count) =>
-    `<button class="mue-filter${active===key?' mue-filter-on':''}" onclick="window.renderMyUpcomingEvents('${key}')">${label} <span class="mue-count">${count}</span></button>`;
-
-  const cards = shown.map(ev => {
-    const d = new Date(ev.date + 'T12:00:00');
-    const status = statusMap[ev.id];
-    const badge = status === 'yes'
-      ? '<span class="mue-badge mue-yes">✅ Going</span>'
-      : '<span class="mue-badge mue-maybe">🤔 Maybe</span>';
+  const cards = upcoming.map(ev => {
+    const dateStr = ev.date || ev.startDate || '';
+    const d = new Date(dateStr + 'T12:00:00');
+    const badge = '<span class="mue-badge mue-yes">✅ Attending</span>';
     const thru = ev.endDate && ev.endDate !== ev.date
       ? ` – ${new Date(ev.endDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}`
       : '';
@@ -972,12 +936,7 @@ window.renderMyUpcomingEvents = async function(filter) {
   }).join('');
 
   el.innerHTML = `
-    <div class="mue-filters">
-      ${filterBtn('all','All',upcoming.length)}
-      ${filterBtn('yes','✅ Going',yesCount)}
-      ${filterBtn('maybe','🤔 Maybe',maybeCount)}
-    </div>
-    ${shown.length ? `<div class="mue-list">${cards}</div>` : `<p style="color:var(--gray);padding:24px 0">No events match this filter.</p>`}
+    <div class="mue-list">${cards}</div>
     <div style="margin-top:16px"><a class="btn btn-sm btn-dark" data-route="/events">All Events →</a></div>`;
   App.bindLinks(el);
 };
