@@ -758,6 +758,14 @@
     });
   };
 
+  // ── Sidebar avatar (image with letter fallback + colored left border) ──
+  function _gmSidebarAvatar(imgUrl, letter, color) {
+    if (!imgUrl) {
+      return `<div class="gm-grp-av-wrap"><div class="gm-grp-av-fb" style="background:${color}">${letter}</div></div>`;
+    }
+    return `<div class="gm-grp-av-wrap"><img class="gm-grp-av-img" src="${imgUrl}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" alt=""><div class="gm-grp-av-fb" style="background:${color};display:none">${letter}</div></div>`;
+  }
+
   // ── Chat message helpers ──────────────────────────────────────
   function gmRenderMsg(m) {
     const name    = _escHtml(m.name || 'Unknown');
@@ -1078,6 +1086,23 @@
       </div>`).join('');
   }
 
+  window.gmSearchGroups = function(q) {
+    const term = q.trim().toLowerCase();
+    document.querySelectorAll('#gm-groups-pane .gm-grp-row').forEach(row => {
+      const name = (row.dataset.gname || row.dataset.uname || '').toLowerCase();
+      row.hidden = !!(term && !name.includes(term));
+    });
+    document.querySelectorAll('#gm-groups-pane .gm-section-hdr').forEach(hdr => {
+      let el = hdr.nextElementSibling;
+      let anyVisible = false;
+      while (el && !el.classList.contains('gm-section-hdr')) {
+        if (!el.hidden) { anyVisible = true; break; }
+        el = el.nextElementSibling;
+      }
+      hdr.hidden = !anyVisible;
+    });
+  };
+
   window.gmOpenCompose = function () {
     if (_gmPollTimer) { clearInterval(_gmPollTimer); _gmPollTimer = null; }
     _gmCurrentGroupId = null;
@@ -1182,12 +1207,18 @@
 .gm-groups-pane.gm-collapsed{width:0!important;overflow:hidden}
 .gm-panes-toggle{width:18px;flex-shrink:0;border:none;border-left:1px solid #e5e7eb;border-right:1px solid #e5e7eb;background:#f9fafb;color:#bbb;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;font-size:13px;font-weight:900;font-family:inherit}
 .gm-panes-toggle:hover{background:#f0f0f0;color:#555}
-.gm-section-hdr{padding:8px 14px 4px;font-size:10px;font-weight:900;letter-spacing:.08em;color:#999;text-transform:uppercase;background:#fff;border-bottom:1px solid #ebebeb;position:sticky;top:0;z-index:1}
-.gm-grp-row{cursor:pointer;border-bottom:1px solid #ebebeb;transition:background 0.1s;overflow:hidden}
+.gm-section-hdr{padding:8px 14px 4px;font-size:10px;font-weight:900;letter-spacing:.08em;color:#999;text-transform:uppercase;background:#fff;border-bottom:1px solid #ebebeb}
+.gm-pane-hdr-wrap{position:sticky;top:0;z-index:2;background:#fff;flex-shrink:0}
+.gm-search-bar{padding:7px 10px;border-bottom:1px solid #ebebeb}
+.gm-search-input{width:100%;padding:6px 12px;border:1.5px solid #e0e0e0;border-radius:16px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;background:#f5f5f5}
+.gm-search-input:focus{border-color:#C8102E;background:#fff}
+.gm-grp-row{cursor:pointer;border-bottom:1px solid #ebebeb;transition:background 0.1s;display:flex;align-items:center}
 .gm-grp-row:hover{background:#f5f5f5}
-.gm-grp-row.gm-grp-sel{background:#fef2f4;box-shadow:inset 3px 0 0 #C8102E}
-.gm-grp-header{width:100%;padding:5px 14px;font-size:13px;font-weight:900;color:rgba(255,255,255,0.92);letter-spacing:.03em}
-.gm-grp-body{padding:10px 14px 12px}
+.gm-grp-row.gm-grp-sel{background:#fef2f4}
+.gm-grp-av-wrap{width:40px;height:40px;flex-shrink:0;border-radius:50%;overflow:hidden;margin:8px 10px 8px 12px;display:flex;align-items:center;justify-content:center}
+.gm-grp-av-img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
+.gm-grp-av-fb{width:100%;height:100%;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:900;color:#fff}
+.gm-grp-body{padding:8px 12px 8px 0;min-width:0;flex:1}
 .gm-grp-name{font-size:13px;font-weight:700;color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gm-grp-meta{font-size:11px;color:#999;margin-top:2px}
 .gm-grp-preview{font-size:12px;color:#777;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
@@ -1217,7 +1248,7 @@
 .gm-popup-title{font-size:16px;font-weight:800;color:#111}
 .gm-hdr-btn{width:32px;height:32px;border-radius:50%;border:1.5px solid #e5e7eb;background:transparent;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#555;font-family:inherit;line-height:1}
 .gm-hdr-btn:hover{background:#f3f4f6}
-.gm-pane-topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#fff;border-bottom:1px solid #ebebeb;position:sticky;top:0;z-index:2;flex-shrink:0}
+.gm-pane-topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#fff;border-bottom:1px solid #ebebeb}
 .gm-pane-topbar-title{font-size:13px;font-weight:900;color:#111}
 .gm-compose-btn{width:28px;height:28px;border-radius:50%;border:none;background:#C8102E;color:#fff;font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit;flex-shrink:0}
 .gm-compose-btn:hover{opacity:.88}
@@ -1253,11 +1284,15 @@
 .gm-hdr-btn{border-color:#3a3a3c!important;color:#aeaeb2!important}
 .gm-hdr-btn:hover{background:#2c2c2e!important}
 .gm-groups-pane{background:#2c2c2e!important;border-right-color:#3a3a3c!important}
+.gm-pane-hdr-wrap{background:#2c2c2e!important}
 .gm-section-hdr{background:#2c2c2e!important;color:#6e6e73!important;border-bottom-color:#3a3a3c!important}
+.gm-search-bar{border-bottom-color:#3a3a3c!important}
+.gm-search-input{background:#3a3a3c!important;border-color:#48484a!important;color:#f2f2f7!important}
+.gm-search-input:focus{border-color:#C8102E!important;background:#48484a!important}
 .gm-panes-toggle{background:#1c1c1e!important;border-color:#3a3a3c!important;color:#6e6e73!important}
 .gm-grp-row{border-bottom-color:#3a3a3c!important}
 .gm-grp-row:hover{background:#3a3a3c!important}
-.gm-grp-row.gm-grp-sel{background:#3d1214!important;box-shadow:inset 3px 0 0 #C8102E!important}
+.gm-grp-row.gm-grp-sel{background:#3d1214!important}
 .gm-grp-name{color:#f2f2f7!important}
 .gm-grp-meta,.gm-grp-preview{color:#6e6e73!important}
 .gm-thread-pane{background:#141414!important}
@@ -1377,10 +1412,12 @@
 
     const groupsHTML = groupList.length === 0 ? '' : `
       <div class="gm-section-hdr">Groups</div>
-      ${groupList.map(g => `
-        <div class="gm-grp-row" data-gid="${g.id}" data-gname="${_escHtml(g.name || '')}"
-            onclick="openGroupMeGroup(this.dataset.gid, this.dataset.gname)">
-          <div class="gm-grp-header" style="background:${_gmColor(g.id)}">${(g.name || '?')[0].toUpperCase()}</div>
+      ${groupList.map(g => {
+        const color = _gmColor(g.id);
+        return `<div class="gm-grp-row" data-gid="${g.id}" data-gname="${_escHtml(g.name || '')}"
+            onclick="openGroupMeGroup(this.dataset.gid, this.dataset.gname)"
+            style="border-left:3px solid ${color}">
+          ${_gmSidebarAvatar(g.image_url || '', (g.name || '?')[0].toUpperCase(), color)}
           <div class="gm-grp-body">
             <div class="gm-grp-name">${_escHtml(g.name || '')}</div>
             <div class="gm-grp-meta">${(g.members || []).length} members</div>
@@ -1388,7 +1425,8 @@
               ? `<div class="gm-grp-preview">${_escHtml((g.messages.preview.preview || '').substring(0, 60))}</div>`
               : ''}
           </div>
-        </div>`).join('')}`;
+        </div>`;
+      }).join('')}`;
 
     const dmsHTML = chatList.length === 0 ? '' : `
       <div class="gm-section-hdr">Direct Messages</div>
@@ -1397,23 +1435,29 @@
         const uid = String(u.id || '');
         const uname = u.name || 'Unknown';
         const preview = c.last_message?.text || '';
-        return `
-          <div class="gm-grp-row" data-uid="${uid}" data-uname="${_escHtml(uname)}"
-              onclick="openGroupMeDM(this.dataset.uid, this.dataset.uname)">
-            <div class="gm-grp-header" style="background:${_gmColor(uid)}">${uname[0]?.toUpperCase() || '?'}</div>
-            <div class="gm-grp-body">
-              <div class="gm-grp-name">${_escHtml(uname)}</div>
-              ${preview ? `<div class="gm-grp-preview">${_escHtml(preview.substring(0, 60))}</div>` : ''}
-            </div>
-          </div>`;
+        const color = _gmColor(uid);
+        return `<div class="gm-grp-row" data-uid="${uid}" data-uname="${_escHtml(uname)}"
+            onclick="openGroupMeDM(this.dataset.uid, this.dataset.uname)"
+            style="border-left:3px solid ${color}">
+          ${_gmSidebarAvatar(u.avatar_url || '', uname[0]?.toUpperCase() || '?', color)}
+          <div class="gm-grp-body">
+            <div class="gm-grp-name">${_escHtml(uname)}</div>
+            ${preview ? `<div class="gm-grp-preview">${_escHtml(preview.substring(0, 60))}</div>` : ''}
+          </div>
+        </div>`;
       }).join('')}`;
 
     panel.innerHTML = `
       <div class="gm-panes">
         <div class="gm-groups-pane" id="gm-groups-pane">
-          <div class="gm-pane-topbar">
-            <span class="gm-pane-topbar-title">Chats</span>
-            <button class="gm-compose-btn" onclick="gmOpenCompose()" title="New message or group">＋</button>
+          <div class="gm-pane-hdr-wrap">
+            <div class="gm-pane-topbar">
+              <span class="gm-pane-topbar-title">Chats</span>
+              <button class="gm-compose-btn" onclick="gmOpenCompose()" title="New message or group">＋</button>
+            </div>
+            <div class="gm-search-bar">
+              <input class="gm-search-input" type="text" id="gm-search-input" placeholder="Search…" oninput="gmSearchGroups(this.value)">
+            </div>
           </div>
           ${groupsHTML}${dmsHTML}
         </div>
