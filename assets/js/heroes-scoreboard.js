@@ -725,6 +725,7 @@
       window.removeEventListener('message', onMsg);
       clearInterval(closedCheck);
       saveGroupMeToken(e.data.groupmeToken).then(async () => {
+        localStorage.removeItem('gm_seen_groups'); // start fresh — badge counts only new messages from this point
         gmUpdateHomeBadge();
         // If the chat popup is open, replace the connect card with the full chat UI
         const popupPanel = document.getElementById('gm-popup-panel');
