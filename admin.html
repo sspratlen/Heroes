@@ -1409,7 +1409,7 @@ function addTeam() {
   openModal('Add New Team', buildTeamForm(null), 'Save Team', () => {
     const d = loadData();
     d.teams.push({ id: 't'+Date.now(), name: val('tf-name'), shortName: val('tf-short'), division: val('tf-div'), ageGroup: parseInt(val('tf-age')||50), color: val('tf-color'), manager: val('tf-mgr'), assistantManager: val('tf-asst') });
-    saveData(d); closeModal(); renderTeams(); toast('Team added!');
+    saveCollection('teams', d.teams); closeModal(); renderTeams(); toast('Team added!');
   });
 }
 function editTeam(id) {
@@ -1417,12 +1417,12 @@ function editTeam(id) {
   openModal('Edit Team', buildTeamForm(t), 'Save Changes', () => {
     const d = loadData(); const idx = d.teams.findIndex(x=>x.id===id);
     d.teams[idx] = { ...d.teams[idx], name: val('tf-name'), shortName: val('tf-short'), division: val('tf-div'), ageGroup: parseInt(val('tf-age')), color: val('tf-color'), manager: val('tf-mgr'), assistantManager: val('tf-asst') };
-    saveData(d); closeModal(); renderTeams(); toast('Team updated!');
+    saveCollection('teams', d.teams); closeModal(); renderTeams(); toast('Team updated!');
   });
 }
 function deleteTeam(id) {
   if (!confirm('Delete this team?')) return;
-  const d = loadData(); d.teams = d.teams.filter(t=>t.id!==id); saveData(d); renderTeams(); toast('Team deleted');
+  const d = loadData(); d.teams = d.teams.filter(t=>t.id!==id); saveCollection('teams', d.teams); renderTeams(); toast('Team deleted');
 }
 function buildTeamForm(t) {
   return `
