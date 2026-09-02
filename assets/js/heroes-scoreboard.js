@@ -643,6 +643,7 @@
   let _gmCurrentGroupId = null;
   let _gmCurrentDMUserId = null;
   let _gmLastMessageId = null;
+  let _gmAllMembers = [];
 
   // ── GroupMe helpers ───────────────────────────────────────────
   const GM_API = 'https://api.groupme.com/v3';
@@ -1062,6 +1063,103 @@
     await gmLoadDMMessages(userId, token);
   };
 
+  // ── Compose (new DM / new group) ─────────────────────────────
+  function _gmRenderComposeResults(el, members) {
+    if (!el) return;
+    if (members.length === 0) {
+      el.innerHTML = '<div style="text-align:center;padding:40px;color:#888;font-size:13px">No people found.</div>';
+      return;
+    }
+    el.innerHTML = members.map(m => `
+      <div class="gm-compose-person-row" data-uid="${m.userId}" data-uname="${_escHtml(m.name)}"
+           onclick="openGroupMeDM(this.dataset.uid, this.dataset.uname)">
+        <div class="gm-msg-av" style="background:${_gmColor(m.userId)}">${(m.name[0] || '?').toUpperCase()}</div>
+        <span class="gm-compose-person-name">${_escHtml(m.name)}</span>
+      </div>`).join('');
+  }
+
+  window.gmOpenCompose = function () {
+    if (_gmPollTimer) { clearInterval(_gmPollTimer); _gmPollTimer = null; }
+    _gmCurrentGroupId = null;
+    _gmCurrentDMUserId = null;
+
+    const threadPane = document.getElementById('gm-thread-pane');
+    if (!threadPane) return;
+
+    threadPane.innerHTML = `
+      <div class="gm-thread-head">
+        <button class="gm-back-btn" onclick="gmBackToGroups()">← Back</button>
+        <div class="gm-thread-title">New Chat</div>
+      </div>
+      <div class="gm-compose-search-wrap">
+        <input class="gm-compose-search" id="gm-compose-search" type="text"
+               placeholder="Search people…" autocomplete="off" oninput="gmComposeFilter(this.value)">
+      </div>
+      <div class="gm-compose-results" id="gm-compose-results"></div>
+      <div class="gm-compose-footer">
+        <button class="gm-compose-create-btn" onclick="gmShowCreateGroup()">＋ Create New Group</button>
+      </div>`;
+
+    document.getElementById('gm-groups-pane')?.classList.add('gm-mobile-hidden');
+    threadPane.classList.add('gm-mobile-visible');
+
+    _gmRenderComposeResults(document.getElementById('gm-compose-results'), _gmAllMembers);
+    document.getElementById('gm-compose-search')?.focus();
+  };
+
+  window.gmComposeFilter = function (q) {
+    const results = document.getElementById('gm-compose-results');
+    const filtered = q.trim()
+      ? _gmAllMembers.filter(m => m.name.toLowerCase().includes(q.toLowerCase()))
+      : _gmAllMembers;
+    _gmRenderComposeResults(results, filtered);
+  };
+
+  window.gmShowCreateGroup = function () {
+    const threadPane = document.getElementById('gm-thread-pane');
+    if (!threadPane) return;
+    threadPane.innerHTML = `
+      <div class="gm-thread-head">
+        <button class="gm-back-btn" onclick="gmOpenCompose()">← Back</button>
+        <div class="gm-thread-title">New Group</div>
+      </div>
+      <div class="gm-create-group-form">
+        <label class="gm-create-group-label">Group Name</label>
+        <input id="gm-new-group-name" class="gm-create-group-input" type="text"
+               placeholder="Enter group name…"
+               onkeydown="if(event.key==='Enter')gmCreateGroup()">
+        <button class="gm-send-btn" id="gm-create-group-btn" onclick="gmCreateGroup()" style="padding:12px">Create Group</button>
+        <div id="gm-create-group-err" class="gm-create-group-err"></div>
+      </div>`;
+    document.getElementById('gm-new-group-name')?.focus();
+  };
+
+  window.gmCreateGroup = async function () {
+    const nameEl = document.getElementById('gm-new-group-name');
+    const errEl  = document.getElementById('gm-create-group-err');
+    const btn    = document.getElementById('gm-create-group-btn');
+    const token  = getGroupMeToken();
+    if (!nameEl || !token) return;
+    const name = nameEl.value.trim();
+    if (!name) { if (errEl) errEl.textContent = 'Please enter a group name.'; return; }
+    if (errEl) errEl.textContent = '';
+    nameEl.disabled = true;
+    if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
+
+    const result = await gmPost('/groups', token, { group: { name } });
+
+    if (result._unauthorized) { await clearGroupMeToken(); return; }
+    if (result._error || !result.id) {
+      if (errEl) errEl.textContent = 'Failed to create group. Try again.';
+      nameEl.disabled = false;
+      if (btn) { btn.disabled = false; btn.textContent = 'Create Group'; }
+      return;
+    }
+    // Success — refresh the full chat panel
+    const panel = document.getElementById('gm-popup-panel');
+    if (panel) await renderChatInto(panel);
+  };
+
   function ensureGmChatCSS() {
     if (document.getElementById('gm-chat-css')) return;
     const s = document.createElement('style');
@@ -1119,6 +1217,25 @@
 .gm-popup-title{font-size:16px;font-weight:800;color:#111}
 .gm-hdr-btn{width:32px;height:32px;border-radius:50%;border:1.5px solid #e5e7eb;background:transparent;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#555;font-family:inherit;line-height:1}
 .gm-hdr-btn:hover{background:#f3f4f6}
+.gm-pane-topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#fff;border-bottom:1px solid #ebebeb;position:sticky;top:0;z-index:2;flex-shrink:0}
+.gm-pane-topbar-title{font-size:13px;font-weight:900;color:#111}
+.gm-compose-btn{width:28px;height:28px;border-radius:50%;border:none;background:#C8102E;color:#fff;font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit;flex-shrink:0}
+.gm-compose-btn:hover{opacity:.88}
+.gm-compose-search-wrap{padding:10px 12px;border-bottom:1px solid #e5e7eb;flex-shrink:0;background:#fff}
+.gm-compose-search{width:100%;padding:8px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box}
+.gm-compose-search:focus{border-color:#C8102E}
+.gm-compose-results{flex:1;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.gm-compose-person-row{display:flex;align-items:center;gap:12px;padding:10px 16px;cursor:pointer;border-bottom:1px solid #ebebeb}
+.gm-compose-person-row:hover{background:#f5f5f5}
+.gm-compose-person-name{font-size:14px;font-weight:600;color:#111}
+.gm-compose-footer{flex-shrink:0;padding:12px 16px;border-top:1px solid #e5e7eb;background:#fff}
+.gm-compose-create-btn{width:100%;padding:10px;border:1.5px solid #C8102E;border-radius:8px;background:transparent;color:#C8102E;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit}
+.gm-compose-create-btn:hover{background:#fef2f4}
+.gm-create-group-form{padding:24px 20px;display:flex;flex-direction:column;gap:14px}
+.gm-create-group-label{font-size:13px;font-weight:700;color:#555}
+.gm-create-group-input{padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;font-family:inherit;outline:none;width:100%;box-sizing:border-box}
+.gm-create-group-input:focus{border-color:#C8102E}
+.gm-create-group-err{font-size:13px;color:#dc2626;min-height:18px}
 @media(max-width:768px){
   .gm-groups-pane{width:100%;border-right:none}
   .gm-groups-pane.gm-mobile-hidden{display:none}
@@ -1153,7 +1270,20 @@
 .gm-msg-text{color:#d1d1d6!important}
 .gm-send-box{background:#1c1c1e!important;border-top-color:#3a3a3c!important}
 .gm-send-input{background:#2c2c2e!important;border-color:#3a3a3c!important;color:#f2f2f7!important}
-.gm-send-input::placeholder{color:#6e6e73!important}`;
+.gm-send-input::placeholder{color:#6e6e73!important}
+.gm-pane-topbar{background:#1c1c1e!important;border-bottom-color:#3a3a3c!important}
+.gm-pane-topbar-title{color:#f2f2f7!important}
+.gm-compose-search-wrap{background:#1c1c1e!important;border-bottom-color:#3a3a3c!important}
+.gm-compose-search{background:#2c2c2e!important;border-color:#3a3a3c!important;color:#f2f2f7!important}
+.gm-compose-search::placeholder{color:#6e6e73!important}
+.gm-compose-person-row{border-bottom-color:#3a3a3c!important}
+.gm-compose-person-row:hover{background:#3a3a3c!important}
+.gm-compose-person-name{color:#f2f2f7!important}
+.gm-compose-footer{border-top-color:#3a3a3c!important;background:#1c1c1e!important}
+.gm-compose-create-btn{border-color:#C8102E!important;color:#ff6b6b!important}
+.gm-compose-create-btn:hover{background:#3d1214!important}
+.gm-create-group-label{color:#aeaeb2!important}
+.gm-create-group-input{background:#2c2c2e!important;border-color:#3a3a3c!important;color:#f2f2f7!important}`;
 
   function _gmSetDark(isDark) {
     const existing = document.getElementById('gm-dark-css');
@@ -1227,6 +1357,19 @@
     const groupList = Array.isArray(groups) ? groups : [];
     const chatList  = Array.isArray(chats)  ? chats  : [];
 
+    // Build deduplicated member list for compose search
+    const _seen = new Set();
+    _gmAllMembers = [];
+    for (const g of groupList) {
+      for (const m of (g.members || [])) {
+        const uid = String(m.user_id || '');
+        if (!uid || _seen.has(uid)) continue;
+        _seen.add(uid);
+        _gmAllMembers.push({ userId: uid, name: m.nickname || m.name || 'Unknown' });
+      }
+    }
+    _gmAllMembers.sort((a, b) => a.name.localeCompare(b.name));
+
     if (groupList.length === 0 && chatList.length === 0) {
       panel.innerHTML = '<div class="gm-empty">You don\'t appear to be in any GroupMe groups yet.</div>';
       return;
@@ -1268,6 +1411,10 @@
     panel.innerHTML = `
       <div class="gm-panes">
         <div class="gm-groups-pane" id="gm-groups-pane">
+          <div class="gm-pane-topbar">
+            <span class="gm-pane-topbar-title">Chats</span>
+            <button class="gm-compose-btn" onclick="gmOpenCompose()" title="New message or group">＋</button>
+          </div>
           ${groupsHTML}${dmsHTML}
         </div>
         <button class="gm-panes-toggle" id="gm-panes-toggle" onclick="gmToggleGroups()" title="Toggle groups list">‹</button>
