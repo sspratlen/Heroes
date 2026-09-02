@@ -361,6 +361,32 @@
               </button>
             </div>
 
+            <!-- Section 4: GroupMe -->
+            <div style="border:1px solid #e5e7eb;border-radius:10px;padding:18px">
+              <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#aaa;margin-bottom:14px">GROUPME</div>
+              ${getGroupMeToken() ? `
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                  <div>
+                    <div style="font-size:13px;font-weight:700;color:#16a34a">✓ Connected</div>
+                    <div style="font-size:12px;color:#999;margin-top:2px">GroupMe account linked</div>
+                  </div>
+                  <button onclick="disconnectGroupMe()" id="ep-gm-btn"
+                    style="padding:8px 16px;background:#fff;border:1.5px solid #dc2626;color:#dc2626;border-radius:7px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap">
+                    Disconnect
+                  </button>
+                </div>` : `
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                  <div>
+                    <div style="font-size:13px;font-weight:700;color:#999">Not connected</div>
+                    <div style="font-size:12px;color:#999;margin-top:2px">Link your GroupMe account</div>
+                  </div>
+                  <button onclick="connectGroupMe()" id="ep-gm-btn"
+                    style="padding:8px 16px;background:#00AFF0;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap">
+                    Connect
+                  </button>
+                </div>`}
+            </div>
+
           </div><!-- /sections -->
         </div>
       </div>`;
@@ -369,6 +395,16 @@
     document.getElementById('ep-modal-backdrop').addEventListener('click', e => {
       if (e.target.id === 'ep-modal-backdrop') el.remove();
     });
+  };
+
+  window.disconnectGroupMe = async function() {
+    const btn = document.getElementById('ep-gm-btn');
+    if (btn) { btn.textContent = 'Disconnecting…'; btn.disabled = true; }
+    await clearGroupMeToken();
+    localStorage.removeItem('gm_seen_groups');
+    gmUpdateHomeBadge();
+    document.getElementById('ep-modal-overlay')?.remove();
+    openEditProfileModal();
   };
 
   window.submitEpInfo = function() {
