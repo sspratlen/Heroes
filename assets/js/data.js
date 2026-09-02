@@ -451,6 +451,10 @@ function getSeasonLeaders(stat, year, teamId, n = 5) {
 const SUPABASE_URL     = 'https://mpgbgucmnxowteonldoh.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_qEfH752_O5r7F9pdKTalEA_B8P0LkV0';
 
+// ─── GROUPME CONFIG ───────────────────────────────────────
+// Get this from https://dev.groupme.com → Applications → your app → Client ID
+const GROUPME_CLIENT_ID = 'YOUR_GROUPME_CLIENT_ID';
+
 // Collections that get synced to Supabase
 const DB_COLLECTIONS = ['config','games','events','news','awards','sponsors','accountRequests','pageLayouts','albums','photos'];
 
