@@ -811,6 +811,12 @@
     _gmLastMessageId = msgs[0].id;
     msgsEl.innerHTML = [...msgs].reverse().map(gmRenderMsg).join('');
     msgsEl.scrollTop = msgsEl.scrollHeight;
+    // Mark group as seen so badge clears
+    try {
+      const seen = JSON.parse(localStorage.getItem('gm_seen_groups') || '{}');
+      seen[groupId] = _gmLastMessageId;
+      localStorage.setItem('gm_seen_groups', JSON.stringify(seen));
+    } catch (_) {}
   }
 
   window.gmRefreshMessages = async function (groupId) {
@@ -1616,6 +1622,14 @@
     let seen;
     try { seen = JSON.parse(localStorage.getItem('gm_seen_groups') || '{}'); }
     catch (_) { seen = {}; }
+
+    // First time ever: seed with current state so old messages aren't flagged
+    if (Object.keys(seen).length === 0) {
+      groups.forEach(g => { const lid = g.messages?.last_message_id; if (lid) seen[g.id] = lid; });
+      try { localStorage.setItem('gm_seen_groups', JSON.stringify(seen)); } catch (_) {}
+      if (badge) badge.hidden = true;
+      return;
+    }
 
     let unread = 0;
     groups.forEach(g => {
