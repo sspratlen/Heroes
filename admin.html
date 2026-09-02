@@ -610,13 +610,9 @@ function renderPlayers() {
           <input type="text" placeholder="Search players…" id="player-search-input"
             style="padding:7px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;outline:none"
             oninput="searchPlayers(this.value)">
-          <button class="btn btn-sm" onclick="showBulkInviteModal()" style="background:#1d4ed8;color:#fff">📧 Send Invites</button>
           <button class="btn btn-primary btn-sm" onclick="addPlayer()">+ New Player</button>
         </div>
       </div>
-
-      <!-- No-account notice (populated async by loadPlayerRoles) -->
-      <div id="no-account-notice"></div>
 
       <!-- Team tabs -->
       <div style="display:flex;align-items:center;padding:0 8px;border-bottom:1px solid var(--border);background:#fafafa;overflow-x:auto">
@@ -703,6 +699,9 @@ function renderPlayers() {
           </tr>`).join('')}
         </tbody>
       </table>
+
+      <!-- No-account notice (populated async by loadPlayerRoles) -->
+      <div id="no-account-notice"></div>
     </div>
   `);
   // Async-load Supabase roles and last-login into their columns (admin only)
@@ -853,16 +852,12 @@ async function loadPlayerRoles() {
           `<span style="font-weight:700">${p.firstName} ${p.lastName}</span>${p.email ? ` <span style="color:#92400e;font-size:11px">(${p.email})</span>` : ' <span style="color:#92400e;font-size:11px">(no email)</span>'}`
         ).join('<span style="color:#b45309;margin:0 4px">·</span>');
         notice.innerHTML = `
-          <div style="background:#fef3c7;border-bottom:1px solid #fde68a;padding:10px 20px;display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap">
+          <div style="background:#fef3c7;border-top:1px solid #fde68a;padding:10px 20px;display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap">
             <span style="font-size:16px;flex-shrink:0">⚠️</span>
             <div style="flex:1;min-width:0">
               <span style="font-size:13px;font-weight:700;color:#92400e">${noAccount.length} active player${noAccount.length!==1?'s':''} ${noAccount.length!==1?'have':'has'} no site account: </span>
               <span style="font-size:13px;color:#78350f;line-height:1.6">${names}</span>
             </div>
-            <button class="btn btn-sm" onclick="showBulkInviteModal()"
-              style="background:#d97706;color:#fff;border:none;padding:5px 12px;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">
-              📧 Send Invites
-            </button>
           </div>`;
       }
     }
