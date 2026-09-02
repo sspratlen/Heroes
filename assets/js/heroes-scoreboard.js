@@ -1273,6 +1273,15 @@
   .gm-thread-pane{display:none;width:100%}
   .gm-thread-pane.gm-mobile-visible{display:flex}
   .gm-back-btn{display:block}
+  .gm-pane-topbar{padding:7px 12px}
+  .gm-search-bar{padding:5px 8px}
+  .gm-search-input{padding:5px 10px;font-size:12px}
+  .gm-grp-av-wrap{width:34px;height:34px;margin:5px 8px 5px 10px}
+  .gm-grp-av-fb{font-size:13px}
+  .gm-grp-name{font-size:12px}
+  .gm-grp-meta,.gm-grp-preview{font-size:11px}
+  .gm-grp-body{padding:6px 10px 6px 0}
+  .gm-section-hdr{padding:5px 12px 3px}
 }
 `;
     document.head.appendChild(s);
