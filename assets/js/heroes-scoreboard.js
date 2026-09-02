@@ -1736,5 +1736,15 @@
     setTimeout(gmUpdateHomeBadge, 600);
   };
 
+  // Show/hide Chat button immediately whenever auth state changes (sign in or out)
+  const _ha = getHA();
+  if (_ha) {
+    const _origRefreshNav = _ha.refreshNavAuth.bind(_ha);
+    _ha.refreshNavAuth = function () {
+      _origRefreshNav();
+      setTimeout(gmUpdateHomeBadge, 0);
+    };
+  }
+
   console.info('[scoreboard] IA overlay active — 5 primary items + team strip + /my portal');
 })();
