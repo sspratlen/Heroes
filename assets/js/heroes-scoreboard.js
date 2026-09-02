@@ -973,14 +973,97 @@
 .gm-send-err{font-size:12px;color:#dc2626;padding:4px 0}
 .gm-refresh-btn{margin-left:auto;padding:5px 10px;background:transparent;border:1px solid #ddd;border-radius:6px;font-size:15px;cursor:pointer;color:#555;font-family:inherit;line-height:1}
 .gm-refresh-btn:hover{background:#f3f4f6}
+.gm-popup-box{background:#fff}
+.gm-popup-hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid #e5e7eb;flex-shrink:0;background:#fff}
+.gm-popup-title{font-size:16px;font-weight:800;color:#111}
+.gm-hdr-btn{width:32px;height:32px;border-radius:50%;border:1.5px solid #e5e7eb;background:transparent;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#555;font-family:inherit;line-height:1}
+.gm-hdr-btn:hover{background:#f3f4f6}
 @media(max-width:768px){
   .gm-groups-pane{width:100%;border-right:none}
   .gm-groups-pane.gm-mobile-hidden{display:none}
   .gm-thread-pane{display:none;width:100%}
   .gm-thread-pane.gm-mobile-visible{display:flex}
   .gm-back-btn{display:block}
-}`;
+}
+@media(prefers-color-scheme:dark){
+  .gm-popup-box,.gm-popup-hdr{background:#1c1c1e}
+  .gm-popup-hdr{border-bottom-color:#3a3a3c}
+  .gm-popup-title{color:#f2f2f7}
+  .gm-hdr-btn{border-color:#3a3a3c;color:#aeaeb2}
+  .gm-hdr-btn:hover{background:#2c2c2e}
+  .gm-groups-pane{background:#2c2c2e;border-right-color:#3a3a3c}
+  .gm-panes-toggle{background:#1c1c1e;border-color:#3a3a3c;color:#6e6e73}
+  .gm-panes-toggle:hover{background:#2c2c2e;color:#aeaeb2}
+  .gm-grp-row{border-bottom-color:#3a3a3c}
+  .gm-grp-row:hover{background:#3a3a3c}
+  .gm-grp-row.gm-grp-sel{background:#3d1214;box-shadow:inset 3px 0 0 #C8102E}
+  .gm-grp-name{color:#f2f2f7}
+  .gm-grp-meta,.gm-grp-preview{color:#6e6e73}
+  .gm-thread-pane{background:#141414}
+  .gm-thread-empty{color:#6e6e73}
+  .gm-thread-head{background:#1c1c1e;border-bottom-color:#3a3a3c}
+  .gm-thread-title{color:#f2f2f7}
+  .gm-back-btn{border-color:#3a3a3c;color:#aeaeb2}
+  .gm-back-btn:hover{background:#2c2c2e}
+  .gm-refresh-btn{border-color:#3a3a3c;color:#aeaeb2}
+  .gm-refresh-btn:hover{background:#2c2c2e}
+  .gm-msg-name{color:#f2f2f7}
+  .gm-msg-time{color:#6e6e73}
+  .gm-msg-text{color:#d1d1d6}
+  .gm-send-box{background:#1c1c1e;border-top-color:#3a3a3c}
+  .gm-send-input{background:#2c2c2e;border-color:#3a3a3c;color:#f2f2f7}
+  .gm-send-input:focus{border-color:#C8102E}
+  .gm-send-input::placeholder{color:#6e6e73}
+}
+.gm-popup-box.gm-dark,.gm-popup-box.gm-dark .gm-popup-hdr{background:#1c1c1e}
+.gm-popup-box.gm-dark .gm-popup-hdr{border-bottom-color:#3a3a3c}
+.gm-popup-box.gm-dark .gm-popup-title{color:#f2f2f7}
+.gm-popup-box.gm-dark .gm-hdr-btn{border-color:#3a3a3c;color:#aeaeb2}
+.gm-popup-box.gm-dark .gm-hdr-btn:hover{background:#2c2c2e}
+.gm-popup-box.gm-dark .gm-groups-pane{background:#2c2c2e;border-right-color:#3a3a3c}
+.gm-popup-box.gm-dark .gm-panes-toggle{background:#1c1c1e;border-color:#3a3a3c;color:#6e6e73}
+.gm-popup-box.gm-dark .gm-panes-toggle:hover{background:#2c2c2e;color:#aeaeb2}
+.gm-popup-box.gm-dark .gm-grp-row{border-bottom-color:#3a3a3c}
+.gm-popup-box.gm-dark .gm-grp-row:hover{background:#3a3a3c}
+.gm-popup-box.gm-dark .gm-grp-row.gm-grp-sel{background:#3d1214;box-shadow:inset 3px 0 0 #C8102E}
+.gm-popup-box.gm-dark .gm-grp-name{color:#f2f2f7}
+.gm-popup-box.gm-dark .gm-grp-meta,.gm-popup-box.gm-dark .gm-grp-preview{color:#6e6e73}
+.gm-popup-box.gm-dark .gm-thread-pane{background:#141414}
+.gm-popup-box.gm-dark .gm-thread-empty{color:#6e6e73}
+.gm-popup-box.gm-dark .gm-thread-head{background:#1c1c1e;border-bottom-color:#3a3a3c}
+.gm-popup-box.gm-dark .gm-thread-title{color:#f2f2f7}
+.gm-popup-box.gm-dark .gm-back-btn{border-color:#3a3a3c;color:#aeaeb2}
+.gm-popup-box.gm-dark .gm-refresh-btn{border-color:#3a3a3c;color:#aeaeb2}
+.gm-popup-box.gm-dark .gm-msg-name{color:#f2f2f7}
+.gm-popup-box.gm-dark .gm-msg-time{color:#6e6e73}
+.gm-popup-box.gm-dark .gm-msg-text{color:#d1d1d6}
+.gm-popup-box.gm-dark .gm-send-box{background:#1c1c1e;border-top-color:#3a3a3c}
+.gm-popup-box.gm-dark .gm-send-input{background:#2c2c2e;border-color:#3a3a3c;color:#f2f2f7}
+.gm-popup-box.gm-dark .gm-send-input:focus{border-color:#C8102E}
+.gm-popup-box.gm-dark .gm-send-input::placeholder{color:#6e6e73}`;
     document.head.appendChild(s);
+  }
+
+  window.gmToggleDark = function () {
+    const box = document.getElementById('gm-popup-box');
+    const btn = document.getElementById('gm-dark-toggle');
+    if (!box) return;
+    const isDark = box.classList.toggle('gm-dark');
+    if (btn) btn.textContent = isDark ? '☀️' : '🌙';
+    try { localStorage.setItem('gm-dark', isDark ? '1' : '0'); } catch (_) {}
+  };
+
+  function _gmApplySavedDark() {
+    try {
+      const saved = localStorage.getItem('gm-dark');
+      if (saved === null) return;
+      const box = document.getElementById('gm-popup-box');
+      const btn = document.getElementById('gm-dark-toggle');
+      if (!box) return;
+      const isDark = saved === '1';
+      box.classList.toggle('gm-dark', isDark);
+      if (btn) btn.textContent = isDark ? '☀️' : '🌙';
+    } catch (_) {}
   }
 
   async function renderChatInto(panel) {
@@ -1086,14 +1169,16 @@
     overlay.id = 'gm-popup-overlay';
     overlay.innerHTML = `
       <div id="gm-popup-backdrop" style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9500;display:flex;flex-direction:column;padding:12px">
-        <div id="gm-popup-box" style="background:#fff;border-radius:14px;flex:1;width:100%;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,0.35)">
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid #e5e7eb;flex-shrink:0;background:#fff">
+        <div id="gm-popup-box" class="gm-popup-box" style="border-radius:14px;flex:1;width:100%;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,0.35)">
+          <div class="gm-popup-hdr">
             <div style="display:flex;align-items:center;gap:10px">
               <div style="width:30px;height:30px;background:#00AFF0;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px">💬</div>
-              <span style="font-size:16px;font-weight:800;color:#111">Team Chat</span>
+              <span class="gm-popup-title">Team Chat</span>
             </div>
-            <button onclick="closeGmChatPopup()"
-              style="width:32px;height:32px;border-radius:50%;border:1.5px solid #e5e7eb;background:transparent;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#555;font-family:inherit">✕</button>
+            <div style="display:flex;align-items:center;gap:8px">
+              <button id="gm-dark-toggle" class="gm-hdr-btn" onclick="gmToggleDark()" title="Toggle dark mode">🌙</button>
+              <button class="gm-hdr-btn" onclick="closeGmChatPopup()">✕</button>
+            </div>
           </div>
           <div id="gm-popup-panel" style="flex:1;min-height:0;overflow:hidden"></div>
         </div>
@@ -1107,6 +1192,7 @@
     overlay._savedScrollY = savedScrollY;
 
     document.body.appendChild(overlay);
+    _gmApplySavedDark();
 
     document.getElementById('gm-popup-backdrop').addEventListener('click', e => {
       if (e.target.id === 'gm-popup-backdrop') closeGmChatPopup();
