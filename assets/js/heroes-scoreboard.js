@@ -722,7 +722,7 @@
       if (!e.data?.groupmeToken) return;
       window.removeEventListener('message', onMsg);
       clearInterval(closedCheck);
-      saveGroupMeToken(e.data.groupmeToken).then(() => renderChatTab());
+      saveGroupMeToken(e.data.groupmeToken).then(() => gmUpdateHomeBadge());
     }
     window.addEventListener('message', onMsg);
 
@@ -738,18 +738,17 @@
 
   // ── Tab switching ─────────────────────────────────────────────
   window.switchMyTab = function (tab) {
-    if (tab !== 'chat' && _gmPollTimer) {
+    if (_gmPollTimer) {
       clearInterval(_gmPollTimer);
       _gmPollTimer = null;
       _gmCurrentGroupId = null;
     }
     document.querySelectorAll('.mh-tab[id^="mh-tab-"]').forEach(b => b.classList.remove('mh-tab-on'));
     document.getElementById('mh-tab-' + tab)?.classList.add('mh-tab-on');
-    ['avail', 'chat'].forEach(p => {
+    ['avail'].forEach(p => {
       const el = document.getElementById('mh-panel-' + p);
       if (el) el.hidden = (p !== tab);
     });
-    if (tab === 'chat') renderChatTab();
   };
 
   // ── Chat message helpers ──────────────────────────────────────
@@ -1000,10 +999,6 @@
         if (t) t.textContent = '›';
       }
     } catch (_) {}
-  }
-
-  async function renderChatTab() {
-    return renderChatInto(document.getElementById('mh-panel-chat'));
   }
 
   window.gmToggleGroups = function () {
@@ -1313,7 +1308,6 @@
         <div class="mh-tabs">
           <div class="mh-tabs-in">
             <button class="mh-tab mh-tab-on" id="mh-tab-avail" onclick="switchMyTab('avail')">AVAILABILITY</button>
-            <button class="mh-tab" id="mh-tab-chat" onclick="switchMyTab('chat')">CHAT</button>
             <button class="mh-tab" data-route="/events">EVENTS</button>
             ${isStaff ? '<a href="admin.html" class="mh-adm-lnk">⚙ Admin Panel</a>' : ''}
           </div>
@@ -1333,9 +1327,6 @@
             ${isStaff ? '<div style="margin-top:20px"><a href="admin.html" style="display:inline-block;padding:10px 22px;background:#C8102E;color:#fff;border-radius:6px;font-size:13px;font-weight:800;text-decoration:none">⚙ Admin Panel</a></div>' : ''}
           </div>`}
         </div>
-
-        <!-- CHAT PANEL -->
-        <div id="mh-panel-chat" hidden></div>
 
       </div>${MH_CSS}`);
   }
