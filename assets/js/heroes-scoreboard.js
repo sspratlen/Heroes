@@ -1162,6 +1162,9 @@
       document.head.appendChild(s);
     }
 
+    const profile = getHA()?.getProfile();
+    if (!profile) { btn.style.display = 'none'; return; }
+
     btn.style.display = '';
 
     const token = getGroupMeToken();
