@@ -882,12 +882,26 @@ window.renderMyUpcomingEvents = async function(filter) {
   const el = document.getElementById('my-events-content');
   if (!el) return;
 
-  const profile = window.getHA?.()?.getProfile?.();
-  const playerId = profile?.player_id;
+  let ha = null;
+  try { if (typeof HeroesAuth !== 'undefined') ha = HeroesAuth; } catch(_) {}
 
-  if (!playerId) {
+  // Auth not ready yet — retry until _initialized
+  if (!ha || !ha._initialized) {
+    setTimeout(() => window.renderMyUpcomingEvents(filter), 800);
+    return;
+  }
+
+  if (!ha.isLoggedIn()) {
     el.innerHTML = `<div style="padding:40px;text-align:center;color:var(--gray);font-size:14px">
       Sign in to see your upcoming events.</div>`;
+    return;
+  }
+
+  const profile = ha.getProfile();
+  const playerId = profile?.player_id;
+  if (!playerId) {
+    el.innerHTML = `<div style="padding:40px;text-align:center;color:var(--gray);font-size:14px">
+      Your account isn't linked to a player profile yet.</div>`;
     return;
   }
 
