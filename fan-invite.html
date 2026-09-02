@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Join Heroes — Fans</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      background: #111;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: Arial, Helvetica, sans-serif;
+      padding: 24px 16px;
+    }
+
+    .join-card {
+      background: #fff;
+      border-radius: 16px;
+      width: 100%;
+      max-width: 460px;
+      overflow: hidden;
+      box-shadow: 0 8px 40px rgba(0,0,0,.5);
+    }
+
+    .join-body { padding: 28px 28px 20px; }
+
+    .join-loading {
+      text-align: center;
+      padding: 48px 0;
+      color: #aaa;
+      font-size: 14px;
+    }
+    .join-spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid #e5e7eb;
+      border-top-color: #C8102E;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .join-footer {
+      text-align: center;
+      padding: 14px;
+      background: #f8f8f8;
+      border-top: 1px solid #e5e7eb;
+      font-size: 12px;
+      color: #aaa;
+    }
+    .join-footer a { color: #C8102E; text-decoration: none; }
+    .join-footer a:hover { text-decoration: underline; }
+
+    .form-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 22px;
+    }
+    .form-header img {
+      width: 50px; height: 50px; border-radius: 50%;
+      object-fit: contain; border: 2px solid #C8102E; flex-shrink: 0;
+    }
+    .form-title   { font-size: 20px; font-weight: 900; color: #111; line-height: 1.2; }
+    .form-subtitle { font-size: 13px; color: #888; margin-top: 2px; }
+
+    .form-group { margin-bottom: 14px; }
+    .form-label {
+      display: block; font-size: 11px; font-weight: 800;
+      text-transform: uppercase; letter-spacing: .5px; color: #666; margin-bottom: 5px;
+    }
+    .form-input {
+      width: 100%; padding: 10px 13px; border: 1px solid #ddd;
+      border-radius: 7px; font-size: 14px; outline: none;
+      font-family: inherit; transition: border-color .15s; color: #111;
+    }
+    .form-input:focus { border-color: #C8102E; }
+    .form-error { font-size: 13px; color: #C8102E; min-height: 18px; margin-bottom: 10px; }
+
+    .btn-primary {
+      display: block; width: 100%; padding: 13px;
+      background: #C8102E; color: #fff; border: none; border-radius: 8px;
+      font-size: 15px; font-weight: 800; cursor: pointer;
+      font-family: inherit; transition: opacity .15s; margin-bottom: 8px;
+    }
+    .btn-primary:hover   { opacity: .88; }
+    .btn-primary:disabled { opacity: .55; cursor: not-allowed; }
+
+    .result-state { text-align: center; padding: 12px 0 4px; }
+    .result-icon  { font-size: 52px; margin-bottom: 16px; line-height: 1; }
+    .result-title { font-size: 20px; font-weight: 900; margin-bottom: 10px; color: #111; }
+    .result-msg   { font-size: 14px; color: #666; line-height: 1.6; margin-bottom: 24px; }
+  </style>
+</head>
+<body>
+
+<div class="join-card">
+  <div class="join-body" id="page-body">
+    <div class="join-loading">
+      <div class="join-spinner"></div>
+      Loading…
+    </div>
+  </div>
+  <div class="join-footer">
+    <a href="index.html">heroesseniorsoftball.com</a>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/auth.js"></script>
+<script>
+(async () => {
+  const sb   = _getClient();
+  const body = document.getElementById('page-body');
+
+  // ── Already logged in ──────────────────────────────────────
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    body.innerHTML = `
+      <div class="result-state">
+        <div class="result-icon">⚾</div>
+        <h2 class="result-title">You're already signed in!</h2>
+        <p class="result-msg">Head back to the Heroes site to see the latest news and scores.</p>
+        <a href="index.html" class="btn-primary" style="display:inline-block;text-decoration:none;max-width:260px;padding:13px 24px">Go to Heroes →</a>
+      </div>`;
+    return;
+  }
+
+  // ── Render signup form ─────────────────────────────────────
+  body.innerHTML = `
+    <div class="form-header">
+      <img src="assets/img/heroes-logo.jpg" alt="Heroes Logo"
+           onerror="this.style.background='#C8102E';this.style.borderRadius='50%'">
+      <div>
+        <div class="form-title">Follow the Heroes!</div>
+        <div class="form-subtitle">Create a fan account to follow your favorite players and get updates.</div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="fi-first">First Name</label>
+      <input type="text" id="fi-first" class="form-input" placeholder="First"
+             autocomplete="given-name"
+             onkeydown="if(event.key==='Enter')document.getElementById('fi-last').focus()">
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="fi-last">Last Name</label>
+      <input type="text" id="fi-last" class="form-input" placeholder="Last"
+             autocomplete="family-name"
+             onkeydown="if(event.key==='Enter')document.getElementById('fi-email').focus()">
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="fi-email">Email</label>
+      <input type="email" id="fi-email" class="form-input" placeholder="you@example.com"
+             autocomplete="email"
+             onkeydown="if(event.key==='Enter')document.getElementById('fi-pw').focus()">
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="fi-pw">Password</label>
+      <input type="password" id="fi-pw" class="form-input" placeholder="Min 6 characters"
+             autocomplete="new-password"
+             onkeydown="if(event.key==='Enter')window._submitFanInvite()">
+    </div>
+
+    <div id="fi-error" class="form-error" aria-live="polite"></div>
+
+    <button class="btn-primary" id="fi-submit" onclick="window._submitFanInvite()">Join as a Fan</button>`;
+
+  document.getElementById('fi-first')?.focus();
+
+  window._submitFanInvite = async function() {
+    const first = document.getElementById('fi-first').value.trim();
+    const last  = document.getElementById('fi-last').value.trim();
+    const email = document.getElementById('fi-email').value.trim();
+    const pw    = document.getElementById('fi-pw').value;
+    const errEl = document.getElementById('fi-error');
+    const btn   = document.getElementById('fi-submit');
+
+    errEl.textContent = '';
+
+    if (!first)                               { errEl.textContent = 'Please enter your first name.'; return; }
+    if (!last)                                { errEl.textContent = 'Please enter your last name.'; return; }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errEl.textContent = 'Please enter a valid email.'; return; }
+    if (!pw || pw.length < 6)                 { errEl.textContent = 'Password must be at least 6 characters.'; return; }
+
+    btn.disabled = true;
+    btn.textContent = 'Creating account…';
+
+    const { data, error } = await sb.auth.signUp({
+      email,
+      password: pw,
+      options: { data: { display_name: `${first} ${last}`, requested_role: 'fan' } },
+    });
+
+    if (error) {
+      errEl.textContent = error.message || 'Sign-up failed. Please try again.';
+      btn.disabled = false;
+      btn.textContent = 'Join as a Fan';
+      return;
+    }
+
+    const token = data?.session?.access_token;
+
+    if (token) {
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/fan-signup`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({}),
+        });
+      } catch (_) {}
+    }
+
+    body.innerHTML = `
+      <div class="result-state">
+        <div class="result-icon">🎉</div>
+        <h2 class="result-title">Welcome, ${first}!</h2>
+        <p class="result-msg">Your fan account is all set — no approval needed. Redirecting you to the Heroes site…</p>
+      </div>`;
+    setTimeout(() => { window.location.href = 'index.html'; }, 2500);
+  };
+})();
+</script>
+
+</body>
+</html>
