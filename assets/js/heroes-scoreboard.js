@@ -247,6 +247,184 @@
 
   // ── Global action handlers ──────────────────────────────────
 
+  // Unified Edit Profile modal — opened from the nav dropdown
+  window.openEditProfileModal = function() {
+    const existing = document.getElementById('ep-modal-overlay');
+    if (existing) existing.remove();
+
+    const player  = getCurrentPlayer();
+    const profile = getHA()?.getProfile();
+    const name    = profile?.display_name || '';
+    const teamColor = '#C8102E';
+
+    // Avatar HTML
+    const initials = name.split(/\s+/).slice(0,2).map(w=>w[0]?.toUpperCase()||'').join('') || '?';
+    const avatarHtml = player?.photo
+      ? `<img src="${player.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block"
+             onerror="this.parentElement.innerHTML='<span style=font-size:22px;font-weight:900;color:#fff>${initials}</span>'">`
+      : `<span style="font-size:22px;font-weight:900;color:#fff">${initials}</span>`;
+
+    // Position / bats / throws
+    const positions = ['P','C','1B','2B','3B','SS','OF','LF','CF','RF','DH','UT'];
+    const posOpts = `<option value="">— Select —</option>${positions.map(p=>`<option value="${p}"${player?.position===p?' selected':''}>${p}</option>`).join('')}`;
+    const selStyle = `width:100%;padding:10px 12px;border:1.5px solid #ddd;border-radius:7px;font-size:14px;outline:none;box-sizing:border-box;font-family:inherit;background:#fff`;
+    const focusBlur = `onfocus="this.style.borderColor='#C8102E'" onblur="this.style.borderColor='#ddd'"`;
+
+    const el = document.createElement('div');
+    el.id = 'ep-modal-overlay';
+    el.innerHTML = `
+      <div id="ep-modal-backdrop" style="position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9000;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto">
+        <div style="background:#fff;border-radius:14px;width:100%;max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,0.3);margin:auto">
+
+          <!-- Header -->
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px 0">
+            <div>
+              <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#aaa">MY HEROES · PLAYER PORTAL</div>
+              <h2 style="font-size:20px;font-weight:900;margin:4px 0 0">Edit Profile</h2>
+            </div>
+            <button onclick="document.getElementById('ep-modal-overlay').remove()"
+              style="width:32px;height:32px;border-radius:50%;border:1.5px solid #ddd;background:transparent;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#555;font-family:inherit;flex-shrink:0">✕</button>
+          </div>
+
+          <div style="padding:20px 24px;display:flex;flex-direction:column;gap:20px">
+
+            <!-- Section 1: Photo -->
+            <div style="border:1px solid #e5e7eb;border-radius:10px;padding:18px">
+              <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#aaa;margin-bottom:12px">PROFILE PHOTO</div>
+              <div style="display:flex;align-items:center;gap:16px">
+                <div style="width:60px;height:60px;border-radius:50%;background:${teamColor};display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden">
+                  ${avatarHtml}
+                </div>
+                <div>
+                  <button onclick="document.getElementById('ep-modal-overlay').remove();setTimeout(myOpenPhotoPicker,80)"
+                    style="padding:9px 18px;background:#fff;border:1.5px solid #C8102E;color:#C8102E;border-radius:7px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">
+                    📷 Change Photo
+                  </button>
+                  <div style="font-size:12px;color:#999;margin-top:6px">Your player avatar</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Section 2: Profile Info -->
+            <div style="border:1px solid #e5e7eb;border-radius:10px;padding:18px">
+              <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#aaa;margin-bottom:14px">PLAYER INFO</div>
+              <div style="margin-bottom:12px">
+                <label style="display:block;font-size:11px;font-weight:800;letter-spacing:0.5px;color:#555;margin-bottom:6px">POSITION</label>
+                <select id="ep-pos" style="${selStyle}" ${focusBlur}>${posOpts}</select>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+                <div>
+                  <label style="display:block;font-size:11px;font-weight:800;letter-spacing:0.5px;color:#555;margin-bottom:6px">BATS</label>
+                  <select id="ep-bats" style="${selStyle}" ${focusBlur}>
+                    <option value="">—</option>
+                    <option value="R"${player?.bats==='R'?' selected':''}>Right</option>
+                    <option value="L"${player?.bats==='L'?' selected':''}>Left</option>
+                    <option value="S"${player?.bats==='S'?' selected':''}>Switch</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="display:block;font-size:11px;font-weight:800;letter-spacing:0.5px;color:#555;margin-bottom:6px">THROWS</label>
+                  <select id="ep-throws" style="${selStyle}" ${focusBlur}>
+                    <option value="">—</option>
+                    <option value="R"${player?.throws==='R'?' selected':''}>Right</option>
+                    <option value="L"${player?.throws==='L'?' selected':''}>Left</option>
+                  </select>
+                </div>
+              </div>
+              <div id="ep-info-err" style="min-height:16px;font-size:13px;color:#dc2626;margin-bottom:8px"></div>
+              <button onclick="submitEpInfo()"
+                style="width:100%;padding:11px;background:#C8102E;color:#fff;border:none;border-radius:7px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">
+                Save Info
+              </button>
+            </div>
+
+            <!-- Section 3: Change Password -->
+            <div style="border:1px solid #e5e7eb;border-radius:10px;padding:18px">
+              <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#aaa;margin-bottom:14px">CHANGE PASSWORD</div>
+              <div style="margin-bottom:12px">
+                <label style="display:block;font-size:11px;font-weight:800;letter-spacing:0.5px;color:#555;margin-bottom:6px">NEW PASSWORD</label>
+                <input type="password" id="ep-pw-new" placeholder="Min 6 characters" autocomplete="new-password"
+                  style="width:100%;padding:10px 12px;border:1.5px solid #ddd;border-radius:7px;font-size:14px;outline:none;box-sizing:border-box;font-family:inherit"
+                  onfocus="this.style.borderColor='#C8102E'" onblur="this.style.borderColor='#ddd'">
+              </div>
+              <div style="margin-bottom:12px">
+                <label style="display:block;font-size:11px;font-weight:800;letter-spacing:0.5px;color:#555;margin-bottom:6px">CONFIRM PASSWORD</label>
+                <input type="password" id="ep-pw-confirm" placeholder="Repeat password" autocomplete="new-password"
+                  style="width:100%;padding:10px 12px;border:1.5px solid #ddd;border-radius:7px;font-size:14px;outline:none;box-sizing:border-box;font-family:inherit"
+                  onfocus="this.style.borderColor='#C8102E'" onblur="this.style.borderColor='#ddd'"
+                  onkeydown="if(event.key==='Enter')submitEpPassword()">
+              </div>
+              <div id="ep-pw-err" style="min-height:16px;font-size:13px;color:#dc2626;margin-bottom:8px"></div>
+              <button onclick="submitEpPassword()"
+                style="width:100%;padding:11px;background:#111;color:#fff;border:none;border-radius:7px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">
+                Update Password
+              </button>
+            </div>
+
+          </div><!-- /sections -->
+        </div>
+      </div>`;
+
+    document.body.appendChild(el);
+    document.getElementById('ep-modal-backdrop').addEventListener('click', e => {
+      if (e.target.id === 'ep-modal-backdrop') el.remove();
+    });
+  };
+
+  window.submitEpInfo = function() {
+    const player = getCurrentPlayer();
+    if (!player) return;
+    const errEl    = document.getElementById('ep-info-err');
+    const position = document.getElementById('ep-pos')?.value     || '';
+    const bats     = document.getElementById('ep-bats')?.value    || '';
+    const throws_  = document.getElementById('ep-throws')?.value  || '';
+
+    const d   = loadData();
+    const idx = d.players.findIndex(p => p.id === player.id);
+    if (idx < 0) { if (errEl) errEl.textContent = 'Could not find your player record.'; return; }
+
+    d.players[idx] = { ...d.players[idx], position, bats, throws: throws_ };
+    saveData(d);
+
+    document.getElementById('ep-modal-overlay')?.remove();
+    if (typeof App !== 'undefined' && App.toast) App.toast('Player info saved! ✓', 'success');
+  };
+
+  window.submitEpPassword = async function() {
+    const newPw   = document.getElementById('ep-pw-new')?.value    || '';
+    const confirm = document.getElementById('ep-pw-confirm')?.value || '';
+    const errEl   = document.getElementById('ep-pw-err');
+    if (!newPw || newPw.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; return; }
+    if (newPw !== confirm)          { errEl.textContent = 'Passwords do not match.'; return; }
+    errEl.textContent = '';
+
+    const ha = getHA();
+    if (!ha) { errEl.textContent = 'Not signed in.'; return; }
+    const { error } = await ha.updatePassword(newPw);
+    if (error) { errEl.textContent = error.message || 'Could not update password.'; return; }
+
+    // Fire-and-forget security notification email
+    try {
+      const profile = ha.getProfile();
+      const email   = ha._session?.user?.email || '';
+      const name    = profile?.display_name    || '';
+      if (email) {
+        const sb = _getClient();
+        const { data: sd } = await sb.auth.getSession();
+        const token = sd?.session?.access_token || (typeof SUPABASE_ANON_KEY !== 'undefined' ? SUPABASE_ANON_KEY : '');
+        const fnUrl = (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '') + '/functions/v1/notify-password-changed';
+        fetch(fnUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ email, name }),
+        }).catch(() => {});
+      }
+    } catch (_) {}
+
+    document.getElementById('ep-modal-overlay')?.remove();
+    if (typeof App !== 'undefined' && App.toast) App.toast('Password updated! ✓', 'success');
+  };
+
   // Change Password — called from /my page "Change Password" link
   window.showPasswordChangeModal = function() {
     const existing = document.getElementById('mh-pw-overlay');
@@ -986,11 +1164,6 @@
               ${upcomingAll.length ? `
               <h1 class="mh-ev-name">UPCOMING EVENTS</h1>
               <div class="mh-ev-meta">${upcomingAll.length} event${upcomingAll.length !== 1 ? 's' : ''} scheduled · Next: ${nextEv ? nextEv.name : ''}</div>` : ''}
-              <div class="mh-hero-actions">
-                <button onclick="myOpenPhotoPicker()" class="mh-chpw-btn">📷 Change Photo</button>
-                <button onclick="showEditProfileModal()" class="mh-chpw-btn">✏️ Edit Profile</button>
-                <button onclick="showPasswordChangeModal()" class="mh-chpw-btn">🔒 Change Password</button>
-              </div>
             </div>
             ${nextDays !== null && nextDays >= 0 ? `
             <div class="mh-cdown">

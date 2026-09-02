@@ -438,6 +438,7 @@ const HeroesAuth = {
           ${roleStatusHtml}
           ${adminLink}
           ${upgradeLink}
+          ${approved ? `<button class="auth-dropdown-item" onclick="document.getElementById('auth-dropdown')?.classList.remove('open');openEditProfileModal()">✏ Edit Profile</button>` : ''}
           <button class="auth-dropdown-item auth-dropdown-signout" onclick="HeroesAuth.signOut()">🚪 Sign Out</button>
         </div>
       </div>`;
