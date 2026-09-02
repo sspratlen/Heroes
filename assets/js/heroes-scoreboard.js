@@ -597,10 +597,20 @@
   }
 
   async function gmLoadMessages(groupId, token) {
-    const data   = await gmFetch(`/groups/${groupId}/messages?limit=20`, token);
     const msgsEl = document.getElementById('gm-msgs');
     if (!msgsEl) return;
+    let data;
+    try {
+      data = await gmFetch(`/groups/${groupId}/messages?limit=20`, token);
+    } catch (err) {
+      msgsEl.innerHTML = '<div style="text-align:center;padding:40px;color:#dc2626;font-size:13px">Failed to load messages. Check your connection and try refreshing.</div>';
+      return;
+    }
     if (data._unauthorized) { await clearGroupMeToken(); return; }
+    if (data._error) {
+      msgsEl.innerHTML = `<div style="text-align:center;padding:40px;color:#dc2626;font-size:13px">Error loading messages (${data._error}). Try refreshing.</div>`;
+      return;
+    }
     const msgs = data.messages || [];
     if (msgs.length === 0) {
       msgsEl.innerHTML = '<div style="text-align:center;padding:40px;color:#888;font-size:13px">No messages yet. Be the first to say something!</div>';
@@ -610,6 +620,15 @@
     msgsEl.innerHTML = [...msgs].reverse().map(gmRenderMsg).join('');
     msgsEl.scrollTop = msgsEl.scrollHeight;
   }
+
+  window.gmRefreshMessages = async function (groupId) {
+    const token = getGroupMeToken();
+    if (!token) return;
+    _gmLastMessageId = null;
+    const msgsEl = document.getElementById('gm-msgs');
+    if (msgsEl) msgsEl.innerHTML = '<div class="gm-loading"><div class="gm-spinner"></div></div>';
+    await gmLoadMessages(groupId, token);
+  };
 
   async function gmPollMessages(groupId, token) {
     if (!_gmLastMessageId) return;
@@ -644,6 +663,7 @@
       <div class="gm-thread-head">
         <button class="gm-back-btn" onclick="gmBackToGroups()">← Groups</button>
         <div class="gm-thread-title">${_escHtml(groupName)}</div>
+        <button class="gm-refresh-btn" onclick="gmRefreshMessages('${groupId}')" title="Refresh messages">↻</button>
       </div>
       <div class="gm-msgs" id="gm-msgs"><div class="gm-loading"><div class="gm-spinner"></div></div></div>
       <div class="gm-send-box">
@@ -758,8 +778,8 @@
       <div class="gm-panes">
         <div class="gm-groups-pane" id="gm-groups-pane">
           ${groups.map(g => `
-            <div class="gm-grp-row" data-gid="${g.id}"
-                onclick="openGroupMeGroup('${g.id}', ${JSON.stringify(_escHtml(g.name || ''))})">
+            <div class="gm-grp-row" data-gid="${g.id}" data-gname="${_escHtml(g.name || '')}"
+                onclick="openGroupMeGroup(this.dataset.gid, this.dataset.gname)">
               <div class="gm-grp-av" style="background:${_gmColor(g.id)}">${(g.name || '?')[0].toUpperCase()}</div>
               <div class="gm-grp-info">
                 <div class="gm-grp-name">${_escHtml(g.name || '')}</div>
@@ -1196,6 +1216,8 @@
     .gm-send-btn { padding:9px 18px; background:#C8102E; color:#fff; border:none; border-radius:8px; font-size:13px; font-weight:800; cursor:pointer; font-family:inherit; white-space:nowrap; }
     .gm-send-btn:hover { opacity:.88; }
     .gm-send-err { font-size:12px; color:#dc2626; padding:4px 0; }
+    .gm-refresh-btn { margin-left:auto; padding:5px 10px; background:transparent; border:1px solid #ddd; border-radius:6px; font-size:15px; cursor:pointer; color:#555; font-family:inherit; line-height:1; }
+    .gm-refresh-btn:hover { background:#f3f4f6; }
 
     /* Responsive */
     @media (max-width:768px) {
