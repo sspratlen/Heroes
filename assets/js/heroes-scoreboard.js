@@ -1195,13 +1195,13 @@
     .gm-grp-meta { font-size:11px; color:#999; margin-top:2px; }
     .gm-grp-preview { font-size:12px; color:#777; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
 
-    .gm-thread-pane { flex:1; display:flex; flex-direction:column; min-width:0; background:#f8f8f8; }
+    .gm-thread-pane { flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; background:#f8f8f8; }
     .gm-thread-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; flex:1; color:#888; }
     .gm-thread-head { display:flex; align-items:center; gap:12px; padding:12px 16px; background:#fff; border-bottom:1px solid #e5e7eb; flex-shrink:0; }
     .gm-back-btn { display:none; padding:6px 12px; background:transparent; border:1px solid #ddd; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; color:#555; font-family:inherit; }
     .gm-thread-title { font-size:14px; font-weight:800; color:#111; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
-    .gm-msgs { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:10px; }
+    .gm-msgs { flex:1; min-height:0; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:10px; }
     .gm-msg { display:flex; gap:10px; align-items:flex-start; }
     .gm-msg-av { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:900; color:#fff; flex-shrink:0; }
     .gm-msg-body { min-width:0; }
