@@ -837,18 +837,30 @@
     const threadPane = document.getElementById('gm-thread-pane');
     if (!threadPane) return;
 
+    // Replace everything except the always-present send box at the bottom
+    const sendBox = threadPane.querySelector('.gm-send-box');
     threadPane.innerHTML = `
       <div class="gm-thread-head">
         <button class="gm-back-btn" onclick="gmBackToGroups()">← Groups</button>
         <div class="gm-thread-title">${_escHtml(groupName)}</div>
         <button class="gm-refresh-btn" onclick="gmRefreshMessages('${groupId}')" title="Refresh messages">↻</button>
       </div>
-      <div class="gm-msgs" id="gm-msgs"><div class="gm-loading"><div class="gm-spinner"></div></div></div>
-      <div class="gm-send-box">
-        <textarea class="gm-send-input" id="gm-send-input" placeholder="Send a message…" rows="1"
-          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();gmSendMessage('${groupId}')}"></textarea>
-        <button class="gm-send-btn" onclick="gmSendMessage('${groupId}')">Send</button>
-      </div>`;
+      <div class="gm-msgs" id="gm-msgs"><div class="gm-loading"><div class="gm-spinner"></div></div></div>`;
+    // Re-attach or create the send box
+    if (sendBox) {
+      const inp = sendBox.querySelector('.gm-send-input');
+      const btn = sendBox.querySelector('.gm-send-btn');
+      if (inp) { inp.id = 'gm-send-input'; inp.placeholder = 'Send a message…'; inp.disabled = false; inp.style.opacity = ''; inp.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); gmSendMessage(groupId); } }; }
+      if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.style.cursor = ''; btn.onclick = () => gmSendMessage(groupId); }
+      threadPane.appendChild(sendBox);
+    } else {
+      const sb = document.createElement('div');
+      sb.className = 'gm-send-box';
+      sb.innerHTML = `<textarea class="gm-send-input" id="gm-send-input" placeholder="Send a message…" rows="1"></textarea><button class="gm-send-btn">Send</button>`;
+      sb.querySelector('.gm-send-input').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); gmSendMessage(groupId); } };
+      sb.querySelector('.gm-send-btn').onclick = () => gmSendMessage(groupId);
+      threadPane.appendChild(sb);
+    }
 
     document.getElementById('gm-groups-pane')?.classList.add('gm-mobile-hidden');
     threadPane.classList.add('gm-mobile-visible');
@@ -957,8 +969,8 @@
           ${groups.map(g => `
             <div class="gm-grp-row" data-gid="${g.id}" data-gname="${_escHtml(g.name || '')}"
                 onclick="openGroupMeGroup(this.dataset.gid, this.dataset.gname)">
-              <div class="gm-grp-av" style="background:${_gmColor(g.id)}">${(g.name || '?')[0].toUpperCase()}</div>
-              <div class="gm-grp-info">
+              <div class="gm-grp-header" style="background:${_gmColor(g.id)}">${(g.name || '?')[0].toUpperCase()}</div>
+              <div class="gm-grp-body">
                 <div class="gm-grp-name">${_escHtml(g.name || '')}</div>
                 <div class="gm-grp-meta">${(g.members || []).length} members</div>
                 ${g.messages?.preview?.preview
@@ -969,9 +981,13 @@
         </div>
         <button class="gm-panes-toggle" id="gm-panes-toggle" onclick="gmToggleGroups()" title="Toggle groups list">‹</button>
         <div class="gm-thread-pane" id="gm-thread-pane">
-          <div class="gm-thread-empty">
+          <div class="gm-thread-empty" id="gm-thread-empty">
             <div style="font-size:40px;margin-bottom:12px">💬</div>
             <div style="font-size:14px;color:#888">Select a group to start chatting</div>
+          </div>
+          <div class="gm-send-box">
+            <textarea class="gm-send-input" id="gm-send-input" placeholder="Select a group to chat…" rows="1" disabled style="opacity:.5"></textarea>
+            <button class="gm-send-btn" disabled style="opacity:.5;cursor:default">Send</button>
           </div>
         </div>
       </div>`;
@@ -1482,11 +1498,11 @@
     .gm-groups-pane.gm-collapsed { width:0 !important; overflow:hidden; }
     .gm-panes-toggle { width:18px; flex-shrink:0; border:none; border-left:1px solid #e5e7eb; border-right:1px solid #e5e7eb; background:#f9fafb; color:#bbb; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; font-size:13px; font-weight:900; font-family:inherit; }
     .gm-panes-toggle:hover { background:#f0f0f0; color:#555; }
-    .gm-grp-row { display:flex; align-items:center; gap:12px; padding:14px 16px; cursor:pointer; border-bottom:1px solid #f3f4f6; transition:background 0.1s; }
-    .gm-grp-row:hover { background:#f9fafb; }
-    .gm-grp-row.gm-grp-sel { background:#fef2f4; border-left:3px solid #C8102E; }
-    .gm-grp-av { width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:900; color:#fff; flex-shrink:0; }
-    .gm-grp-info { min-width:0; flex:1; }
+    .gm-grp-row { cursor:pointer; border-bottom:1px solid #ebebeb; transition:background 0.1s; overflow:hidden; }
+    .gm-grp-row:hover { background:#f5f5f5; }
+    .gm-grp-row.gm-grp-sel { background:#fef2f4; box-shadow:inset 3px 0 0 #C8102E; }
+    .gm-grp-header { width:100%; padding:5px 14px; font-size:13px; font-weight:900; color:rgba(255,255,255,0.92); letter-spacing:.03em; }
+    .gm-grp-body { padding:10px 14px 12px; }
     .gm-grp-name { font-size:13px; font-weight:700; color:#111; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .gm-grp-meta { font-size:11px; color:#999; margin-top:2px; }
     .gm-grp-preview { font-size:12px; color:#777; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
