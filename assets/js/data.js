@@ -271,10 +271,13 @@ async function _syncTeamsToSupabase(teams) {
       color:             t.color             || '',
       manager:           t.manager           || '',
       assistant_manager: t.assistantManager  || '',
-      updated_at:        new Date().toISOString(),
     }));
     const { error } = await client.from('teams').upsert(rows, { onConflict: 'legacy_id' });
-    if (error) { console.error('Supabase teams sync error:', error.message); return; }
+    if (error) {
+      console.error('Supabase teams sync error:', error.message);
+      if (typeof toast === 'function') toast('⚠️ Team save failed: ' + error.message, 'error');
+      return;
+    }
 
     const { data: existing } = await client.from('teams').select('legacy_id');
     const toDelete = (existing || []).map(r => r.legacy_id).filter(lid => !currentLegacyIds.includes(lid));
@@ -302,10 +305,13 @@ async function _syncPlayersToSupabase(players) {
       active:     p.active !== false,
       photo:      p.photo     || '',
       email:      p.email     || '',
-      updated_at: new Date().toISOString(),
     }));
     const { error: playerErr } = await client.from('players').upsert(playerRows, { onConflict: 'legacy_id' });
-    if (playerErr) { console.error('Supabase players sync error:', playerErr.message); return; }
+    if (playerErr) {
+      console.error('Supabase players sync error:', playerErr.message);
+      if (typeof toast === 'function') toast('⚠️ Player save failed: ' + playerErr.message, 'error');
+      return;
+    }
 
     // Delete rows whose legacy_id is no longer in the current players array
     const currentLegacyIds = players.map(p => p.id);
