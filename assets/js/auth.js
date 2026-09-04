@@ -91,6 +91,8 @@ const HeroesAuth = {
           window.history.replaceState(null, '', window.location.pathname + window.location.search + '#/');
           this.showLoginModal();
           this._renderSetPasswordForm({ firstLogin: true, magicLink: true });
+          // Fan data not loaded here — _fanData() falls back to localStorage during
+          // the password-set flow. A subsequent SIGNED_IN event loads it from Supabase.
           return;
         }
       }
@@ -220,6 +222,7 @@ const HeroesAuth = {
     });
   },
   async _loadFanDataFromSupabase() {
+    if (this._fanCache) return;
     const sb = _getClient();
     const uid = this._profile?.id || this._session?.user?.id;
     if (!sb || !uid) return;
