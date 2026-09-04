@@ -490,24 +490,31 @@ function triggerAddNew() {
 function setContent(html) { document.getElementById('admin-content').innerHTML = html; }
 
 // ── Audit Logging ──────────────────────────────────────────────────────────
-async function auditLog(action, collection, recordId, summary) {
+async function auditLog(action, collection, recordId, summary, opts = {}) {
   try {
     const sb = _getClient();
     if (!sb) return;
-    let userEmail = 'unknown', userId = null;
+    let userEmail = 'unknown', userId = null, changedBy = null;
     try {
       if (typeof HeroesAuth !== 'undefined') {
         const prof = HeroesAuth.getProfile();
         const sess = HeroesAuth.getSession();
         userEmail = prof?.email || sess?.user?.email || 'unknown';
-        userId = sess?.user?.id || null;
+        userId    = sess?.user?.id || null;
+        changedBy = prof?.display_name || prof?.email || null;
       }
     } catch(_) {}
     await sb.from('audit_log').insert({
-      user_email: userEmail, user_id: userId,
-      action, collection, record_id: String(recordId || ''), summary: summary || ''
+      user_email:     userEmail,
+      user_id:        userId,
+      changed_by:     changedBy,
+      action, collection,
+      record_id:      String(recordId || ''),
+      summary:        summary || '',
+      previous_value: opts.previousValue ?? null,
+      new_value:      opts.newValue      ?? null,
     });
-  } catch(e) { console.warn('audit log skipped (table may not exist yet):', e.message); }
+  } catch(e) { console.warn('audit log skipped:', e.message); }
 }
 
 function toast(msg, type = 'success') {
