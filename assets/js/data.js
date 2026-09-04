@@ -272,10 +272,23 @@ async function _syncTeamsToSupabase(teams) {
       manager:           t.manager           || '',
       assistant_manager: t.assistantManager  || '',
     }));
-    const { error } = await client.from('teams').upsert(rows, { onConflict: 'legacy_id' });
+    const { data: session } = await client.auth.getSession();
+    if (!session?.session) {
+      if (typeof toast === 'function') toast('⚠️ Team save failed: not authenticated — sign out and back in', 'error');
+      console.warn('Teams sync: no active session');
+      return;
+    }
+
+    const { data: upserted, error } = await client.from('teams').upsert(rows, { onConflict: 'legacy_id' }).select();
     if (error) {
       console.error('Supabase teams sync error:', error.message);
       if (typeof toast === 'function') toast('⚠️ Team save failed: ' + error.message, 'error');
+      return;
+    }
+    if (!upserted || upserted.length < rows.length) {
+      const msg = `Team save blocked by Supabase (${upserted?.length ?? 0}/${rows.length} rows written) — check your role in Supabase`;
+      console.warn(msg);
+      if (typeof toast === 'function') toast('⚠️ ' + msg, 'error');
       return;
     }
 
