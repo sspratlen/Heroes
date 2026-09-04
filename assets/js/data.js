@@ -300,18 +300,25 @@ async function _syncPlayersToSupabase(players) {
   const client = _getClient();
   if (!client) return;
   try {
+    // Fetch existing players first to get organization_id (NOT NULL column)
+    const { data: existingForOrg } = await client.from('players').select('legacy_id, organization_id');
+    const playerOrgMap = {};
+    (existingForOrg || []).forEach(r => { if (r.legacy_id) playerOrgMap[r.legacy_id] = r.organization_id; });
+    const defaultPlayerOrgId = (existingForOrg || []).find(r => r.organization_id)?.organization_id ?? null;
+
     const playerRows = players.map(p => ({
-      legacy_id:  p.id,
-      first_name: p.firstName || '',
-      last_name:  p.lastName  || '',
-      number:     p.number ? parseInt(p.number, 10) : null,
-      position:   p.position  || '',
-      bats:       p.bats      || 'R',
-      throws:     p.throws    || 'R',
-      join_year:  p.joinYear  || null,
-      active:     p.active !== false,
-      photo:      p.photo     || '',
-      email:      p.email     || '',
+      legacy_id:       p.id,
+      first_name:      p.firstName || '',
+      last_name:       p.lastName  || '',
+      number:          p.number ? parseInt(p.number, 10) : null,
+      position:        p.position  || '',
+      bats:            p.bats      || 'R',
+      throws:          p.throws    || 'R',
+      join_year:       p.joinYear  || null,
+      active:          p.active !== false,
+      photo:           p.photo     || '',
+      email:           p.email     || '',
+      organization_id: playerOrgMap[p.id] ?? defaultPlayerOrgId,
     }));
     const { error: playerErr } = await client.from('players').upsert(playerRows, { onConflict: 'legacy_id' });
     if (playerErr) {
