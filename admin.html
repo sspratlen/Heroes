@@ -927,7 +927,7 @@ async function loadPlayerLogins() {
                     : diffDays < 365 ? `${Math.floor(diffDays/30)}mo ago`
                     : `${Math.floor(diffDays/365)}yr ago`;
         const full = d.toLocaleString();
-        cell.innerHTML = `<span title="${full}" style="color:#374151">${label}</span>`;
+        cell.innerHTML = `<span style="color:#374151">${label}</span><br><span style="color:#9ca3af;font-size:11px">${full}</span>`;
       } else if (info) {
         cell.innerHTML = `<span style="color:#ccc" title="Account exists but never logged in">never</span>`;
       } else {
