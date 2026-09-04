@@ -1816,17 +1816,10 @@ function addTournament() {
     if (!name) { toast('Tournament name is required'); return; }
     const d = loadData();
     if (!d.tournaments) d.tournaments = [];
-    d.tournaments.push({
-      id: 'tr'+Date.now(), name,
-      teamId: val('tf-team')||null,
-      startDate: val('tf-start')||null,
-      endDate: val('tf-end')||null,
-      location: val('tf-location'),
-      season: val('tf-season')||new Date().getFullYear(),
-      placement: null,
-      notes: val('tf-notes')
-    });
+    const newTournament = { id: 'tr'+Date.now(), name, teamId: val('tf-team')||null, startDate: val('tf-start')||null, endDate: val('tf-end')||null, location: val('tf-location'), season: val('tf-season')||new Date().getFullYear(), placement: null, notes: val('tf-notes') };
+    d.tournaments.push(newTournament);
     saveCollection('tournaments', d.tournaments);
+    auditLog('tournament_add', 'tournaments', newTournament.id, newTournament.name, { previousValue: null, newValue: newTournament });
     closeModal(); renderTournaments(); toast('Tournament added!');
   });
 }
@@ -1839,6 +1832,7 @@ function editTournament(id) {
     if (!name) { toast('Tournament name is required'); return; }
     const d = loadData();
     const idx = d.tournaments.findIndex(x=>x.id===id);
+    const beforeTournament = d.tournaments[idx] ? { ...d.tournaments[idx] } : null;
     d.tournaments[idx] = { ...d.tournaments[idx], name,
       teamId: val('tf-team')||null,
       startDate: val('tf-start')||null,
@@ -1848,6 +1842,7 @@ function editTournament(id) {
       notes: val('tf-notes')
     };
     saveCollection('tournaments', d.tournaments);
+    auditLog('tournament_edit', 'tournaments', id, d.tournaments[idx]?.name || id, { previousValue: beforeTournament, newValue: d.tournaments[idx] });
     closeModal(); renderTournaments(); toast('Tournament updated!');
   });
 }
@@ -2049,10 +2044,12 @@ window.savePlacement = function(id, place) {
 function deleteTournament(id) {
   if (!confirm('Delete this tournament? Games assigned to it will be unlinked.')) return;
   const d = loadData();
+  const deletedTournament = (d.tournaments||[]).find(t=>t.id===id) || null;
   d.tournaments = (d.tournaments||[]).filter(t=>t.id!==id);
   d.games = d.games.map(g=>g.tournamentId===id?{...g,tournamentId:null}:g);
   saveCollection('tournaments', d.tournaments);
   saveCollection('games', d.games);
+  auditLog('tournament_delete', 'tournaments', id, deletedTournament?.name || id, { previousValue: deletedTournament, newValue: null });
   renderTournaments(); toast('Tournament deleted');
 }
 
@@ -2859,8 +2856,9 @@ function addNews() {
   openModal('Add Article', buildNewsForm(null), 'Publish', async () => {
     const image = await _resolveNewsImage();
     const d = loadData();
-    d.news.unshift({ id:'n'+Date.now(), title:val('nf-title'), category:val('nf-cat'), date:val('nf-date'), season:new Date().getFullYear().toString(), excerpt:val('nf-excerpt'), content:val('nf-content'), image, author:val('nf-author'), pinned:document.getElementById('nf-pinned').checked });
-    saveData(d); closeModal(); renderNews(); toast('Article published!');
+    const newArticle = { id:'n'+Date.now(), title:val('nf-title'), category:val('nf-cat'), date:val('nf-date'), season:new Date().getFullYear().toString(), excerpt:val('nf-excerpt'), content:val('nf-content'), image, author:val('nf-author'), pinned:document.getElementById('nf-pinned').checked };
+    d.news.unshift(newArticle);
+    saveData(d); auditLog('news_add', 'news', newArticle.id, newArticle.title || newArticle.id, { previousValue: null, newValue: newArticle }); closeModal(); renderNews(); toast('Article published!');
   });
 }
 function editNews(id) {
@@ -2868,13 +2866,14 @@ function editNews(id) {
   openModal('Edit Article', buildNewsForm(n), 'Save', async () => {
     const image = await _resolveNewsImage();
     const d=loadData(); const idx=d.news.findIndex(x=>x.id===id);
+    const beforeNews = d.news[idx] ? { ...d.news[idx] } : null;
     d.news[idx]={...d.news[idx],title:val('nf-title'),category:val('nf-cat'),date:val('nf-date'),excerpt:val('nf-excerpt'),content:val('nf-content'),image,author:val('nf-author'),pinned:document.getElementById('nf-pinned').checked};
-    saveData(d); closeModal(); renderNews(); toast('Article updated!');
+    saveData(d); auditLog('news_edit', 'news', id, d.news[idx]?.title || id, { previousValue: beforeNews, newValue: d.news[idx] }); closeModal(); renderNews(); toast('Article updated!');
   });
 }
 function deleteNews(id) {
   if(!confirm('Delete?')) return;
-  const d=loadData(); d.news=d.news.filter(n=>n.id!==id); saveData(d); renderNews();
+  const d=loadData(); const deletedArticle=d.news.find(n=>n.id===id)||null; d.news=d.news.filter(n=>n.id!==id); saveData(d); auditLog('news_delete', 'news', id, deletedArticle?.title || id, { previousValue: deletedArticle, newValue: null }); renderNews();
 }
 function buildNewsForm(n) {
   const cats = ['Announcement','Tournament','Game Recap','Season Update','Team News','Community'];
@@ -3002,21 +3001,23 @@ function addAward() {
   const data=loadData();
   openModal('Add Award', buildAwardForm(null,data), 'Add Award', () => {
     const d=loadData();
-    d.awards.unshift({id:'a'+Date.now(),year:val('af-year'),title:val('af-title'),team:val('af-team'),description:val('af-desc'),icon:val('af-icon')});
-    saveData(d); closeModal(); renderAwards(); toast('Award added!');
+    const newAward={id:'a'+Date.now(),year:val('af-year'),title:val('af-title'),team:val('af-team'),description:val('af-desc'),icon:val('af-icon')};
+    d.awards.unshift(newAward);
+    saveData(d); auditLog('award_add', 'awards', newAward.id, newAward.title || newAward.id, { previousValue: null, newValue: newAward }); closeModal(); renderAwards(); toast('Award added!');
   });
 }
 function editAward(id) {
   const data=loadData(); const a=data.awards.find(x=>x.id===id);
   openModal('Edit Award', buildAwardForm(a,data), 'Save', () => {
     const d=loadData(); const idx=d.awards.findIndex(x=>x.id===id);
+    const beforeAward = d.awards[idx] ? { ...d.awards[idx] } : null;
     d.awards[idx]={...d.awards[idx],year:val('af-year'),title:val('af-title'),team:val('af-team'),description:val('af-desc'),icon:val('af-icon')};
-    saveData(d); closeModal(); renderAwards(); toast('Award updated!');
+    saveData(d); auditLog('award_edit', 'awards', id, d.awards[idx]?.title || id, { previousValue: beforeAward, newValue: d.awards[idx] }); closeModal(); renderAwards(); toast('Award updated!');
   });
 }
 function deleteAward(id) {
   if(!confirm('Delete?')) return;
-  const d=loadData(); d.awards=d.awards.filter(a=>a.id!==id); saveData(d); renderAwards();
+  const d=loadData(); const deletedAward=d.awards.find(a=>a.id===id)||null; d.awards=d.awards.filter(a=>a.id!==id); saveData(d); auditLog('award_delete', 'awards', id, deletedAward?.title || id, { previousValue: deletedAward, newValue: null }); renderAwards();
 }
 function buildAwardForm(a, data) {
   return `
@@ -3158,8 +3159,9 @@ function addAlbum() {
     const d = loadData();
     if (!d.albums) d.albums = [];
     const alCat = val('al-category')==='__new__' ? (val('al-cat-new')||'').toLowerCase().trim()||'site' : val('al-category')||'site';
-    d.albums.push({ id:'al'+Date.now(), name:val('al-name'), category:alCat, date:val('al-date'), teamId:val('al-team'), description:val('al-desc'), coverUrl:val('al-cover') });
-    saveCollection('albums', d.albums); closeModal(); renderGalleryAdmin(); toast('Album added!');
+    const newAlbum = { id:'al'+Date.now(), name:val('al-name'), category:alCat, date:val('al-date'), teamId:val('al-team'), description:val('al-desc'), coverUrl:val('al-cover') };
+    d.albums.push(newAlbum);
+    saveCollection('albums', d.albums); auditLog('album_add', 'albums', newAlbum.id, newAlbum.name || newAlbum.id, { previousValue: null, newValue: newAlbum }); closeModal(); renderGalleryAdmin(); toast('Album added!');
   });
 }
 function editAlbum(id) {
@@ -3167,16 +3169,18 @@ function editAlbum(id) {
   openModal('Edit Album', buildAlbumForm(al, data), 'Save Changes', () => {
     const d = loadData(); const idx = (d.albums||[]).findIndex(a=>a.id===id);
     const alCat2 = val('al-category')==='__new__' ? (val('al-cat-new')||'').toLowerCase().trim()||'site' : val('al-category')||'site';
+    const beforeAlbum = idx>=0 ? { ...d.albums[idx] } : null;
     if (idx>=0) d.albums[idx] = { ...d.albums[idx], name:val('al-name'), category:alCat2, date:val('al-date'), teamId:val('al-team'), description:val('al-desc'), coverUrl:val('al-cover') };
-    saveCollection('albums', d.albums); closeModal(); renderGalleryAdmin(); toast('Album updated!');
+    saveCollection('albums', d.albums); auditLog('album_edit', 'albums', id, d.albums[idx]?.name || id, { previousValue: beforeAlbum, newValue: d.albums[idx] }); closeModal(); renderGalleryAdmin(); toast('Album updated!');
   });
 }
 function deleteAlbum(id) {
   if(!confirm('Delete album and all its photos?')) return;
   const d = loadData();
+  const deletedAlbum = (d.albums||[]).find(a=>a.id===id) || null;
   d.albums = (d.albums||[]).filter(a=>a.id!==id);
   d.photos = (d.photos||[]).filter(p=>p.albumId!==id);
-  saveCollection('albums', d.albums); saveCollection('photos', d.photos); renderGalleryAdmin(); toast('Album deleted');
+  saveCollection('albums', d.albums); saveCollection('photos', d.photos); auditLog('album_delete', 'albums', id, deletedAlbum?.name || id, { previousValue: deletedAlbum, newValue: null }); renderGalleryAdmin(); toast('Album deleted');
 }
 function managePhotos(albumId) {
   const data = loadData();
@@ -3211,14 +3215,15 @@ function managePhotos(albumId) {
     }
     if (!url) { toast('File or URL required','error'); return false; }
     const d = loadData(); if (!d.photos) d.photos = [];
-    d.photos.push({ id:'ph'+Date.now(), albumId, url, caption:val('ph-caption') });
-    saveCollection('photos', d.photos); closeModal(); managePhotos(albumId); toast('Photo added!');
+    const newPhoto = { id:'ph'+Date.now(), albumId, url, caption:val('ph-caption') };
+    d.photos.push(newPhoto);
+    saveCollection('photos', d.photos); auditLog('photo_add', 'photos', newPhoto.id, newPhoto.url || newPhoto.id, { previousValue: null, newValue: newPhoto }); closeModal(); managePhotos(albumId); toast('Photo added!');
   });
 }
 window.deletePhoto = function(photoId, albumId) {
   if(!confirm('Delete photo?')) return;
-  const d = loadData(); d.photos = (d.photos||[]).filter(p=>p.id!==photoId);
-  saveCollection('photos', d.photos); toast('Photo deleted'); managePhotos(albumId);
+  const d = loadData(); const deletedPhoto = (d.photos||[]).find(p=>p.id===photoId)||null; d.photos = (d.photos||[]).filter(p=>p.id!==photoId);
+  saveCollection('photos', d.photos); auditLog('photo_delete', 'photos', photoId, deletedPhoto?.url || photoId, { previousValue: deletedPhoto, newValue: null }); toast('Photo deleted'); managePhotos(albumId);
 };
 
 window.previewGalleryUpload = function(input) {
@@ -3302,21 +3307,23 @@ function renderSponsors() {
 function addSponsor() {
   openModal('Add Sponsor', buildSponsorForm(null), 'Add Sponsor', () => {
     const d=loadData();
-    d.sponsors.push({id:'s'+Date.now(),name:val('sf-name'),url:val('sf-url'),logo:val('sf-logo'),tier:val('sf-tier')});
-    saveData(d); closeModal(); renderSponsors(); toast('Sponsor added!');
+    const newSponsor={id:'s'+Date.now(),name:val('sf-name'),url:val('sf-url'),logo:val('sf-logo'),tier:val('sf-tier')};
+    d.sponsors.push(newSponsor);
+    saveData(d); auditLog('sponsor_add', 'sponsors', newSponsor.id, newSponsor.name || newSponsor.id, { previousValue: null, newValue: newSponsor }); closeModal(); renderSponsors(); toast('Sponsor added!');
   });
 }
 function editSponsor(id) {
   const data=loadData(); const s=data.sponsors.find(x=>x.id===id);
   openModal('Edit Sponsor', buildSponsorForm(s), 'Save', () => {
     const d=loadData(); const idx=d.sponsors.findIndex(x=>x.id===id);
+    const beforeSponsor = d.sponsors[idx] ? { ...d.sponsors[idx] } : null;
     d.sponsors[idx]={...d.sponsors[idx],name:val('sf-name'),url:val('sf-url'),logo:val('sf-logo'),tier:val('sf-tier')};
-    saveData(d); closeModal(); renderSponsors(); toast('Updated!');
+    saveData(d); auditLog('sponsor_edit', 'sponsors', id, d.sponsors[idx]?.name || id, { previousValue: beforeSponsor, newValue: d.sponsors[idx] }); closeModal(); renderSponsors(); toast('Updated!');
   });
 }
 function deleteSponsor(id) {
   if(!confirm('Delete?')) return;
-  const d=loadData(); d.sponsors=d.sponsors.filter(s=>s.id!==id); saveData(d); renderSponsors();
+  const d=loadData(); const deletedSponsor=d.sponsors.find(s=>s.id===id)||null; d.sponsors=d.sponsors.filter(s=>s.id!==id); saveData(d); auditLog('sponsor_delete', 'sponsors', id, deletedSponsor?.name || id, { previousValue: deletedSponsor, newValue: null }); renderSponsors();
 }
 function buildSponsorForm(s) {
   return `
@@ -3478,22 +3485,24 @@ window.pbDrop = function(e, targetIdx) {
   if (pbDragIdx === null || pbDragIdx === targetIdx) return;
   const d = loadData();
   const layout = d.pageLayouts.home;
+  const oldLayouts = layout.map(x=>({...x}));
   const [item] = layout.splice(pbDragIdx, 1);
   layout.splice(targetIdx, 0, item);
-  saveData(d); renderPageBuilder();
+  saveData(d); auditLog('layout_save', 'pageLayouts', 'all', 'Page layout reordered', { previousValue: oldLayouts, newValue: d.pageLayouts.home }); renderPageBuilder();
 };
 window.pbToggleVisible = function(idx, visible) {
-  const d = loadData(); d.pageLayouts.home[idx].visible = visible; saveData(d);
+  const d = loadData(); const beforeLayout = d.pageLayouts.home[idx] ? { ...d.pageLayouts.home[idx] } : null; d.pageLayouts.home[idx].visible = visible; saveData(d); auditLog('layout_save', 'pageLayouts', d.pageLayouts.home[idx]?.id || String(idx), `Section visibility changed: ${d.pageLayouts.home[idx]?.type || idx}`, { previousValue: beforeLayout, newValue: d.pageLayouts.home[idx] });
 };
 window.pbRemoveSection = function(idx) {
   if(!confirm('Remove this section?')) return;
-  const d = loadData(); d.pageLayouts.home.splice(idx,1); saveData(d); renderPageBuilder();
+  const d = loadData(); const removedSection = d.pageLayouts.home[idx] ? { ...d.pageLayouts.home[idx] } : null; d.pageLayouts.home.splice(idx,1); saveData(d); auditLog('layout_save', 'pageLayouts', removedSection?.id || String(idx), `Section removed: ${removedSection?.type || idx}`, { previousValue: removedSection, newValue: null }); renderPageBuilder();
 };
 window.pbAddSection = function(type) {
   const d = loadData();
   if (!d.pageLayouts) d.pageLayouts = { home: [] };
-  d.pageLayouts.home.push({ id: type+'-'+Date.now(), type, visible: true, settings: {} });
-  saveData(d);
+  const newSection = { id: type+'-'+Date.now(), type, visible: true, settings: {} };
+  d.pageLayouts.home.push(newSection);
+  saveData(d); auditLog('layout_save', 'pageLayouts', newSection.id, `Section added: ${type}`, { previousValue: null, newValue: newSection });
   renderPageBuilder();
   // For configurable types, immediately open settings so user can configure right away
   const needsConfig = ['photo-gallery'];
@@ -3577,8 +3586,9 @@ window.pbEditSection = function(idx) {
         count:    parseInt(val('pbs-count') || 5),
       };
     }
+    const beforeSection = { ...section };
     d.pageLayouts.home[idx].visible = document.getElementById('pbs-visible').checked;
-    saveData(d); closeModal(); renderPageBuilder(); toast('Section updated!');
+    saveData(d); auditLog('layout_save', 'pageLayouts', section.id || String(idx), `Section configured: ${section.type}`, { previousValue: beforeSection, newValue: d.pageLayouts.home[idx] }); closeModal(); renderPageBuilder(); toast('Section updated!');
   });
 };
 window.savePageLayout = function() { toast('Layout saved! Changes appear on the public site immediately.', 'success'); };
@@ -3722,6 +3732,7 @@ function renderSettings() {
 }
 window.saveSettings = function() {
   const d = loadData();
+  const oldConfig = { ...d.config };
   d.config = { ...d.config,
     orgName: val('cfg-org'), city: val('cfg-city'), foundedYear: parseInt(val('cfg-year')),
     contactEmail: val('cfg-email'), facebookUrl: val('cfg-fb'), storeUrl: val('cfg-store'), venmoHandle: val('cfg-venmo')
@@ -3733,7 +3744,7 @@ window.saveSettings = function() {
     if (claudeKey) localStorage.setItem('heroes_claude_api_key', claudeKey);
     else localStorage.removeItem('heroes_claude_api_key');
   } catch(e) {}
-  saveCollection('config', d.config); renderSettings(); toast('Settings saved!');
+  saveCollection('config', d.config); auditLog('config_save', 'config', 'all', 'Settings updated', { previousValue: oldConfig, newValue: d.config }); renderSettings(); toast('Settings saved!');
 };
 
 // ─── SCOREBOOK SCAN ───────────────────────────────────────
