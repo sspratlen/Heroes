@@ -4327,6 +4327,7 @@ async function approveProfile(profileId, grantRole) {
 
     const { error } = await sb.from('profiles').update(updates).eq('id', profileId);
     if (error) throw error;
+    auditLog('approve', 'profiles', profileId, `Approved account as ${grantRole}${matched ? ' (linked to player ' + matched.firstName + ' ' + matched.lastName + ')' : ''}`);
 
     // Fire-and-forget: notify the player they've been approved
     try {
@@ -4385,6 +4386,7 @@ async function approveRoleUpgrade(profileId) {
       rejection_reason: null,
     }).eq('id', profileId);
     if (error) throw error;
+    auditLog('approve', 'profiles', profileId, `Role upgraded to ${prof.pending_role} for ${prof.display_name || profileId}`);
     toast(`✅ Role upgraded to ${prof.pending_role}!`);
     renderAccountRequests();
     updateReqBadge();
