@@ -192,7 +192,10 @@ const HeroesAuth = {
   _fanDataFromLocalStorage() {
     const key = this._fanKey();
     if (!key) return { favorites: [], attending: [] };
-    try { return JSON.parse(localStorage.getItem(key) || '{}'); } catch(e) { return {}; }
+    try {
+      const d = JSON.parse(localStorage.getItem(key) || '{}');
+      return { favorites: d.favorites || [], attending: d.attending || [] };
+    } catch(e) { return { favorites: [], attending: [] }; }
   },
   _fanData() {
     if (this._fanCache) return this._fanCache;
