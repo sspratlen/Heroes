@@ -517,6 +517,44 @@ async function auditLog(action, collection, recordId, summary, opts = {}) {
   } catch(e) { console.warn('audit log skipped:', e.message); }
 }
 
+window._auditEntryMap = {};
+
+async function restoreFromAudit(entry) {
+  const { action, collection, record_id, previous_value } = entry;
+  const isDelete = action.includes('_delete') || action === 'delete';
+  const isAdd    = action.includes('_add')    || action === 'add';
+
+  if (['players', 'teams', 'tournaments'].includes(collection)) {
+    const d = loadData();
+    if (isDelete)        d[collection] = [...(d[collection] || []), previous_value];
+    else if (isAdd)      d[collection] = (d[collection] || []).filter(r => r.id !== record_id);
+    else                 d[collection] = (d[collection] || []).map(r => r.id === record_id ? previous_value : r);
+    saveCollection(collection, d[collection]);
+  } else {
+    const d = loadData();
+    if (isDelete)                            d[collection] = [...(d[collection] || []), previous_value];
+    else if (isAdd)                          d[collection] = (d[collection] || []).filter(r => r.id !== record_id);
+    else if (Array.isArray(previous_value))  d[collection] = previous_value;
+    else                                     d[collection] = (d[collection] || []).map(r => r.id === record_id ? previous_value : r);
+    saveData(d);
+  }
+
+  await auditLog('restore', collection, record_id,
+    `Restored to state from ${new Date(entry.created_at).toLocaleString()}`);
+  toast('Restored successfully!');
+  renderAuditLog();
+}
+
+function confirmRestore(entryId) {
+  const entry = window._auditEntryMap[entryId];
+  if (!entry) return;
+  const dateStr = new Date(entry.created_at).toLocaleString();
+  const msg = `Restore "${entry.summary}" to its state from ${dateStr}?\n\nThis will overwrite the current record.`;
+  if (confirm(msg)) {
+    restoreFromAudit(entry);
+  }
+}
+
 function toast(msg, type = 'success') {
   const t = document.createElement('div');
   t.className = `alert alert-${type}`;
@@ -3632,13 +3670,24 @@ async function renderAuditLog() {
       return;
     }
 
+    window._auditEntryMap = {};
+    (rows || []).forEach(r => { window._auditEntryMap[r.id] = r; });
+
     const actionLabel = {
-      player_add:'➕ Added player', player_edit:'✏️ Edited player', player_delete:'🗑 Deleted player',
-      player_deactivate:'⏸ Deactivated player', player_reactivate:'▶️ Reactivated player',
-      roster_add:'➕ Added to roster', roster_remove:'➖ Removed from roster',
-      team_add:'➕ Added team', team_edit:'✏️ Edited team', team_delete:'🗑 Deleted team',
-      game_add:'➕ Added game', game_edit:'✏️ Edited game', game_delete:'🗑 Deleted game',
-      event_add:'➕ Added event', event_edit:'✏️ Edited event', event_delete:'🗑 Deleted event',
+      player_add: 'Player Added', player_edit: 'Player Edited',
+      player_deactivate: 'Player Deactivated', player_reactivate: 'Player Reactivated',
+      player_delete: 'Player Deleted', roster_add: 'Roster Add', roster_remove: 'Roster Remove',
+      team_add: 'Team Added', team_edit: 'Team Edited', team_delete: 'Team Deleted',
+      game_add: 'Game Added', game_edit: 'Game Edited', game_delete: 'Game Deleted',
+      event_add: 'Event Added', event_edit: 'Event Edited', event_delete: 'Event Deleted',
+      tournament_add: 'Tournament Added', tournament_edit: 'Tournament Edited', tournament_delete: 'Tournament Deleted',
+      news_add: 'News Added', news_edit: 'News Edited', news_delete: 'News Deleted',
+      award_add: 'Award Added', award_edit: 'Award Edited', award_delete: 'Award Deleted',
+      sponsor_add: 'Sponsor Added', sponsor_edit: 'Sponsor Edited', sponsor_delete: 'Sponsor Deleted',
+      album_add: 'Album Added', album_edit: 'Album Edited', album_delete: 'Album Deleted',
+      photo_add: 'Photo Added', photo_delete: 'Photo Deleted',
+      layout_save: 'Layout Saved', config_save: 'Config Saved',
+      approve: 'Account Approved', restore: 'Restored',
     };
 
     el.innerHTML = `
@@ -3646,22 +3695,27 @@ async function renderAuditLog() {
         <thead>
           <tr style="border-bottom:2px solid var(--border)">
             <th style="text-align:left;padding:8px 12px;color:var(--gray);font-weight:600">When</th>
-            <th style="text-align:left;padding:8px 12px;color:var(--gray);font-weight:600">Who</th>
+            <th style="text-align:left;padding:8px 12px;color:var(--gray);font-weight:600">Changed By</th>
             <th style="text-align:left;padding:8px 12px;color:var(--gray);font-weight:600">Action</th>
             <th style="text-align:left;padding:8px 12px;color:var(--gray);font-weight:600">Detail</th>
+            <th style="text-align:left;padding:8px 12px;color:var(--gray);font-weight:600">Restore</th>
           </tr>
         </thead>
         <tbody>
           ${rows.map(r => {
-            const d = new Date(r.created_at);
-            const when = d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) + ' ' +
-                         d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+            const when = new Date(r.created_at).toLocaleString();
             const label = actionLabel[r.action] || r.action;
+            const changedBy = r.changed_by || r.user_email || '—';
+            const canRestore = r.previous_value !== null || r.new_value !== null;
+            const restoreCell = canRestore
+              ? `<td style="padding:8px 12px"><button onclick="confirmRestore('${r.id}')" class="btn-small">↩ Restore</button></td>`
+              : `<td style="padding:8px 12px">—</td>`;
             return `<tr style="border-bottom:1px solid var(--border)">
               <td style="padding:8px 12px;white-space:nowrap;color:var(--gray)">${when}</td>
-              <td style="padding:8px 12px">${r.user_email || '—'}</td>
+              <td style="padding:8px 12px">${changedBy}</td>
               <td style="padding:8px 12px;white-space:nowrap">${label}</td>
               <td style="padding:8px 12px;color:var(--gray)">${r.summary || ''}</td>
+              ${restoreCell}
             </tr>`;
           }).join('')}
         </tbody>
