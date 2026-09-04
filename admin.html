@@ -509,7 +509,7 @@ async function auditLog(action, collection, recordId, summary, opts = {}) {
       user_id:        userId,
       changed_by:     changedBy,
       action, collection,
-      record_id:      String(recordId || ''),
+      record_id:      String(recordId ?? ''),
       summary:        summary || '',
       previous_value: opts.previousValue ?? null,
       new_value:      opts.newValue      ?? null,
