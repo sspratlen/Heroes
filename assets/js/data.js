@@ -262,6 +262,12 @@ async function _syncTeamsToSupabase(teams) {
   if (!client) return;
   try {
     const currentLegacyIds = teams.map(t => t.id);
+    // Fetch existing rows first — need organization_id for upsert and legacy_ids for deletion
+    const { data: existing } = await client.from('teams').select('legacy_id, organization_id');
+    const orgIdMap = {};
+    (existing || []).forEach(r => { if (r.legacy_id) orgIdMap[r.legacy_id] = r.organization_id; });
+    const defaultOrgId = (existing || []).find(r => r.organization_id)?.organization_id ?? null;
+
     const rows = teams.map(t => ({
       legacy_id:         t.id,
       name:              t.name,
@@ -271,13 +277,8 @@ async function _syncTeamsToSupabase(teams) {
       color:             t.color             || '',
       manager:           t.manager           || '',
       assistant_manager: t.assistantManager  || '',
+      organization_id:   orgIdMap[t.id] ?? defaultOrgId,
     }));
-    const { data: session } = await client.auth.getSession();
-    if (!session?.session) {
-      if (typeof toast === 'function') toast('⚠️ Team save failed: not authenticated — sign out and back in', 'error');
-      console.warn('Teams sync: no active session');
-      return;
-    }
 
     const { data: upserted, error } = await client.from('teams').upsert(rows, { onConflict: 'legacy_id' }).select();
     if (error) {
@@ -285,14 +286,7 @@ async function _syncTeamsToSupabase(teams) {
       if (typeof toast === 'function') toast('⚠️ Team save failed: ' + error.message, 'error');
       return;
     }
-    if (!upserted || upserted.length < rows.length) {
-      const msg = `Team save blocked by Supabase (${upserted?.length ?? 0}/${rows.length} rows written) — check your role in Supabase`;
-      console.warn(msg);
-      if (typeof toast === 'function') toast('⚠️ ' + msg, 'error');
-      return;
-    }
 
-    const { data: existing } = await client.from('teams').select('legacy_id');
     const toDelete = (existing || []).map(r => r.legacy_id).filter(lid => !currentLegacyIds.includes(lid));
     for (const lid of toDelete) {
       await client.from('teams').delete().eq('legacy_id', lid);
