@@ -307,6 +307,14 @@ async function _syncPlayersToSupabase(players) {
     const { error: playerErr } = await client.from('players').upsert(playerRows, { onConflict: 'legacy_id' });
     if (playerErr) { console.error('Supabase players sync error:', playerErr.message); return; }
 
+    // Delete rows whose legacy_id is no longer in the current players array
+    const currentLegacyIds = players.map(p => p.id);
+    const { data: existingPlayers } = await client.from('players').select('legacy_id');
+    const toDelete = (existingPlayers || []).map(r => r.legacy_id).filter(lid => !currentLegacyIds.includes(lid));
+    for (const lid of toDelete) {
+      await client.from('players').delete().eq('legacy_id', lid);
+    }
+
     const [{ data: playerUuids }, { data: teamUuids }] = await Promise.all([
       client.from('players').select('id, legacy_id'),
       client.from('teams').select('id, legacy_id'),
