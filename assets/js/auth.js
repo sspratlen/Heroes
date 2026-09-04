@@ -34,6 +34,7 @@ const HeroesAuth = {
   // Other modules (e.g. heroes-scoreboard.js) can check this to know whether
   // the auth state is ready to read.
   _initialized: false,
+  _fanCache: null,
 
 
   // ── Initialisation ────────────────────────────────────────
@@ -61,6 +62,7 @@ const HeroesAuth = {
       this._session = session;
       if (session?.user) {
         await this._loadProfile(session.user.id);
+        await this._loadFanDataFromSupabase();
       }
     } catch (err) {
       console.warn('HeroesAuth.init: could not get session:', err.message);
@@ -94,8 +96,10 @@ const HeroesAuth = {
       }
       if (session?.user) {
         await this._loadProfile(session.user.id);
+        await this._loadFanDataFromSupabase();
       } else {
         this._profile = null;
+        this._fanCache = null;
       }
       this.refreshNavAuth();
 
@@ -180,20 +184,69 @@ const HeroesAuth = {
   /** Any logged-in, approved user can use fan features (favorites, event attendance). */
   canUseFanFeatures() { return this.isLoggedIn() && this.isApproved(); },
 
-  // ── Fan data (stored in localStorage per user) ────────────
+  // ── Fan data (Supabase-backed, localStorage for offline fallback) ──
   _fanKey() {
     const uid = this._profile?.id || this._session?.user?.id;
     return uid ? `heroes_fan_${uid}` : null;
   },
-  _fanData() {
+  _fanDataFromLocalStorage() {
     const key = this._fanKey();
     if (!key) return { favorites: [], attending: [] };
     try { return JSON.parse(localStorage.getItem(key) || '{}'); } catch(e) { return {}; }
   },
+  _fanData() {
+    if (this._fanCache) return this._fanCache;
+    return this._fanDataFromLocalStorage();
+  },
   _saveFanData(d) {
+    // Write to localStorage immediately (keeps toggles snappy)
     const key = this._fanKey();
-    if (!key) return;
-    try { localStorage.setItem(key, JSON.stringify(d)); } catch(e) {}
+    if (key) { try { localStorage.setItem(key, JSON.stringify(d)); } catch(e) {} }
+    // Update in-memory cache
+    this._fanCache = d;
+    // Push to Supabase in background (fire-and-forget)
+    const uid = this._profile?.id || this._session?.user?.id;
+    if (!uid) return;
+    const sb = _getClient();
+    if (!sb) return;
+    sb.from('fan_preferences').upsert(
+      { user_id: uid, attending: d.attending || [], favorites: d.favorites || [], updated_at: new Date().toISOString() },
+      { onConflict: 'user_id' }
+    ).then(({ error }) => {
+      if (error) console.warn('[HeroesAuth] fan_preferences upsert error:', error.message);
+    });
+  },
+  async _loadFanDataFromSupabase() {
+    const sb = _getClient();
+    const uid = this._profile?.id || this._session?.user?.id;
+    if (!sb || !uid) return;
+    try {
+      const { data } = await sb
+        .from('fan_preferences')
+        .select('attending, favorites')
+        .eq('user_id', uid)
+        .single();
+      if (data) {
+        // Row found — Supabase is source of truth
+        this._fanCache = { attending: data.attending || [], favorites: data.favorites || [] };
+        const key = this._fanKey();
+        if (key) { try { localStorage.setItem(key, JSON.stringify(this._fanCache)); } catch(e) {} }
+      } else {
+        // No Supabase row yet — check localStorage for one-time migration
+        const local = this._fanDataFromLocalStorage();
+        const hasData = (local.attending?.length || 0) + (local.favorites?.length || 0) > 0;
+        if (hasData) {
+          await sb.from('fan_preferences').upsert(
+            { user_id: uid, attending: local.attending || [], favorites: local.favorites || [], updated_at: new Date().toISOString() },
+            { onConflict: 'user_id' }
+          );
+        }
+        this._fanCache = { attending: local.attending || [], favorites: local.favorites || [] };
+      }
+    } catch(e) {
+      console.warn('[HeroesAuth] _loadFanDataFromSupabase error (using localStorage):', e.message);
+      this._fanCache = this._fanDataFromLocalStorage();
+    }
   },
 
   getFavorites()      { return this._fanData().favorites || []; },
@@ -299,6 +352,7 @@ const HeroesAuth = {
     }
     this._session = null;
     this._profile = null;
+    this._fanCache = null;
     this._initialized = false;
     // Hard reload to flush every module's cached state (player-auth, scoreboard,
     // app router, etc.) — refreshing only the nav left stale state elsewhere.
