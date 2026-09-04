@@ -482,6 +482,54 @@ function exportData() {
   a.click(); URL.revokeObjectURL(url);
 }
 
+async function exportFromSupabase() {
+  const client = _getClient();
+  if (!client) { alert('Supabase not configured'); return; }
+  const btn = document.getElementById('topbar-backup-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '☁ Backing up…'; }
+  try {
+    const [
+      { data: blobRows },
+      { data: playerRows },
+      { data: teamRows },
+      { data: ptRows },
+      { data: tourneyRows },
+      { data: fanRows },
+    ] = await Promise.all([
+      client.from('heroes_data').select('collection, value, updated_at'),
+      client.from('players').select('*'),
+      client.from('teams').select('*'),
+      client.from('player_teams').select('*'),
+      client.from('tournaments').select('*'),
+      client.from('fan_preferences').select('*'),
+    ]);
+
+    const snapshot = {
+      exported_at: new Date().toISOString(),
+      heroes_data: {},
+      players: playerRows || [],
+      teams: teamRows || [],
+      player_teams: ptRows || [],
+      tournaments: tourneyRows || [],
+      fan_preferences: fanRows || [],
+    };
+    (blobRows || []).forEach(r => { snapshot.heroes_data[r.collection] = r.value; });
+
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `heroes-supabase-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    console.error('exportFromSupabase error:', e.message);
+    alert('Backup failed: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '☁ Supabase Backup'; }
+  }
+}
+
 function importData(jsonStr) {
   try {
     const data = JSON.parse(jsonStr);
