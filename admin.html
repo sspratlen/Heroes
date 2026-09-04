@@ -104,6 +104,10 @@
         <span class="icon">🎨</span> Page Builder
       </a>
 
+      <div class="sidebar-section-label" style="margin-top:12px">Admin</div>
+      <a class="sidebar-link" onclick="showPage('audit-log')">
+        <span class="icon">🔍</span> Audit Log
+      </a>
       <div class="sidebar-section-label" style="margin-top:12px">Settings</div>
       <a class="sidebar-link" onclick="showPage('settings')">
         <span class="icon">⚙️</span> Settings
@@ -461,6 +465,7 @@ function showPage(page) {
     'account-requests': ['Account Requests','Review & Approve Player Accounts',false],
     'gallery': ['Photo Gallery','Manage Albums & Photos',true],
     'tournaments': ['Tournaments','Manage Tournament Results',true],
+    'audit-log': ['Audit Log','Who Changed What & When',false],
   };
   
   const [title, sub, showAdd] = pages[page] || ['Unknown','',false];
@@ -473,7 +478,7 @@ function showPage(page) {
     availability: renderAvailability, news: renderNews, awards: renderAwards,
     sponsors: renderSponsors, 'page-builder': renderPageBuilder,
     settings: renderSettings, data: renderData, 'account-requests': renderAccountRequests,
-    gallery: renderGalleryAdmin, tournaments: renderTournaments }[page];
+    gallery: renderGalleryAdmin, tournaments: renderTournaments, 'audit-log': renderAuditLog }[page];
   if (fn) fn();
 }
 function triggerAddNew() {
@@ -482,6 +487,28 @@ function triggerAddNew() {
 }
 
 function setContent(html) { document.getElementById('admin-content').innerHTML = html; }
+
+// ── Audit Logging ──────────────────────────────────────────────────────────
+async function auditLog(action, collection, recordId, summary) {
+  try {
+    const sb = _getClient();
+    if (!sb) return;
+    let userEmail = 'unknown', userId = null;
+    try {
+      if (typeof HeroesAuth !== 'undefined') {
+        const prof = HeroesAuth.getProfile();
+        const sess = HeroesAuth.getSession();
+        userEmail = prof?.email || sess?.user?.email || 'unknown';
+        userId = sess?.user?.id || null;
+      }
+    } catch(_) {}
+    await sb.from('audit_log').insert({
+      user_email: userEmail, user_id: userId,
+      action, collection, record_id: String(recordId || ''), summary: summary || ''
+    });
+  } catch(e) { console.warn('audit log skipped (table may not exist yet):', e.message); }
+}
+
 function toast(msg, type = 'success') {
   const t = document.createElement('div');
   t.className = `alert alert-${type}`;
@@ -727,7 +754,7 @@ window.assignPlayerToTeam = function(teamId) {
   const idx = d.players.findIndex(p => p.id === playerId);
   if (idx < 0) return;
   if (!d.players[idx].teams.includes(teamId)) d.players[idx].teams.push(teamId);
-  saveData(d); renderPlayers(); toast('Player added to roster!');
+  saveCollection('players', d.players); auditLog('roster_add', 'players', playerId, `Added to team ${teamId}`); renderPlayers(); toast('Player added to roster!');
 };
 
 window.removeFromTeam = function(playerId, teamId) {
@@ -736,7 +763,7 @@ window.removeFromTeam = function(playerId, teamId) {
   if (!p || !confirm(`Remove ${p.firstName} ${p.lastName} from this team roster?`)) return;
   const idx = d.players.findIndex(x => x.id === playerId);
   d.players[idx].teams = d.players[idx].teams.filter(t => t !== teamId);
-  saveData(d); renderPlayers(); toast('Player removed from roster');
+  saveCollection('players', d.players); auditLog('roster_remove', 'players', playerId, `Removed from team ${teamId}`); renderPlayers(); toast('Player removed from roster');
 };
 
 async function deletePlayerFull(playerId) {
@@ -792,10 +819,11 @@ async function deletePlayerFull(playerId) {
           if (!res.ok) throw new Error(result.error || 'Failed to delete account');
         }
 
-        // Remove from localStorage
+        // Remove from players list and sync to Supabase
         const fresh = loadData();
         fresh.players = fresh.players.filter(x => x.id !== playerId);
-        saveData(fresh);
+        saveCollection('players', fresh.players);
+        auditLog('player_delete', 'players', playerId, fullName);
         closeModal();
         renderPlayers();
         toast(`${fullName} permanently deleted`);
@@ -1062,7 +1090,7 @@ async function addPlayer() {
       active: document.getElementById('pf-active').checked, photo: val('pf-photo'), email: val('pf-email'),
       credentials: { username: '', password: '' }
     });
-    saveData(d); closeModal(); renderPlayers(); toast('Player added!');
+    saveCollection('players', d.players); auditLog('player_add', 'players', id, `${val('pf-first')} ${val('pf-last')}`); closeModal(); renderPlayers(); toast('Player added!');
   });
 }
 
@@ -1092,7 +1120,8 @@ function editPlayer(id) {
       active: document.getElementById('pf-active').checked, email,
       photo: val('pf-photo')
     };
-    saveData(d);
+    saveCollection('players', d.players);
+    auditLog('player_edit', 'players', id, `${val('pf-first')} ${val('pf-last')}`);
 
     // Handle optional password set
     const pw  = document.getElementById('pf-pw')?.value || '';
@@ -1136,13 +1165,15 @@ function editPlayer(id) {
 function deletePlayer(id) {
   if (!confirm('Remove this player? Their game stats will be preserved.')) return;
   const d = loadData(); const idx = d.players.findIndex(p=>p.id===id);
-  d.players[idx].active = false; saveData(d); renderPlayers(); toast('Player removed');
+  const p = d.players[idx]; p.active = false;
+  saveCollection('players', d.players); auditLog('player_deactivate', 'players', id, `${p.firstName} ${p.lastName}`); renderPlayers(); toast('Player removed');
 }
 
 function reactivatePlayer(id) {
   const d = loadData(); const idx = d.players.findIndex(p=>p.id===id);
   if (idx < 0) return;
-  d.players[idx].active = true; saveData(d); renderPlayers(); toast('Player reactivated');
+  const rp = d.players[idx]; rp.active = true;
+  saveCollection('players', d.players); auditLog('player_reactivate', 'players', id, `${rp.firstName} ${rp.lastName}`); renderPlayers(); toast('Player reactivated');
 }
 
 window.sendPlayerPasswordReset = async function(email, name) {
@@ -1408,8 +1439,9 @@ function renderTeams() {
 function addTeam() {
   openModal('Add New Team', buildTeamForm(null), 'Save Team', () => {
     const d = loadData();
-    d.teams.push({ id: 't'+Date.now(), name: val('tf-name'), shortName: val('tf-short'), division: val('tf-div'), ageGroup: parseInt(val('tf-age')||50), color: val('tf-color'), manager: val('tf-mgr'), assistantManager: val('tf-asst') });
-    saveCollection('teams', d.teams); closeModal(); renderTeams(); toast('Team added!');
+    const tid = 't'+Date.now();
+    d.teams.push({ id: tid, name: val('tf-name'), shortName: val('tf-short'), division: val('tf-div'), ageGroup: parseInt(val('tf-age')||50), color: val('tf-color'), manager: val('tf-mgr'), assistantManager: val('tf-asst') });
+    saveCollection('teams', d.teams); auditLog('team_add', 'teams', tid, val('tf-name')); closeModal(); renderTeams(); toast('Team added!');
   });
 }
 function editTeam(id) {
@@ -1417,12 +1449,12 @@ function editTeam(id) {
   openModal('Edit Team', buildTeamForm(t), 'Save Changes', () => {
     const d = loadData(); const idx = d.teams.findIndex(x=>x.id===id);
     d.teams[idx] = { ...d.teams[idx], name: val('tf-name'), shortName: val('tf-short'), division: val('tf-div'), ageGroup: parseInt(val('tf-age')), color: val('tf-color'), manager: val('tf-mgr'), assistantManager: val('tf-asst') };
-    saveCollection('teams', d.teams); closeModal(); renderTeams(); toast('Team updated!');
+    saveCollection('teams', d.teams); auditLog('team_edit', 'teams', id, val('tf-name')); closeModal(); renderTeams(); toast('Team updated!');
   });
 }
 function deleteTeam(id) {
   if (!confirm('Delete this team?')) return;
-  const d = loadData(); d.teams = d.teams.filter(t=>t.id!==id); saveCollection('teams', d.teams); renderTeams(); toast('Team deleted');
+  const d = loadData(); const dt = d.teams.find(t=>t.id===id); d.teams = d.teams.filter(t=>t.id!==id); saveCollection('teams', d.teams); auditLog('team_delete', 'teams', id, dt?.name||id); renderTeams(); toast('Team deleted');
 }
 function buildTeamForm(t) {
   return `
@@ -1550,7 +1582,7 @@ function addGame() {
       result: val('gf-result'), season: val('gf-season'), notes: val('gf-notes'),
       tournamentId: val('gf-tournament')||null, playerStats: []
     });
-    saveCollection('games', d.games); closeModal(); renderGames(); toast('Game added!');
+    saveCollection('games', d.games); auditLog('game_add', 'games', 'g'+Date.now(), `${val('gf-date')} vs ${val('gf-opp')}`); closeModal(); renderGames(); toast('Game added!');
   });
 }
 
@@ -1565,13 +1597,13 @@ function editGame(id) {
       result: val('gf-result'), season: val('gf-season'), notes: val('gf-notes'),
       tournamentId: val('gf-tournament')||null
     };
-    saveCollection('games', d.games); closeModal(); renderGames(); toast('Game updated!');
+    saveCollection('games', d.games); auditLog('game_edit', 'games', id, `${val('gf-date')} vs ${val('gf-opp')}`); closeModal(); renderGames(); toast('Game updated!');
   });
 }
 
 function deleteGame(id) {
   if (!confirm('Delete this game and all its stats?')) return;
-  const d = loadData(); d.games = d.games.filter(g=>g.id!==id); saveCollection('games', d.games); renderGames(); toast('Game deleted');
+  const d = loadData(); const dg = d.games.find(g=>g.id===id); d.games = d.games.filter(g=>g.id!==id); saveCollection('games', d.games); auditLog('game_delete', 'games', id, dg ? `${dg.date} vs ${dg.opponent}` : id); renderGames(); toast('Game deleted');
 }
 
 function buildGameForm(g, data) {
@@ -2548,7 +2580,7 @@ function addEvent() {
         placement:val('ef-placement')
       } : {}),
       availability:[], bracket: (()=>{ try { return JSON.parse(val('ef-bracket')||'null'); } catch(e){ return null; } })() });
-    saveData(d); closeModal(); renderEvents(); toast('Event added!');
+    saveData(d); auditLog('event_add', 'events', 'e'+Date.now(), val('ef-name')); closeModal(); renderEvents(); toast('Event added!');
   });
 }
 function editEvent(id) {
@@ -2568,12 +2600,12 @@ function editEvent(id) {
         hotelInfo:val('ef-hotel'), hotelCode:val('ef-hotelcode'), hotelUrl:val('ef-hotelurl'),
         placement:val('ef-placement')
       } : {}), bracket: (()=>{ try { return JSON.parse(val('ef-bracket')||'null'); } catch(e){ return null; } })() };
-    saveData(d); closeModal(); renderEvents(); toast('Event updated!');
+    saveData(d); auditLog('event_edit', 'events', id, val('ef-name')); closeModal(); renderEvents(); toast('Event updated!');
   });
 }
 function deleteEvent(id) {
   if(!confirm('Delete event?')) return;
-  const d=loadData(); d.events=d.events.filter(e=>e.id!==id); saveData(d); renderEvents(); toast('Event deleted');
+  const d=loadData(); const de=d.events.find(e=>e.id===id); d.events=d.events.filter(e=>e.id!==id); saveData(d); auditLog('event_delete', 'events', id, de?.name||id); renderEvents(); toast('Event deleted');
 }
 function buildEventForm(ev, data) {
   return `
@@ -3530,6 +3562,85 @@ window.pbEditSection = function(idx) {
   });
 };
 window.savePageLayout = function() { toast('Layout saved! Changes appear on the public site immediately.', 'success'); };
+
+// ─── AUDIT LOG ────────────────────────────────────────────
+async function renderAuditLog() {
+  setContent(`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div>
+        <div style="font-size:13px;color:var(--gray);margin-bottom:4px">Showing last 200 entries</div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="renderAuditLog()">↻ Refresh</button>
+    </div>
+    <div id="audit-log-content" style="text-align:center;padding:48px;color:var(--gray)">
+      <div style="width:24px;height:24px;border:2.5px solid #e5e7eb;border-top-color:#C8102E;border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 12px"></div>
+      Loading audit log…
+    </div>
+  `);
+
+  try {
+    const sb = _getClient();
+    const { data: rows, error } = await sb
+      .from('audit_log')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(200);
+
+    const el = document.getElementById('audit-log-content');
+    if (!el) return;
+
+    if (error) {
+      el.innerHTML = `<div style="color:#dc2626;padding:24px">
+        Error loading audit log: ${error.message}<br>
+        <small style="color:var(--gray)">The audit_log table may not exist yet — run the SQL migration first.</small>
+      </div>`;
+      return;
+    }
+
+    if (!rows || rows.length === 0) {
+      el.innerHTML = '<div style="color:var(--gray);padding:32px">No audit entries yet. Changes made going forward will appear here.</div>';
+      return;
+    }
+
+    const actionLabel = {
+      player_add:'➕ Added player', player_edit:'✏️ Edited player', player_delete:'🗑 Deleted player',
+      player_deactivate:'⏸ Deactivated player', player_reactivate:'▶️ Reactivated player',
+      roster_add:'➕ Added to roster', roster_remove:'➖ Removed from roster',
+      team_add:'➕ Added team', team_edit:'✏️ Edited team', team_delete:'🗑 Deleted team',
+      game_add:'➕ Added game', game_edit:'✏️ Edited game', game_delete:'🗑 Deleted game',
+      event_add:'➕ Added event', event_edit:'✏️ Edited event', event_delete:'🗑 Deleted event',
+    };
+
+    el.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="border-bottom:2px solid var(--border)">
+            <th style="text-align:left;padding:8px 12px;color:var(--gray);font-weight:600">When</th>
+            <th style="text-align:left;padding:8px 12px;color:var(--gray);font-weight:600">Who</th>
+            <th style="text-align:left;padding:8px 12px;color:var(--gray);font-weight:600">Action</th>
+            <th style="text-align:left;padding:8px 12px;color:var(--gray);font-weight:600">Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(r => {
+            const d = new Date(r.created_at);
+            const when = d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) + ' ' +
+                         d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+            const label = actionLabel[r.action] || r.action;
+            return `<tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:8px 12px;white-space:nowrap;color:var(--gray)">${when}</td>
+              <td style="padding:8px 12px">${r.user_email || '—'}</td>
+              <td style="padding:8px 12px;white-space:nowrap">${label}</td>
+              <td style="padding:8px 12px;color:var(--gray)">${r.summary || ''}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+  } catch(e) {
+    const el = document.getElementById('audit-log-content');
+    if (el) el.innerHTML = `<div style="color:#dc2626;padding:24px">Failed to load: ${e.message}</div>`;
+  }
+}
 
 // ─── SETTINGS ─────────────────────────────────────────────
 function renderSettings() {
