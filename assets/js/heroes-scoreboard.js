@@ -340,7 +340,7 @@
               <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#aaa;margin-bottom:14px">CHANGE PASSWORD</div>
               <div style="margin-bottom:12px">
                 <label style="display:block;font-size:11px;font-weight:800;letter-spacing:0.5px;color:#555;margin-bottom:6px">NEW PASSWORD</label>
-                <input type="password" id="ep-pw-new" placeholder="Min 6 characters" autocomplete="new-password"
+                <input type="password" id="ep-pw-new" placeholder="Min 8 characters" autocomplete="new-password"
                   style="width:100%;padding:10px 12px;border:1.5px solid #ddd;border-radius:7px;font-size:14px;outline:none;box-sizing:border-box;font-family:inherit"
                   onfocus="this.style.borderColor='#C8102E'" onblur="this.style.borderColor='#ddd'">
               </div>
@@ -427,7 +427,8 @@
     const newPw   = document.getElementById('ep-pw-new')?.value    || '';
     const confirm = document.getElementById('ep-pw-confirm')?.value || '';
     const errEl   = document.getElementById('ep-pw-err');
-    if (!newPw || newPw.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; return; }
+    const pwErr = await HeroesPassword.check(newPw);
+    if (pwErr)                      { errEl.textContent = pwErr; return; }
     if (newPw !== confirm)          { errEl.textContent = 'Passwords do not match.'; return; }
     errEl.textContent = '';
 
@@ -475,7 +476,7 @@
             <label style="display:block;font-size:11px;font-weight:800;letter-spacing:0.5px;color:#555;margin-bottom:6px">NEW PASSWORD</label>
             <input type="password" id="mh-pw-new"
               style="width:100%;padding:11px 13px;border:1.5px solid #ddd;border-radius:7px;font-size:14px;outline:none;box-sizing:border-box;font-family:inherit"
-              placeholder="Min 6 characters" autocomplete="new-password"
+              placeholder="Min 8 characters" autocomplete="new-password"
               onfocus="this.style.borderColor='#C8102E'" onblur="this.style.borderColor='#ddd'">
           </div>
           <div style="margin-bottom:8px">
@@ -508,7 +509,8 @@
     const newPw   = document.getElementById('mh-pw-new')?.value || '';
     const confirm = document.getElementById('mh-pw-confirm')?.value || '';
     const errEl   = document.getElementById('mh-pw-err');
-    if (!newPw || newPw.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; return; }
+    const pwErr = await HeroesPassword.check(newPw);
+    if (pwErr)                      { errEl.textContent = pwErr; return; }
     if (newPw !== confirm)          { errEl.textContent = 'Passwords do not match.'; return; }
     errEl.textContent = '';
 

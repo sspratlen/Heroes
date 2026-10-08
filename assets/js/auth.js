@@ -716,7 +716,7 @@ const HeroesAuth = {
       <div class="auth-form-group">
         <label class="auth-form-label" for="ha-reg-pw">Password</label>
         <input  type="password" id="ha-reg-pw"    class="auth-form-input"
-                placeholder="Min 6 characters" autocomplete="new-password"
+                placeholder="Min 8 characters" autocomplete="new-password"
                 onkeydown="if(event.key==='Enter')HeroesAuth.submitRegister()">
       </div>
 
@@ -788,7 +788,7 @@ const HeroesAuth = {
       <div class="auth-form-group">
         <label class="auth-form-label" for="ha-new-pw">New Password</label>
         <input type="password" id="ha-new-pw" class="auth-form-input"
-               placeholder="Min 6 characters" autocomplete="new-password"
+               placeholder="Min 8 characters" autocomplete="new-password"
                onkeydown="if(event.key==='Enter')document.getElementById('ha-new-pw2').focus()">
       </div>
 
@@ -921,9 +921,8 @@ const HeroesAuth = {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       errEl.textContent = 'Please enter a valid email address.'; return;
     }
-    if (!password || password.length < 6) {
-      errEl.textContent = 'Password must be at least 6 characters.'; return;
-    }
+    const pwErr = await HeroesPassword.check(password);
+    if (pwErr) { errEl.textContent = pwErr; return; }
 
     // Disable button while in flight
     const btn = document.querySelector('#auth-modal-inner .auth-submit-btn');
@@ -1187,9 +1186,8 @@ const HeroesAuth = {
     const password = pwEl.value;
     const confirm  = pw2El.value;
 
-    if (!password || password.length < 6) {
-      errEl.textContent = 'Password must be at least 6 characters.'; return;
-    }
+    const pwErr = await HeroesPassword.check(password);
+    if (pwErr) { errEl.textContent = pwErr; return; }
     if (password !== confirm) {
       errEl.textContent = 'Passwords do not match.'; return;
     }

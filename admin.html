@@ -158,6 +158,7 @@
 <!-- SCRIPTS -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="assets/js/data.js"></script>
+<script src="assets/js/password-check.js"></script>
 <script src="assets/js/photo-picker.js"></script>
 <script>
 'use strict';
@@ -255,7 +256,7 @@ function showSetNewPassword() {
       <div class="login-subtitle" style="margin-bottom:20px">Choose a new password for your account</div>
       <div class="form-group" style="text-align:left;margin-bottom:14px">
         <label class="form-label">New Password</label>
-        <input type="password" class="form-input" id="new-pw" placeholder="Min 6 characters" autocomplete="new-password"
+        <input type="password" class="form-input" id="new-pw" placeholder="Min 8 characters" autocomplete="new-password"
           onkeydown="if(event.key==='Enter')document.getElementById('new-pw2').focus()">
       </div>
       <div class="form-group" style="text-align:left;margin-bottom:20px">
@@ -275,7 +276,8 @@ async function submitNewPassword() {
   const errEl = document.getElementById('newpw-error');
   const btn   = document.getElementById('newpw-btn');
 
-  if (pw.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; return; }
+  const pwErr = await HeroesPassword.check(pw);
+  if (pwErr)         { errEl.textContent = pwErr; return; }
   if (pw !== pw2)    { errEl.textContent = 'Passwords do not match.'; return; }
 
   btn.textContent = 'Updating…';
@@ -1182,7 +1184,8 @@ function editPlayer(id) {
     if (pw || mustChange) {
       if (!email) { toast('Add an email address to set a password.', 'warning'); closeModal(); renderPlayers(); return; }
       if (pw && pw !== pw2) { toast('Passwords do not match — other changes saved.', 'warning'); closeModal(); renderPlayers(); return; }
-      if (pw && pw.length < 6) { toast('Password must be at least 6 characters — other changes saved.', 'warning'); closeModal(); renderPlayers(); return; }
+      const pwErr = pw ? await HeroesPassword.check(pw) : null;
+      if (pwErr) { toast(pwErr + ' Other changes saved.', 'warning'); closeModal(); renderPlayers(); return; }
 
       try {
         const sb = _getClient();
@@ -1457,7 +1460,7 @@ function buildPlayerForm(p, data, users = []) {
       <label class="form-check" style="margin-top:4px">
         <input type="checkbox" id="pf-must-change"> Must change password on next login
       </label>
-      <div style="font-size:11px;color:#888;margin-top:6px">Requires the player to have an email address. Password must be at least 6 characters.</div>
+      <div style="font-size:11px;color:#888;margin-top:6px">Requires the player to have an email address. Password must be at least 8 characters.</div>
     </div>
   `;
 }
