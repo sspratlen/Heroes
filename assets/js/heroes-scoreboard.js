@@ -3,7 +3,7 @@
    Loads AFTER app.js. Patches:
      • App.buildNav  → 5 primary items + team switcher second tier
      • App.buildFooter → About/Contact/Sponsors/Admin in footer
-     • Router '/my'  → player portal landing page
+     • Router '/my'  → retired; redirects home
      • Router '/all' → 'All Heroes' filter (alias for /)
 
    Existing routes still work — nav items just map to consolidated hubs:
@@ -12,7 +12,6 @@
      Season        → /stats
      Players       → /players
      Latest        → /news
-     My Heroes     → /my            (NEW)
    ============================================================ */
 (function () {
   'use strict';
@@ -31,7 +30,6 @@
     { label: 'Players',     route: '/players',    matches: ['/players', '/player', '/team'] },
     { label: 'Latest',      route: '/news',       matches: ['/news', '/awards', '/latest'] },
     { label: 'Gallery',     route: '/gallery',    matches: ['/gallery'] },
-    { label: 'My Heroes',   route: '/my',         matches: ['/my'], primary: true },
   ];
 
   // ──────────────────────────────────────────────────────────
@@ -160,7 +158,6 @@
             <a class="footer-link" data-route="/stats">Season</a>
             <a class="footer-link" data-route="/players">Players</a>
             <a class="footer-link" data-route="/news">Latest</a>
-            <a class="footer-link" data-route="/my">My Heroes</a>
           </div>
         </div>
         <div class="footer-col">
@@ -1684,9 +1681,10 @@
     }
   }
 
-  // ── Main render ─────────────────────────────────────────────
+  // ── (My Heroes page removed) ─────────────────────────────────
 
   function renderMyHeroes() {
+    Router.navigate('/'); return; // page retired — redirect home
     const data = loadData();
     const player = getCurrentPlayer();
 
