@@ -58,6 +58,9 @@
         <span class="icon">🆕</span> Account Requests
         <span id="req-badge" style="display:none;background:#C8102E;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:800;margin-left:auto"></span>
       </a>
+      <a class="sidebar-link" onclick="showPage('users')" id="sidebar-users" style="display:none">
+        <span class="icon">🔑</span> Users
+      </a>
       <a class="sidebar-link" onclick="showPage('players')">
         <span class="icon">👥</span> Players
       </a>
@@ -160,6 +163,7 @@
 <script src="assets/js/data.js"></script>
 <script src="assets/js/password-check.js"></script>
 <script src="assets/js/photo-picker.js"></script>
+<script src="assets/js/admin-users.js"></script>
 <script>
 'use strict';
 
@@ -381,6 +385,8 @@ async function doLogin() {
 
 async function showAdminLayout(profile) {
   _adminProfile = profile;
+  const usersLink = document.getElementById('sidebar-users');
+  if (usersLink) usersLink.style.display = profile.role === 'admin' ? '' : 'none';
   document.getElementById('admin-login').style.display = 'none';
   document.getElementById('admin-layout').style.display = 'flex';
   const userEl = document.getElementById('admin-current-user');
@@ -469,6 +475,7 @@ function showPage(page) {
     'gallery': ['Photo Gallery','Manage Albums & Photos',true],
     'tournaments': ['Tournaments','Manage Tournament Results',true],
     'audit-log': ['Audit Log','Who Changed What & When',false],
+    'users': ['Users','Login Accounts & Access',false],
   };
   
   const [title, sub, showAdd] = pages[page] || ['Unknown','',false];
@@ -481,7 +488,8 @@ function showPage(page) {
     availability: renderAvailability, news: renderNews, awards: renderAwards,
     sponsors: renderSponsors, 'page-builder': renderPageBuilder,
     settings: renderSettings, data: renderData, 'account-requests': renderAccountRequests,
-    gallery: renderGalleryAdmin, tournaments: renderTournaments, 'audit-log': renderAuditLog }[page];
+    gallery: renderGalleryAdmin, tournaments: renderTournaments, 'audit-log': renderAuditLog,
+    users: renderUsers }[page];
   if (fn) fn();
 }
 function triggerAddNew() {
@@ -3701,7 +3709,7 @@ async function renderAuditLog() {
             const when = new Date(r.created_at).toLocaleString();
             const label = actionLabel[r.action] || r.action;
             const changedBy = r.changed_by || r.user_email || '—';
-            const canRestore = r.previous_value !== null || r.new_value !== null;
+            const canRestore = r.collection !== 'profiles' && (r.previous_value !== null || r.new_value !== null);
             const restoreCell = canRestore
               ? `<td style="padding:8px 12px"><button onclick="confirmRestore('${r.id}')" class="btn-small">↩ Restore</button></td>`
               : `<td style="padding:8px 12px">—</td>`;

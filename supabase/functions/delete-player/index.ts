@@ -61,6 +61,9 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (!profile) return json({ deleted: false, reason: 'no_account' });
+    if (profile.id === user.id) {
+      return json({ error: 'You cannot delete your own account.' }, 400);
+    }
 
     // Delete auth user — cascade deletes profiles row + tournament_rsvps rows
     const { error } = await serviceClient.auth.admin.deleteUser(profile.id);
