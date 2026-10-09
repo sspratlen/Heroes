@@ -883,19 +883,25 @@ const ROLE_PILL = {
   player:  'background:#f3f4f6;color:#374151',
 };
 
+// The site account for a roster player: linked via profiles.player_id, else matching email.
+function _profileForPlayer(profiles, player) {
+  const email = (player.email || '').toLowerCase();
+  return profiles.find(pr => pr.player_id && pr.player_id === player.id)
+      || (email ? profiles.find(pr => pr.email?.toLowerCase() === email) : null)
+      || null;
+}
+
 // Fetch all profiles from Supabase and inject role badges into the table.
 async function loadPlayerRoles() {
   try {
     const sb = _getClient();
-    const { data: profiles } = await sb.from('profiles').select('email, role, approved');
+    const { data: profiles } = await sb.from('profiles').select('email, role, approved, player_id');
     if (!profiles) return;
     const players = loadData().players;
     const noAccount = [];
     players.forEach(p => {
       const cell = document.getElementById('player-role-' + p.id);
-      const profile = p.email
-        ? profiles.find(pr => pr.email?.toLowerCase() === p.email.toLowerCase())
-        : null;
+      const profile = _profileForPlayer(profiles, p);
       if (profile) {
         const r = profile.role || 'player';
         const approved = profile.approved;
@@ -989,17 +995,14 @@ window.setPlayerRole = async function(playerId) {
   const player = data.players.find(p => p.id === playerId);
   if (!player) return;
 
-  if (!player.email) {
-    toast('No email on file — add an email address to manage this player\'s role.', 'warning');
-    return;
-  }
-
   const sb = _getClient();
-  const { data: profile } = await sb
+  const { data: candidates } = await sb
     .from('profiles')
-    .select('id, role, approved, display_name')
-    .eq('email', player.email.toLowerCase())
-    .maybeSingle();
+    .select('id, email, role, approved, display_name, player_id')
+    .or(player.email
+      ? `player_id.eq."${player.id}",email.eq."${player.email.toLowerCase()}"`
+      : `player_id.eq."${player.id}"`);
+  const profile = _profileForPlayer(candidates || [], player);
 
   if (!profile) {
     openModal(
