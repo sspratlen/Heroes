@@ -496,20 +496,9 @@ async function auditLog(action, collection, recordId, summary, opts = {}) {
   try {
     const sb = _getClient();
     if (!sb) return;
-    let userEmail = 'unknown', userId = null, changedBy = null;
-    try {
-      if (typeof HeroesAuth !== 'undefined') {
-        const prof = HeroesAuth.getProfile();
-        const sess = HeroesAuth.getSession();
-        userEmail = prof?.email || sess?.user?.email || 'unknown';
-        userId    = sess?.user?.id || null;
-        changedBy = prof?.display_name || prof?.email || null;
-      }
-    } catch(_) {}
+    // user_id / user_email / changed_by are stamped server-side from the
+    // signed-in session by the audit_log_set_actor trigger.
     await sb.from('audit_log').insert({
-      user_email:     userEmail,
-      user_id:        userId,
-      changed_by:     changedBy,
       action, collection,
       record_id:      String(recordId ?? ''),
       summary:        summary || '',
