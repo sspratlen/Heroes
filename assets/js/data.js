@@ -424,13 +424,24 @@ async function initData() {
     if (!merged.tournaments)     merged.tournaments     = [];
 
     // Fetch from relational tables (teams, players, player_teams, tournaments)
-    const [{ data: teamRows }, { data: playerRows }, { data: ptRows }, { data: tourneyRows }] =
+    const [{ data: teamRows }, { data: playerRows }, { data: ptRows }, { data: tourneyRows }, { data: attendanceRows }] =
       await Promise.all([
         client.from('teams').select('*'),
         client.from('players').select('*'),
         client.from('player_teams').select('player_id, team_id'),
         client.from('tournaments').select('*'),
+        client.from('event_attendance').select('event_id, player_id, status, note'),
       ]);
+
+    // Player attendance lives in event_attendance (players can only write their own row);
+    // it replaces the old events[].availability arrays stored in the blob.
+    if (attendanceRows) {
+      const byEvent = {};
+      attendanceRows.forEach(r => {
+        (byEvent[r.event_id] = byEvent[r.event_id] || []).push({ playerId: r.player_id, status: r.status, note: r.note || '' });
+      });
+      (merged.events || []).forEach(ev => { ev.availability = byEvent[ev.id] || []; });
+    }
 
     // Build UUID → legacy_id map for teams (used by player_teams and tournaments)
     const teamUuidToLegacyId = {};
@@ -516,6 +527,7 @@ async function exportFromSupabase() {
       { data: ptRows },
       { data: tourneyRows },
       { data: fanRows },
+      { data: attendanceRows },
     ] = await Promise.all([
       client.from('heroes_data').select('collection, value, updated_at'),
       client.from('players').select('*'),
@@ -523,6 +535,7 @@ async function exportFromSupabase() {
       client.from('player_teams').select('*'),
       client.from('tournaments').select('*'),
       client.from('fan_preferences').select('*'),
+      client.from('event_attendance').select('*'),
     ]);
 
     const snapshot = {
@@ -533,6 +546,7 @@ async function exportFromSupabase() {
       player_teams: ptRows || [],
       tournaments: tourneyRows || [],
       fan_preferences: fanRows || [],
+      event_attendance: attendanceRows || [],
     };
     (blobRows || []).forEach(r => { snapshot.heroes_data[r.collection] = r.value; });
 

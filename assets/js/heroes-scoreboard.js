@@ -207,7 +207,8 @@
       try {
         const data = loadData();
         const match = (data.players || []).find(p =>
-          p.email && p.email.toLowerCase() === (profile.email || '').toLowerCase()
+          (profile.player_id && p.id === profile.player_id) ||
+          (p.email && p.email.toLowerCase() === (profile.email || '').toLowerCase())
         );
         if (match) return match;
       } catch {}
@@ -404,7 +405,25 @@
     openEditProfileModal();
   };
 
-  window.submitEpInfo = function() {
+  // Write fields on the signed-in player's own roster record (RLS allows only
+  // position/bats/throws/photo on their own row), then update the local cache.
+  async function saveOwnPlayerFields(playerId, fields) {
+    const sb = _getClient();
+    if (!sb) return { error: { message: 'Database unavailable.' } };
+    const col = /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(playerId) ? 'id' : 'legacy_id';
+    const { data: rows, error } = await sb.from('players').update(fields).eq(col, playerId).select('id');
+    if (error) return { error };
+    if (!rows || !rows.length) return { error: { message: 'Your account is not linked to a roster record yet — ask an admin to link it.' } };
+    const d   = loadData();
+    const idx = d.players.findIndex(p => p.id === playerId);
+    if (idx >= 0) {
+      d.players[idx] = { ...d.players[idx], ...fields };
+      localStorage.setItem('heroes_data', JSON.stringify(d));
+    }
+    return {};
+  }
+
+  window.submitEpInfo = async function() {
     const player = getCurrentPlayer();
     if (!player) return;
     const errEl    = document.getElementById('ep-info-err');
@@ -414,10 +433,10 @@
 
     const d   = loadData();
     const idx = d.players.findIndex(p => p.id === player.id);
-    if (idx < 0) { if (errEl) errEl.textContent = 'Could not find your player record.'; return; }
+    if (idx < 0) { if (errEl) errEl.textContent = 'Your account is not linked to a roster record yet — ask an admin to link it.'; return; }
 
-    d.players[idx] = { ...d.players[idx], position, bats, throws: throws_ };
-    saveData(d);
+    const { error } = await saveOwnPlayerFields(player.id, { position, bats, throws: throws_ });
+    if (error) { if (errEl) errEl.textContent = 'Could not save: ' + error.message; return; }
 
     document.getElementById('ep-modal-overlay')?.remove();
     if (typeof App !== 'undefined' && App.toast) App.toast('Player info saved! ✓', 'success');
@@ -628,13 +647,14 @@
   };
 
   // Save the new photo URL and refresh the avatar in-place
-  window.saveMyPhoto = function(playerId, url) {
+  window.saveMyPhoto = async function(playerId, url) {
+    const { error } = await saveOwnPlayerFields(playerId, { photo: url });
+    if (error) {
+      if (typeof App !== 'undefined' && App.toast) App.toast('Could not save photo: ' + error.message, 'error');
+      return;
+    }
     const d   = loadData();
     const idx = d.players.findIndex(p => p.id === playerId);
-    if (idx >= 0) {
-      d.players[idx].photo = url;
-      saveData(d);
-    }
     // Pre-compute initials for onerror fallback
     const p0  = (idx >= 0 ? d.players[idx] : null) || {};
     const fn0 = `${p0.firstName||''} ${p0.lastName||''}`.trim();

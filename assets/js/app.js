@@ -1724,6 +1724,17 @@ function renderTournaments() {
       .ev-av-maybe   { background:#ca8a04; border:2px solid #fef9c3; }
       .ev-av-no      { background:#dc2626; border:2px solid #fee2e2; opacity:0.45; }
       .ev-av-pending { background:#9ca3af; border:2px solid #f3f4f6; opacity:0.6; }
+      .ev-my-rsvp       { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; margin-top:12px; }
+      .ev-my-rsvp-label { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; color:var(--gray); }
+      .ev-my-rsvp-btns  { display:flex; flex-wrap:wrap; gap:6px; }
+      .ev-rsvp-btn {
+        padding:7px 14px; border-radius:8px; border:1.5px solid var(--border); background:#fff;
+        font-size:13px; font-weight:700; color:var(--text); cursor:pointer;
+      }
+      .ev-rsvp-btn:disabled { opacity:0.6; cursor:wait; }
+      .ev-rsvp-btn.on-yes   { background:#16a34a; border-color:#16a34a; color:#fff; }
+      .ev-rsvp-btn.on-maybe { background:#ca8a04; border-color:#ca8a04; color:#fff; }
+      .ev-rsvp-btn.on-no    { background:#dc2626; border-color:#dc2626; color:#fff; }
 
       /* ── filter/sort controls ── */
       .ev-controls-row { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:28px; }
@@ -1894,6 +1905,21 @@ function renderTournaments() {
         const a = avail.find(x => x.playerId === p.id);
         return { p, status: a?.status || 'pending', note: a?.note || '' };
       }).sort((a, b) => (order[a.status]||2) - (order[b.status]||2));
+      // Signed-in player on one of this event's teams → their own answer buttons
+      const me = isDone ? null : _myRosterPlayer();
+      const myStatus = me && eligible.some(p => p.id === me.id)
+        ? (avail.find(a => a.playerId === me.id)?.status || 'pending')
+        : null;
+      const rsvpBtn = (status, label) =>
+        `<button class="ev-rsvp-btn${myStatus === status ? ' on-' + status : ''}" onclick="setEventAttendance('${ev.id}','${status}',this)">${label}</button>`;
+      const myRsvpHtml = myStatus ? `
+              <div class="ev-my-rsvp">
+                <span class="ev-my-rsvp-label">Your answer</span>
+                <div class="ev-my-rsvp-btns">
+                  ${rsvpBtn('yes', "✓ I'm In")}${rsvpBtn('maybe', '? Maybe')}${rsvpBtn('no', "✗ Can't Go")}
+                </div>
+              </div>` : '';
+
       const avatarHtml = sorted.map(({ p, status, note }) => {
         const tip = `${p.firstName} ${p.lastName} — ${status==='yes'?'✅ Attending':status==='no'?'❌ Not Attending':status==='maybe'?'\u{1F7E1} Maybe':'⏳ TBD'}${note ? ': ' + note : ''}`;
         return `<div class="ev-av ev-av-${status}" title="${tip.replace(/"/g,"'")}">${p.firstName[0]}${p.lastName[0]}</div>`;
@@ -1972,6 +1998,7 @@ function renderTournaments() {
                 <div class="ev-bar-no"    style="width:${nPct}%"></div>
               </div>
               <div class="ev-avatars">${avatarHtml}</div>
+              ${myRsvpHtml}
             </div>
 
             ${fanAttendSection}
@@ -2114,6 +2141,45 @@ document.addEventListener('click', function(e) {
     if (panel) panel.style.display = 'none';
   }
 });
+
+// The roster player linked to the signed-in account (by player link or email), or null.
+function _myRosterPlayer() {
+  if (typeof HeroesAuth === 'undefined' || !HeroesAuth.isLoggedIn() || !HeroesAuth.isApproved()) return null;
+  const profile = HeroesAuth.getProfile();
+  if (!profile) return null;
+  const email = (profile.email || '').toLowerCase();
+  return (loadData().players || []).find(p =>
+    (profile.player_id && p.id === profile.player_id) || (email && (p.email || '').toLowerCase() === email)
+  ) || null;
+}
+
+window.setEventAttendance = async function(eventId, status, btn) {
+  const me = _myRosterPlayer();
+  const sb = _getClient();
+  if (!me || !sb) return;
+  const btns = btn?.closest('.ev-my-rsvp-btns')?.querySelectorAll('button') || [];
+  btns.forEach(b => { b.disabled = true; });
+
+  const { error } = await sb.from('event_attendance').upsert(
+    { event_id: eventId, player_id: me.id, status, updated_at: new Date().toISOString() },
+    { onConflict: 'event_id,player_id' }
+  );
+  if (error) {
+    btns.forEach(b => { b.disabled = false; });
+    App.toast('Could not save your answer: ' + error.message, 'error');
+    return;
+  }
+
+  const d = loadData();
+  const ev = (d.events || []).find(e => e.id === eventId);
+  if (ev) {
+    ev.availability = (ev.availability || []).filter(a => a.playerId !== me.id);
+    ev.availability.push({ playerId: me.id, status, note: '' });
+    localStorage.setItem('heroes_data', JSON.stringify(d));
+  }
+  App.toast(status === 'yes' ? "You're in! ✓" : status === 'maybe' ? 'Marked as maybe' : "Got it — you can't make this one", 'success');
+  Router.dispatch();
+};
 
 window.toggleAttendGrid = function(evId, btn) {
   const grid = document.getElementById('attend-grid-' + evId);
@@ -2519,9 +2585,8 @@ function _getGalleryCats(albums) {
 }
 
 function _galleryCanUpload() {
-  if (typeof HeroesAuth !== 'undefined' && HeroesAuth.isLoggedIn() && HeroesAuth.isApproved()) return true;
-  if (typeof PlayerAuth !== 'undefined' && PlayerAuth.isLoggedIn()) return true;
-  return false;
+  // Gallery uploads are limited to admins/staff (storage rules enforce the same).
+  return _galleryCanManageAlbums();
 }
 
 function _galleryCanManageAlbums() {
