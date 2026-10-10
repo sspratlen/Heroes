@@ -1735,6 +1735,8 @@ function renderTournaments() {
       .ev-rsvp-btn.on-yes   { background:#16a34a; border-color:#16a34a; color:#fff; }
       .ev-rsvp-btn.on-maybe { background:#ca8a04; border-color:#ca8a04; color:#fff; }
       .ev-rsvp-btn.on-no    { background:#dc2626; border-color:#dc2626; color:#fff; }
+      .ev-tile .ev-my-rsvp  { margin-top:0; gap:6px; }
+      .ev-tile .ev-rsvp-btn { padding:6px 10px; font-size:12px; }
 
       /* ── filter/sort controls ── */
       .ev-controls-row { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:28px; }
@@ -1807,7 +1809,12 @@ function renderTournaments() {
   let tournaments = [...(data.events || [])];
   if (_tevFilter === 'upcoming')       tournaments = tournaments.filter(e => e.status === 'upcoming' || e.status === 'active');
   else if (_tevFilter === 'completed') tournaments = tournaments.filter(e => e.status === 'completed' || e.status === 'cancelled');
-  else if (_tevFilter === 'attending') tournaments = tournaments.filter(e => typeof HeroesAuth !== 'undefined' && HeroesAuth.isAttendingEvent(e.id));
+  else if (_tevFilter === 'attending') {
+    const me = _myRosterPlayer();
+    tournaments = tournaments.filter(e =>
+      (typeof HeroesAuth !== 'undefined' && HeroesAuth.isAttendingEvent(e.id)) ||
+      (me && (e.availability || []).some(a => a.playerId === me.id && a.status === 'yes')));
+  }
   if (_tevTypeFilters.length)          tournaments = tournaments.filter(e => _tevTypeFilters.includes(e.type));
 
   // Sort
@@ -1906,19 +1913,8 @@ function renderTournaments() {
         return { p, status: a?.status || 'pending', note: a?.note || '' };
       }).sort((a, b) => (order[a.status]||2) - (order[b.status]||2));
       // Signed-in player on one of this event's teams → their own answer buttons
-      const me = isDone ? null : _myRosterPlayer();
-      const myStatus = me && eligible.some(p => p.id === me.id)
-        ? (avail.find(a => a.playerId === me.id)?.status || 'pending')
-        : null;
-      const rsvpBtn = (status, label) =>
-        `<button class="ev-rsvp-btn${myStatus === status ? ' on-' + status : ''}" onclick="setEventAttendance('${ev.id}','${status}',this)">${label}</button>`;
-      const myRsvpHtml = myStatus ? `
-              <div class="ev-my-rsvp">
-                <span class="ev-my-rsvp-label">Your answer</span>
-                <div class="ev-my-rsvp-btns">
-                  ${rsvpBtn('yes', "✓ I'm In")}${rsvpBtn('maybe', '? Maybe')}${rsvpBtn('no', "✗ Can't Go")}
-                </div>
-              </div>` : '';
+      const myStatus   = _myEventStatus(ev);
+      const myRsvpHtml = myStatus ? _rsvpButtonsHtml(ev, myStatus) : '';
 
       const avatarHtml = sorted.map(({ p, status, note }) => {
         const tip = `${p.firstName} ${p.lastName} — ${status==='yes'?'✅ Attending':status==='no'?'❌ Not Attending':status==='maybe'?'\u{1F7E1} Maybe':'⏳ TBD'}${note ? ': ' + note : ''}`;
@@ -1937,7 +1933,7 @@ function renderTournaments() {
 
       const accentClass = isSocial ? 'ev-accent-social' : (isDone ? 'ev-accent-completed' : '');
 
-      const canFanAttend = typeof HeroesAuth !== 'undefined' && HeroesAuth.canUseFanFeatures() && !isDone && ev.allowFans !== false;
+      const canFanAttend = !myStatus && typeof HeroesAuth !== 'undefined' && HeroesAuth.canUseFanFeatures() && !isDone && ev.allowFans !== false;
       const fanAttending = canFanAttend && HeroesAuth.isAttendingEvent(ev.id);
       const fanAttendSection = canFanAttend ? `
         <div class="ev-attend" style="border-top:1px solid var(--border);margin-top:0">
@@ -2030,9 +2026,12 @@ function renderTournaments() {
       const teams = ev.teams.map(id => data.teams.find(t => t.id === id)).filter(Boolean);
       const [sbg,scl,slbl] = statusMap[ev.status] || statusMap.upcoming;
       const typeLabel = TYPE_LABELS[ev.type] || ev.type;
-      const canFanAttend = typeof HeroesAuth !== 'undefined' && HeroesAuth.canUseFanFeatures() && ev.status !== 'completed' && ev.status !== 'cancelled' && ev.allowFans !== false;
+      const myStatus = _myEventStatus(ev);
+      const canFanAttend = !myStatus && typeof HeroesAuth !== 'undefined' && HeroesAuth.canUseFanFeatures() && ev.status !== 'completed' && ev.status !== 'cancelled' && ev.allowFans !== false;
       const fanAttending = canFanAttend && HeroesAuth.isAttendingEvent(ev.id);
-      const fanChk = canFanAttend ? `
+      const fanChk = myStatus
+        ? `<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">${_rsvpButtonsHtml(ev, myStatus)}</div>`
+        : canFanAttend ? `
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text);margin-top:4px;padding-top:8px;border-top:1px solid var(--border)">
           <input type="checkbox" onchange="toggleFanAttend('${ev.id}',this)" ${fanAttending?'checked':''}
             style="width:15px;height:15px;cursor:pointer;accent-color:#1d4ed8;flex-shrink:0">
@@ -2151,6 +2150,24 @@ function _myRosterPlayer() {
   return (loadData().players || []).find(p =>
     (profile.player_id && p.id === profile.player_id) || (email && (p.email || '').toLowerCase() === email)
   ) || null;
+}
+
+// The signed-in player's answer for an event they can answer ('yes'|'maybe'|'no'|'pending'),
+// or null when they can't (not an active linked roster player on its teams, or event over).
+function _myEventStatus(ev) {
+  if (ev.status === 'completed' || ev.status === 'cancelled') return null;
+  const me = _myRosterPlayer();
+  if (!me || !me.active || !(ev.teams || []).some(t => (me.teams || []).includes(t))) return null;
+  return (ev.availability || []).find(a => a.playerId === me.id)?.status || 'pending';
+}
+
+function _rsvpButtonsHtml(ev, myStatus) {
+  const btn = (status, label) =>
+    `<button class="ev-rsvp-btn${myStatus === status ? ' on-' + status : ''}" onclick="setEventAttendance('${ev.id}','${status}',this)">${label}</button>`;
+  return `<div class="ev-my-rsvp">
+    <span class="ev-my-rsvp-label">Your answer</span>
+    <div class="ev-my-rsvp-btns">${btn('yes', "✓ I'm In")}${btn('maybe', '? Maybe')}${btn('no', "✗ Can't Go")}</div>
+  </div>`;
 }
 
 window.setEventAttendance = async function(eventId, status, btn) {
