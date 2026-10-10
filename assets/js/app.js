@@ -1608,6 +1608,7 @@ let _tevView        = (()=>{ try { return localStorage.getItem('heroes_ev_view')
 let _tevTypeFilters = [];
 
 function renderTournaments() {
+  _ensureMyFanAnswers();
   // Inject styles once
   if (!document.getElementById('ev-styles')) {
     const s = document.createElement('style');
@@ -1933,18 +1934,10 @@ function renderTournaments() {
 
       const accentClass = isSocial ? 'ev-accent-social' : (isDone ? 'ev-accent-completed' : '');
 
-      const canFanAttend = !myStatus && typeof HeroesAuth !== 'undefined' && HeroesAuth.canUseFanFeatures() && !isDone && ev.allowFans !== false;
-      const fanAttending = canFanAttend && HeroesAuth.isAttendingEvent(ev.id);
-      const fanAttendSection = canFanAttend ? `
+      const fanStatus = myStatus ? null : _myFanStatus(ev);
+      const fanAttendSection = fanStatus ? `
         <div class="ev-attend" style="border-top:1px solid var(--border);margin-top:0">
-          <div class="ev-attend-head">
-            <span class="ev-attend-label">Fans</span>
-          </div>
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:4px 0;font-size:14px;color:var(--text)">
-            <input type="checkbox" onchange="toggleFanAttend('${ev.id}',this)" ${fanAttending?'checked':''}
-              style="width:18px;height:18px;cursor:pointer;accent-color:#1d4ed8;flex-shrink:0">
-            <span id="fan-attend-label-${ev.id}">${fanAttending ? "You're attending! 🎉" : "I'm attending"}</span>
-          </label>
+          ${_rsvpButtonsHtml(ev, fanStatus, 'setFanAttendance')}
         </div>` : '';
 
       return `
@@ -2027,16 +2020,11 @@ function renderTournaments() {
       const [sbg,scl,slbl] = statusMap[ev.status] || statusMap.upcoming;
       const typeLabel = TYPE_LABELS[ev.type] || ev.type;
       const myStatus = _myEventStatus(ev);
-      const canFanAttend = !myStatus && typeof HeroesAuth !== 'undefined' && HeroesAuth.canUseFanFeatures() && ev.status !== 'completed' && ev.status !== 'cancelled' && ev.allowFans !== false;
-      const fanAttending = canFanAttend && HeroesAuth.isAttendingEvent(ev.id);
-      const fanChk = myStatus
-        ? `<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">${_rsvpButtonsHtml(ev, myStatus)}</div>`
-        : canFanAttend ? `
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text);margin-top:4px;padding-top:8px;border-top:1px solid var(--border)">
-          <input type="checkbox" onchange="toggleFanAttend('${ev.id}',this)" ${fanAttending?'checked':''}
-            style="width:15px;height:15px;cursor:pointer;accent-color:#1d4ed8;flex-shrink:0">
-          <span id="fan-attend-label-${ev.id}">${fanAttending?"You're attending! 🎉":"I'm attending"}</span>
-        </label>` : '';
+      const fanStatus = myStatus ? null : _myFanStatus(ev);
+      const fanChk = (myStatus || fanStatus)
+        ? `<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">${
+            myStatus ? _rsvpButtonsHtml(ev, myStatus) : _rsvpButtonsHtml(ev, fanStatus, 'setFanAttendance')}</div>`
+        : '';
       return `<div class="ev-tile">
         <div class="ev-tile-top">
           <div class="ev-tile-date">${dateStr}</div>
@@ -2161,14 +2149,65 @@ function _myEventStatus(ev) {
   return (ev.availability || []).find(a => a.playerId === me.id)?.status || 'pending';
 }
 
-function _rsvpButtonsHtml(ev, myStatus) {
+function _rsvpButtonsHtml(ev, myStatus, handler = 'setEventAttendance') {
   const btn = (status, label) =>
-    `<button class="ev-rsvp-btn${myStatus === status ? ' on-' + status : ''}" onclick="setEventAttendance('${ev.id}','${status}',this)">${label}</button>`;
+    `<button class="ev-rsvp-btn${myStatus === status ? ' on-' + status : ''}" onclick="${handler}('${ev.id}','${status}',this)">${label}</button>`;
   return `<div class="ev-my-rsvp">
     <span class="ev-my-rsvp-label">Your answer</span>
     <div class="ev-my-rsvp-btns">${btn('yes', "✓ I'm In")}${btn('maybe', '? Maybe')}${btn('no', "✗ Can't Go")}</div>
   </div>`;
 }
+
+// ── Fan answers (anyone signed in who isn't answering as a roster player) ──
+// Stored in event_fan_attendance; "I'm In" also stays in sync with the fan
+// "attending" list used by the Attending filter and the home page.
+let _fanAnswers = new Map();   // eventId → 'yes' | 'maybe' | 'no'
+let _fanAnswersFor = null;     // profile id the cache belongs to
+
+function _ensureMyFanAnswers() {
+  if (typeof HeroesAuth === 'undefined' || !HeroesAuth.canUseFanFeatures()) return;
+  const profile = HeroesAuth.getProfile();
+  if (!profile || _fanAnswersFor === profile.id) return;
+  _fanAnswersFor = profile.id;
+  _fanAnswers = new Map();
+  const sb = _getClient();
+  if (!sb) return;
+  sb.from('event_fan_attendance').select('event_id, status').eq('user_id', profile.id)
+    .then(({ data }) => {
+      if (_fanAnswersFor !== profile.id || !data || !data.length) return;
+      data.forEach(r => _fanAnswers.set(r.event_id, r.status));
+      if ((location.hash || '').startsWith('#/events')) Router.dispatch();
+    });
+}
+
+function _myFanStatus(ev) {
+  if (ev.status === 'completed' || ev.status === 'cancelled' || ev.allowFans === false) return null;
+  if (typeof HeroesAuth === 'undefined' || !HeroesAuth.canUseFanFeatures()) return null;
+  return _fanAnswers.get(ev.id) || (HeroesAuth.isAttendingEvent(ev.id) ? 'yes' : 'pending');
+}
+
+window.setFanAttendance = async function(eventId, status, btn) {
+  const profile = typeof HeroesAuth !== 'undefined' ? HeroesAuth.getProfile() : null;
+  const sb = _getClient();
+  if (!profile || !sb) return;
+  const btns = btn?.closest('.ev-my-rsvp-btns')?.querySelectorAll('button') || [];
+  btns.forEach(b => { b.disabled = true; });
+
+  const { error } = await sb.from('event_fan_attendance').upsert(
+    { event_id: eventId, user_id: profile.id, status, updated_at: new Date().toISOString() },
+    { onConflict: 'event_id,user_id' }
+  );
+  if (error) {
+    btns.forEach(b => { b.disabled = false; });
+    App.toast('Could not save your answer: ' + error.message, 'error');
+    return;
+  }
+  _fanAnswers.set(eventId, status);
+  if (HeroesAuth.isAttendingEvent(eventId) !== (status === 'yes')) HeroesAuth.toggleAttendEvent(eventId);
+
+  App.toast(status === 'yes' ? "You're in! See you there 🎉" : status === 'maybe' ? 'Marked as maybe' : "Got it — you can't make this one", 'success');
+  Router.dispatch();
+};
 
 window.setEventAttendance = async function(eventId, status, btn) {
   const me = _myRosterPlayer();

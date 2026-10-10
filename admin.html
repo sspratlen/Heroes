@@ -2773,7 +2773,7 @@ window.showAvailabilityForEvent = function(eventId) {
           ${[['pending','⏳ TBD'],['yes','✅ Available'],['no','❌ Unavailable'],['maybe','🟡 Maybe']].map(([v,l])=>`<option value="${v}"${status===v?' selected':''}>${l}</option>`).join('')}
         </select>
       </td>
-      <td style="font-size:12px;color:var(--gray)">${a?.notes||'—'}</td>
+      <td style="font-size:12px;color:var(--gray)">${a?.note||a?.notes||'—'}</td>
     </tr>`;
   }).join('');
   
@@ -2792,18 +2792,69 @@ window.showAvailabilityForEvent = function(eventId) {
         <tbody>${rows}</tbody>
       </table>
     </div>
+    <div id="avail-fans" style="margin-top:20px"></div>
   `;
+  loadFanAvailability(ev, players);
 };
 
-window.setAvailability = function(eventId, playerId, status) {
+// Fans' answers for an event (event_fan_attendance), excluding anyone already
+// listed above as a roster player on the event's teams.
+async function loadFanAvailability(ev, players) {
+  const box = document.getElementById('avail-fans');
+  if (!box) return;
+  const { data, error } = await _getClient()
+    .from('event_fan_attendance')
+    .select('status, updated_at, profiles(display_name, email, player_id)')
+    .eq('event_id', ev.id);
+  if (error) { box.innerHTML = `<div class="alert alert-error">Could not load fans: ${escapeHtmlAdmin(error.message)}</div>`; return; }
+
+  const rosterIds = new Set(players.map(p => p.id));
+  const rosterEmails = new Set(players.map(p => (p.email || '').toLowerCase()).filter(Boolean));
+  const fans = (data || []).filter(r =>
+    !rosterIds.has(r.profiles?.player_id) && !rosterEmails.has((r.profiles?.email || '').toLowerCase()));
+  const order = { yes: 0, maybe: 1, no: 2 };
+  fans.sort((a, b) => order[a.status] - order[b.status] ||
+    (a.profiles?.display_name || '').localeCompare(b.profiles?.display_name || ''));
+
+  const label = { yes: '✅ In', maybe: '🟡 Maybe', no: '❌ Can\'t go' };
+  const count = st => fans.filter(f => f.status === st).length;
+  box.innerHTML = `
+    <div class="admin-table-wrap">
+      <div class="admin-table-header">
+        <div><h3>Fans</h3>
+        <div style="font-size:12px;color:var(--gray);margin-top:4px">✅ ${count('yes')} in · 🟡 ${count('maybe')} maybe · ❌ ${count('no')} can't go</div></div>
+      </div>
+      ${fans.length ? `
+      <table class="admin-table">
+        <thead><tr><th>Fan</th><th>Answer</th><th>Updated</th></tr></thead>
+        <tbody>${fans.map(f => `<tr>
+          <td><strong>${escapeHtmlAdmin(f.profiles?.display_name || f.profiles?.email || 'Unknown')}</strong></td>
+          <td>${label[f.status] || f.status}</td>
+          <td style="font-size:12px;color:var(--gray)">${new Date(f.updated_at).toLocaleDateString()}</td>
+        </tr>`).join('')}</tbody>
+      </table>` : '<p style="padding:0 16px 16px;color:var(--gray);font-size:13px">No fan answers yet.</p>'}
+    </div>`;
+}
+
+// Coach override of a player's answer — stored in event_attendance (staff may edit any row).
+window.setAvailability = async function(eventId, playerId, status) {
+  const sb = _getClient();
+  const { error } = status === 'pending'
+    ? await sb.from('event_attendance').delete().eq('event_id', eventId).eq('player_id', playerId)
+    : await sb.from('event_attendance').upsert(
+        { event_id: eventId, player_id: playerId, status, updated_at: new Date().toISOString() },
+        { onConflict: 'event_id,player_id' });
+  if (error) { toast('Could not save: ' + error.message, 'error'); showAvailabilityForEvent(eventId); return; }
+
   const d = loadData();
-  const evIdx = d.events.findIndex(e=>e.id===eventId);
-  if (evIdx < 0) return;
-  if (!d.events[evIdx].availability) d.events[evIdx].availability = [];
-  const aIdx = d.events[evIdx].availability.findIndex(a=>a.playerId===playerId);
-  if (aIdx >= 0) d.events[evIdx].availability[aIdx].status = status;
-  else d.events[evIdx].availability.push({ playerId, status, notes: '' });
-  saveData(d);
+  const ev = d.events.find(e => e.id === eventId);
+  if (ev) {
+    ev.availability = (ev.availability || []).filter(a => a.playerId !== playerId);
+    if (status !== 'pending') ev.availability.push({ playerId, status, note: '' });
+    localStorage.setItem('heroes_data', JSON.stringify(d));
+  }
+  showAvailabilityForEvent(eventId);
+  toast('Availability updated');
 };
 
 // ─── NEWS ──────────────────────────────────────────────────
@@ -4572,14 +4623,17 @@ async function submitCreateUser() {
   if (errEl) errEl.textContent = '';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { if (errEl) errEl.textContent = 'Enter a valid email.'; return; }
   if (!name) { if (errEl) errEl.textContent = 'Display name is required.'; return; }
-  if (tempPassword.length < 8) { if (errEl) errEl.textContent = 'Temp password must be at least 8 characters.'; return; }
+  const pwErr = await HeroesPassword.check(tempPassword);
+  if (pwErr) { if (errEl) errEl.textContent = pwErr; return; }
 
   const saveBtn = document.getElementById('modal-save-btn');
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Creating…'; }
 
   try {
     const sb = _getClient();
-    const { data: { session } } = await sb.auth.getSession();
+    const { data: { session } } = await sb.auth.getSession().catch(e => {
+      throw new Error(`Could not refresh your sign-in (${e.message}). Check your connection and try again.`);
+    });
     if (!session?.access_token) throw new Error('Your admin session expired. Sign in again.');
 
     const res = await fetch(`${SUPABASE_URL}/functions/v1/admin-create-user`, {
@@ -4590,6 +4644,8 @@ async function submitCreateUser() {
         'apikey': SUPABASE_ANON_KEY,
       },
       body: JSON.stringify({ email, displayName: name, role, tempPassword }),
+    }).catch(e => {
+      throw new Error(`Could not reach the create-user service (${e.message}). Check your connection, or try with browser extensions/ad-blockers paused.`);
     });
 
     const body = await res.json().catch(() => ({}));
